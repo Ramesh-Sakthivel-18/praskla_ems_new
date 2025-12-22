@@ -17,6 +17,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/attendance', require('./routes/attendance'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/leave', require('./routes/leave'));
+app.use('/api/manager', require('./routes/manager'));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

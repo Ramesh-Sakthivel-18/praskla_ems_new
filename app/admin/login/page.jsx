@@ -17,86 +17,95 @@ export default function AdminLoginPage() {
   const [loading, setLoading] = useState(false)
 
   const handleLogin = async (e) => {
-    e.preventDefault()
-    console.log('🔐 AdminLogin: Starting login process')
-    console.log('📧 AdminLogin: Email:', email)
+  e.preventDefault()
+  console.log('🔐 AdminLogin: Starting login process')
+  console.log('📧 AdminLogin: Email:', email)
 
-    if (!email || !password) {
-      alert('Please enter both email and password')
-      return
-    }
-
-    setLoading(true)
-    console.log('🔗 AdminLogin: Sending login request to backend...')
-
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ email, password })
-      })
-
-      console.log('📊 AdminLogin: Response status:', response.status)
-      console.log('📊 AdminLogin: Response ok:', response.ok)
-
-      if (response.ok) {
-        const data = await response.json()
-        console.log('✅ AdminLogin: Login successful')
-        console.log('👤 AdminLogin: Employee data:', data.employee)
-        console.log('🔑 AdminLogin: Custom token received')
-
-        // Sign in to Firebase with the custom token (if Firebase is available)
-        let idToken = data.customToken; // Fallback to custom token
-        
-        if (auth) {
-          try {
-            const userCredential = await signInWithCustomToken(auth, data.customToken)
-            console.log('🔥 AdminLogin: Firebase authentication successful')
-            
-            // Get the ID token for API calls
-            idToken = await userCredential.user.getIdToken()
-            console.log('🎟️ AdminLogin: Firebase ID token obtained')
-          } catch (firebaseError) {
-            console.warn('⚠️ AdminLogin: Firebase authentication failed, using custom token:', firebaseError.message)
-            // Continue with custom token as fallback
-          }
-        } else {
-          console.warn('⚠️ AdminLogin: Firebase not available, using custom token')
-        }
-
-        // Store authentication data
-        localStorage.setItem("adminLoggedIn", "true")
-        localStorage.setItem("firebaseToken", idToken)
-        localStorage.setItem("currentEmployee", JSON.stringify(data.employee))
-
-        console.log('💾 AdminLogin: Stored auth data in localStorage')
-        console.log('🔄 AdminLogin: Redirecting to dashboard...')
-
-        safeRedirect(router, "/admin/dashboard")
-      } else {
-        let errorData;
-        try {
-          errorData = await response.json();
-        } catch (jsonError) {
-          console.error('❌ AdminLogin: Failed to parse error response as JSON');
-          errorData = { error: `Login failed with status ${response.status}` };
-        }
-        
-        console.error('❌ AdminLogin: Login failed:', errorData);
-        console.error('❌ AdminLogin: Response status:', response.status, response.statusText);
-        
-        const errorMessage = errorData?.error || errorData?.message || `Login failed (Status: ${response.status})`;
-        alert(errorMessage);
-      }
-    } catch (error) {
-      console.error('❌ AdminLogin: Network error:', error)
-      alert('Network error. Please check if the backend is running.')
-    }
-
-    setLoading(false)
+  if (!email || !password) {
+    alert('Please enter both email and password')
+    return
   }
+
+  setLoading(true)
+  console.log('🔗 AdminLogin: Sending login request to backend...')
+
+  try {
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/auth/login`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      }
+    )
+
+    console.log('📊 AdminLogin: Response status:', response.status)
+    console.log('📊 AdminLogin: Response ok:', response.ok)
+
+    if (response.ok) {
+      const data = await response.json()
+      console.log('✅ AdminLogin: Login successful')
+      console.log('👤 AdminLogin: Employee data:', data.employee)
+      console.log('🔑 AdminLogin: Custom token received')
+
+      let idToken = data.customToken
+
+      if (auth) {
+        try {
+          const userCredential = await signInWithCustomToken(auth, data.customToken)
+          console.log('🔥 AdminLogin: Firebase authentication successful')
+          idToken = await userCredential.user.getIdToken()
+          console.log('🎟️ AdminLogin: Firebase ID token obtained')
+        } catch (firebaseError) {
+          console.warn('⚠️ AdminLogin: Firebase authentication failed, using custom token:', firebaseError.message)
+        }
+      } else {
+        console.warn('⚠️ AdminLogin: Firebase not available, using custom token')
+      }
+
+      // Store authentication data
+      localStorage.setItem('adminLoggedIn', 'true')
+      localStorage.setItem('firebaseToken', idToken)
+      localStorage.setItem('currentEmployee', JSON.stringify(data.employee))
+      console.log('💾 AdminLogin: Stored auth data in localStorage')
+
+      // ✅ ROLE-BASED REDIRECTS (NO extra redirect after this)
+      if (data.employee.role === 'manager') {
+        console.log('Manager login detected, redirecting to manager dashboard')
+        safeRedirect(router, '/manager-dashboard')
+        return
+      }
+
+      if (data.employee.role === 'admin') {
+        console.log('Admin login detected, redirecting to admin dashboard')
+        safeRedirect(router, '/admin/dashboard')
+        return
+      }
+
+      // For any other role, block here
+      alert('Employee users should use the employee login page')
+      setLoading(false)
+      return
+    } else {
+      let errorData
+      try {
+        errorData = await response.json()
+      } catch {
+        errorData = { error: `Login failed with status ${response.status}` }
+      }
+      console.error('❌ AdminLogin: Login failed:', errorData)
+      const errorMessage =
+        errorData?.error || errorData?.message || `Login failed (Status: ${response.status})`
+      alert(errorMessage)
+    }
+  } catch (error) {
+    console.error('❌ AdminLogin: Network error:', error)
+    alert('Network error. Please check if the backend is running.')
+  }
+
+  setLoading(false)
+}
+
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">

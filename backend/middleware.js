@@ -95,13 +95,15 @@ function requireAdmin(req, res, next) {
   console.log('👑 Middleware: requireAdmin() - Checking admin privileges');
   console.log('👤 Middleware: User role:', req.user?.employee?.role);
 
-  if (!req.user || req.user.employee.role !== 'admin') {
+  // ✅ Allow BOTH admin AND business_owner
+  if (!req.user || (req.user.employee.role !== 'admin' && req.user.employee.role !== 'business_owner')) {
     console.log('❌ Middleware: Admin access denied');
-    return res.status(403).json({ error: 'Admin access required' });
+    return res.status(403).json({ error: 'Admin or Business Owner access required' });
   }
 
-  console.log('✅ Middleware: Admin access granted');
+  console.log('✅ Middleware: Access granted for role:', req.user.employee.role);
   next();
 }
+
 
 module.exports = { authenticateToken, requireAdmin };
