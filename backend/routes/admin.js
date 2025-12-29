@@ -4,6 +4,7 @@ const AttendanceService = require('../services/AttendanceService');
 const EmployeeService = require('../services/EmployeeService');
 const { authenticateToken, requireAdmin } = require('../middleware');
 
+
 // Get all attendance records (admin only)
 router.get('/all', authenticateToken, requireAdmin, async (req, res) => {
   console.log('🔍 AdminRoutes: GET /all - Fetching all attendance records');
@@ -24,6 +25,7 @@ router.get('/all', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
+
 // Get attendance records by date range (admin only)
 router.get('/date-range', authenticateToken, requireAdmin, async (req, res) => {
   try {
@@ -41,6 +43,7 @@ router.get('/date-range', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
+
 // Get attendance summary (admin only)
 router.get('/summary', authenticateToken, requireAdmin, async (req, res) => {
   try {
@@ -52,6 +55,7 @@ router.get('/summary', authenticateToken, requireAdmin, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch attendance summary' });
   }
 });
+
 
 // Get employee attendance statistics (admin only)
 router.get('/employee/:employeeId', authenticateToken, requireAdmin, async (req, res) => {
@@ -67,14 +71,32 @@ router.get('/employee/:employeeId', authenticateToken, requireAdmin, async (req,
   }
 });
 
+
 // ===== EMPLOYEE MANAGEMENT ENDPOINTS =====
+
 
 // Get all employees (admin only)
 router.get('/employees', authenticateToken, requireAdmin, async (req, res) => {
   console.log('🔍 GET /api/admin/employees - Fetching all employees');
+  console.log('👤 Logged in user:', req.user?.email || 'Unknown');
+  console.log('🏢 User organizationId:', req.user?.organizationId || 'None');
+  
   try {
-    const employees = await EmployeeService.getAll();
-    console.log(`✅ Found ${employees.length} employees`);
+    const allEmployees = await EmployeeService.getAll();
+    console.log(`📊 Total employees in database: ${allEmployees.length}`);
+    
+    // ✅ FIX: Filter by organizationId if user has one
+    let employees = allEmployees;
+    
+    if (req.user?.organizationId) {
+      employees = allEmployees.filter(emp => 
+        emp.organizationId === req.user.organizationId
+      );
+      console.log(`✅ Filtered to ${employees.length} employees in organization: ${req.user.organizationId}`);
+    } else {
+      console.log('⚠️ User has no organizationId - returning all employees');
+    }
+    
     res.json(employees);
   } catch (error) {
     console.error('❌ Error fetching employees:', error);
@@ -82,14 +104,19 @@ router.get('/employees', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
+
 // Create new employee (admin only)
 router.post('/employees', authenticateToken, requireAdmin, async (req, res) => {
   console.log('📝 POST /api/admin/employees - Creating new employee');
   console.log('📝 Request body:', JSON.stringify(req.body, null, 2));
-  console.log('👤 Request user:', req.user ? req.user.employee.email : 'No user');
+  console.log('👤 Request user:', req.user?.email || 'No user');
+  console.log('🏢 Request user organizationId:', req.user?.organizationId || 'None');
   
   try {
-    const { name, email, password, role, department, position, salary, workingType, skills, address, emergencyContact } = req.body;
+    const { 
+      name, email, password, role, department, position, 
+      salary, workingType, skills, address, emergencyContact 
+    } = req.body;
 
     // Validate required fields
     if (!name || !email || !password || !role || !department || !workingType) {
@@ -97,7 +124,24 @@ router.post('/employees', authenticateToken, requireAdmin, async (req, res) => {
       return res.status(400).json({ 
         error: 'Missing required fields', 
         required: ['name', 'email', 'password', 'role', 'department', 'workingType'],
-        received: { name: !!name, email: !!email, password: !!password, role: !!role, department: !!department, workingType: !!workingType }
+        received: { 
+          name: !!name, 
+          email: !!email, 
+          password: !!password, 
+          role: !!role, 
+          department: !!department, 
+          workingType: !!workingType 
+        }
+      });
+    }
+
+    // ✅ FIX: Get organizationId from logged-in user
+    const organizationId = req.user?.organizationId;
+    
+    if (!organizationId) {
+      console.error('❌ Admin does not have organizationId');
+      return res.status(400).json({ 
+        error: 'Your admin account is not associated with an organization. Please contact system administrator.' 
       });
     }
 
@@ -109,7 +153,7 @@ router.post('/employees', authenticateToken, requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Employee already exists with this email' });
     }
 
-    // Create new employee
+    // ✅ FIX: Create employee WITH organizationId
     console.log('💾 Creating employee in Firebase...');
     const employeeData = {
       name,
@@ -122,13 +166,16 @@ router.post('/employees', authenticateToken, requireAdmin, async (req, res) => {
       workingType,
       skills: skills || '',
       address: address || '',
-      emergencyContact: emergencyContact || ''
+      emergencyContact: emergencyContact || '',
+      organizationId: organizationId  // ✅ ADD THIS LINE
     };
     
     console.log('📝 Employee data to create:', JSON.stringify(employeeData, null, 2));
     const employee = await EmployeeService.create(employeeData);
 
     console.log('✅ Employee created successfully:', employee.id);
+    console.log('✅ Employee organizationId:', employee.organizationId);
+    
     res.status(201).json({
       success: true,
       message: 'Employee created successfully',
@@ -145,6 +192,7 @@ router.post('/employees', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
+
 // Update employee (admin only)
 router.put('/employees/:employeeId', authenticateToken, requireAdmin, async (req, res) => {
   console.log('✏️ PUT /api/admin/employees/:id - Updating employee');
@@ -154,12 +202,19 @@ router.put('/employees/:employeeId', authenticateToken, requireAdmin, async (req
     const { employeeId } = req.params;
     const updateData = req.body;
 
-    const updatedEmployee = await EmployeeService.update(employeeId, updateData);
-
-    if (!updatedEmployee) {
-      console.log('⚠️ Employee not found for update');
+    // ✅ SECURITY: Verify employee belongs to same organization
+    const employee = await EmployeeService.findById(employeeId);
+    if (!employee) {
+      console.log('⚠️ Employee not found');
       return res.status(404).json({ error: 'Employee not found' });
     }
+
+    if (req.user?.organizationId && employee.organizationId !== req.user.organizationId) {
+      console.log('⚠️ Unauthorized: Employee belongs to different organization');
+      return res.status(403).json({ error: 'You can only update employees in your organization' });
+    }
+
+    const updatedEmployee = await EmployeeService.update(employeeId, updateData);
 
     console.log('✅ Employee updated successfully');
     res.json({
@@ -172,6 +227,7 @@ router.put('/employees/:employeeId', authenticateToken, requireAdmin, async (req
     res.status(500).json({ error: 'Failed to update employee' });
   }
 });
+
 
 // Delete employee (admin only)
 router.delete('/employees/:employeeId', authenticateToken, requireAdmin, async (req, res) => {
@@ -187,6 +243,12 @@ router.delete('/employees/:employeeId', authenticateToken, requireAdmin, async (
       return res.status(404).json({ error: 'Employee not found' });
     }
 
+    // ✅ SECURITY: Verify employee belongs to same organization
+    if (req.user?.organizationId && employee.organizationId !== req.user.organizationId) {
+      console.log('⚠️ Unauthorized: Employee belongs to different organization');
+      return res.status(403).json({ error: 'You can only delete employees in your organization' });
+    }
+
     // In Firebase, we'll mark as inactive instead of deleting
     await EmployeeService.update(employeeId, { isActive: false });
     console.log('✅ Employee marked as inactive');
@@ -200,5 +262,6 @@ router.delete('/employees/:employeeId', authenticateToken, requireAdmin, async (
     res.status(500).json({ error: 'Failed to delete employee' });
   }
 });
+
 
 module.exports = router;

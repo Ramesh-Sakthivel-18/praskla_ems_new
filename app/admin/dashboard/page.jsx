@@ -28,34 +28,67 @@ export default function AdminDashboardPage() {
   })
   const [recentActivity, setRecentActivity] = useState([])
   const [loading, setLoading] = useState(true)
-  const [unsubscribes, setUnsubscribes] = useState([])
+  const [error, setError] = useState(null)
+
+  // Helper to get API base URL
+  const getApiBase = () => {
+    // Priority: env variable > localhost:3000 (Next.js default proxy)
+    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
+  }
 
   useEffect(() => {
     const load = async () => {
       setLoading(true)
+      setError(null)
+      
       const today = format(new Date(), "M/d/yyyy")
       const token = await getValidIdToken()
+      
       if (!token) {
+        setError("Authentication failed. Please login again.")
         setLoading(false)
         return
       }
+
+      const apiBase = getApiBase()
+      console.log("📡 Fetching from API:", apiBase)
+
       try {
         const [employeesRes, attendanceRes, leavesRes] = await Promise.all([
-          fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}/api/admin/employees`, {
-            headers: { 'Authorization': `Bearer ${token}` }
+          fetch(`${apiBase}/api/admin/employees`, {
+            headers: { 
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
           }),
-          fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}/api/admin/all?date=${today}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
+          fetch(`${apiBase}/api/admin/all?date=${today}`, {
+            headers: { 
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
           }),
-          fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}/api/leave/all`, {
-            headers: { 'Authorization': `Bearer ${token}` }
+          fetch(`${apiBase}/api/leave/all`, {
+            headers: { 
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
           })
         ])
+
+        console.log("✅ Response status:", {
+          employees: employeesRes.status,
+          attendance: attendanceRes.status,
+          leaves: leavesRes.status
+        })
 
         let totalEmployees = 0
         if (employeesRes.ok) {
           const employees = await employeesRes.json()
-          totalEmployees = (Array.isArray(employees) ? employees : employees.employees || []).length
+          const employeeList = Array.isArray(employees) ? employees : employees.employees || []
+          totalEmployees = employeeList.length
+          console.log("👥 Total employees:", totalEmployees)
+        } else {
+          console.error("❌ Failed to fetch employees:", employeesRes.status)
         }
 
         let presentToday = 0
@@ -72,6 +105,9 @@ export default function AdminDashboardPage() {
               message: `${r.employeeName} ${r.checkOut ? `checked out at ${r.checkOut}` : r.checkIn ? `checked in at ${r.checkIn}` : 'updated'}`,
               time: r.updatedAt || ''
             }))
+          console.log("📅 Present today:", presentToday)
+        } else {
+          console.error("❌ Failed to fetch attendance:", attendanceRes.status)
         }
 
         let leaveRequests = 0
@@ -79,12 +115,21 @@ export default function AdminDashboardPage() {
           const leaves = await leavesRes.json()
           const arr = Array.isArray(leaves) ? leaves : (leaves.requests || leaves.leaveRequests || [])
           leaveRequests = arr.filter(l => l.status === 'Pending').length
+          console.log("📄 Pending leave requests:", leaveRequests)
+        } else {
+          console.error("❌ Failed to fetch leaves:", leavesRes.status)
         }
 
-        setStats({ totalEmployees, presentToday, absentToday: Math.max(totalEmployees - presentToday, 0), leaveRequests })
+        setStats({ 
+          totalEmployees, 
+          presentToday, 
+          absentToday: Math.max(totalEmployees - presentToday, 0), 
+          leaveRequests 
+        })
         setRecentActivity(recent)
       } catch (e) {
-        console.error('AdminDashboard: Failed to load stats', e)
+        console.error('❌ AdminDashboard: Failed to load stats', e)
+        setError(`Failed to connect to backend: ${e.message}. Make sure your backend is running on ${apiBase}`)
       }
       setLoading(false)
     }
@@ -111,6 +156,21 @@ export default function AdminDashboardPage() {
             <h2 className="text-3xl font-bold text-foreground">Dashboard Overview</h2>
             <p className="text-muted-foreground mt-1">Welcome back! Here's your overview for today.</p>
           </div>
+
+          {/* Error State */}
+          {error && (
+            <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg mb-6">
+              <p className="font-semibold">⚠️ Connection Error</p>
+              <p className="text-sm mt-1">{error}</p>
+              <p className="text-xs mt-2">
+                <strong>Troubleshooting:</strong><br/>
+                1. Make sure your backend server is running<br/>
+                2. Check if it's running on port 3000 or 5001<br/>
+                3. Verify CORS is enabled on the backend<br/>
+                4. Check browser console for detailed errors
+              </p>
+            </div>
+          )}
 
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -178,10 +238,21 @@ export default function AdminDashboardPage() {
                   <div>
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-muted-foreground">Attendance Rate</span>
-                      <span className="text-foreground font-medium">87.5%</span>
+                      <span className="text-foreground font-medium">
+                        {stats.totalEmployees > 0 
+                          ? `${Math.round((stats.presentToday / stats.totalEmployees) * 100)}%` 
+                          : '0%'}
+                      </span>
                     </div>
                     <div className="w-full bg-muted rounded-full h-2">
-                      <div className="bg-green-600 h-2 rounded-full" style={{ width: "87.5%" }}></div>
+                      <div 
+                        className="bg-green-600 h-2 rounded-full" 
+                        style={{ 
+                          width: stats.totalEmployees > 0 
+                            ? `${(stats.presentToday / stats.totalEmployees) * 100}%` 
+                            : '0%' 
+                        }}
+                      ></div>
                     </div>
                   </div>
                   <div>

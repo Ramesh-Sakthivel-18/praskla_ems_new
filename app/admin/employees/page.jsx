@@ -11,18 +11,20 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { UserPlus, Edit, Trash2, Eye } from "lucide-react"
+import { UserPlus, Edit, Trash2, Eye, Building2, RefreshCw } from "lucide-react"
 import { auth } from "@/lib/firebaseClient"
 import { safeRedirect } from "@/lib/redirectUtils"
 
 export default function AdminEmployeesPage() {
   const router = useRouter()
+  const [currentAdmin, setCurrentAdmin] = useState(null) // ✅ Store current admin
   const [employees, setEmployees] = useState([])
   const [filteredEmployees, setFilteredEmployees] = useState([])
   const [searchTerm, setSearchTerm] = useState("")
   const [token, setToken] = useState("")
   const [employeesLoading, setEmployeesLoading] = useState(true)
   const [editingId, setEditingId] = useState(null)
+  const [dialogOpen, setDialogOpen] = useState(false) // ✅ Control dialog state
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -30,245 +32,199 @@ export default function AdminEmployeesPage() {
     department: "",
     role: "employee",
     password: "",
-    workingType: "full-time" // Add the missing required field
+    workingType: "full-time",
+    salary: "" // ✅ Add salary field
   })
 
   useEffect(() => {
     console.log('👥 AdminEmployees: Component mounted');
     
-    // Check authentication
-    if (!localStorage.getItem("adminLoggedIn")) {
-      console.log('⚠️ AdminEmployees: Not logged in, redirecting to login');
+    // ✅ Get current admin from localStorage
+    const currentEmployee = localStorage.getItem("currentEmployee")
+    if (!currentEmployee) {
+      console.log('⚠️ AdminEmployees: No current employee found, redirecting to login');
       safeRedirect(router, "/admin/login")
       return
     }
 
+    const admin = JSON.parse(currentEmployee)
+    if (admin.role !== "admin") {
+      console.log('⚠️ AdminEmployees: Not an admin, redirecting');
+      alert("Unauthorized. Admin access required.")
+      safeRedirect(router, "/role-selection")
+      return
+    }
+
+    console.log('✅ Admin logged in:', admin.email)
+    console.log('🏢 Organization ID:', admin.organizationId)
+    setCurrentAdmin(admin) // ✅ Store admin info
+
     const loadEmployees = async () => {
-      console.log('🔄 AdminEmployees: loadEmployees() - Loading employees...');
-      setEmployeesLoading(true);
+      console.log("=".repeat(50))
+      console.log('🔄 AdminEmployees: Loading employees for organization:', admin.organizationId)
+      console.log("=".repeat(50))
+      setEmployeesLoading(true)
       
       try {
-        // Get fresh token from Firebase if available
-        let freshToken = localStorage.getItem("firebaseToken");
-        console.log('🔑 AdminEmployees: Using stored token, length:', freshToken?.length || 0);
+        // Get fresh token
+        let freshToken = localStorage.getItem("firebaseToken")
+        console.log('🔑 AdminEmployees: Using token, length:', freshToken?.length || 0)
         
         if (auth && auth.currentUser) {
           try {
-            console.log('🔄 AdminEmployees: Refreshing Firebase token...');
-            freshToken = await auth.currentUser.getIdToken(true); // Force refresh
-            localStorage.setItem("firebaseToken", freshToken);
-            console.log('✅ AdminEmployees: Token refreshed, length:', freshToken.length);
+            freshToken = await auth.currentUser.getIdToken(true)
+            localStorage.setItem("firebaseToken", freshToken)
+            console.log('✅ AdminEmployees: Token refreshed')
           } catch (refreshError) {
-            console.error('❌ AdminEmployees: Token refresh failed:', refreshError);
-            console.error('❌ AdminEmployees: Token refresh error stack:', refreshError.stack);
-          }
-        } else {
-          console.log('⚠️ AdminEmployees: Firebase auth not available');
-        }
-        
-        if (!freshToken) {
-          console.log('⚠️ AdminEmployees: No token available, checking Firebase user');
-          
-          // Try to get token from Firebase user if available
-          if (auth && auth.currentUser) {
-            try {
-              console.log('🔄 AdminEmployees: Getting token from Firebase user...');
-              freshToken = await auth.currentUser.getIdToken();
-              localStorage.setItem("firebaseToken", freshToken);
-              console.log('✅ AdminEmployees: Got token from Firebase user, length:', freshToken.length);
-            } catch (refreshError) {
-              console.error('❌ AdminEmployees: Token refresh failed:', refreshError);
-              console.error('❌ AdminEmployees: Token refresh error stack:', refreshError.stack);
-            }
-          } else {
-            console.log('⚠️ AdminEmployees: No Firebase user found, checking localStorage');
-            // Try to get token from localStorage as last resort
-            const storedToken = localStorage.getItem("firebaseToken");
-            if (storedToken) {
-              console.log('🔁 AdminEmployees: Trying stored token...');
-              freshToken = storedToken;
-            } else {
-              console.log('⚠️ AdminEmployees: No stored token found');
-            }
+            console.error('❌ Token refresh failed:', refreshError)
           }
         }
         
         if (!freshToken) {
-          console.log('❌ AdminEmployees: No valid token found, redirecting to login');
-          localStorage.removeItem("adminLoggedIn");
-          localStorage.removeItem("firebaseToken");
-          safeRedirect(router, "/admin/login");
-          return;
+          console.log('❌ AdminEmployees: No valid token found')
+          localStorage.removeItem("adminLoggedIn")
+          localStorage.removeItem("firebaseToken")
+          safeRedirect(router, "/admin/login")
+          return
         }
         
-        console.log('🔗 AdminEmployees: Fetching employees from API...');
+        setToken(freshToken)
+        
         const getApiBase = () => {
-          const env = process.env.NEXT_PUBLIC_API_URL || ''
-          if (!env) return 'http://localhost:3000'
-          if (env.includes('5001')) return 'http://localhost:3000'
-          return env
+          return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
         }
+        
+        console.log('🔗 AdminEmployees: Fetching from:', `${getApiBase()}/api/admin/employees`)
         let response = await fetch(`${getApiBase()}/api/admin/employees`, {
           headers: {
             'Authorization': `Bearer ${freshToken}`,
             'Content-Type': 'application/json'
           }
-        });
+        })
         
-        console.log('📊 AdminEmployees: API response status:', response.status);
+        console.log('📊 AdminEmployees: API response status:', response.status)
         
-        // If unauthorized, try to refresh token and retry once
-        if (response.status === 401) {
-          console.log('⚠️ AdminEmployees: Unauthorized, trying token refresh...');
+        // Retry with token refresh if unauthorized
+        if (response.status === 401 && auth && auth.currentUser) {
+          console.log('⚠️ Unauthorized, retrying with fresh token...')
+          const newToken = await auth.currentUser.getIdToken(true)
+          localStorage.setItem("firebaseToken", newToken)
+          setToken(newToken)
           
-          if (auth && auth.currentUser) {
-            try {
-              console.log('🔄 AdminEmployees: Refreshing token for retry...');
-              const newToken = await auth.currentUser.getIdToken(true); // Force refresh
-              localStorage.setItem("firebaseToken", newToken);
-              console.log('✅ AdminEmployees: Token refreshed for retry, length:', newToken.length);
-              
-              // Retry the request with new token
-              response = await fetch(`${getApiBase()}/api/admin/employees`, {
-                headers: {
-                  'Authorization': `Bearer ${newToken}`,
-                  'Content-Type': 'application/json'
-                }
-              });
-              
-              console.log('📊 AdminEmployees: Retry API response status:', response.status);
-            } catch (refreshError) {
-              console.error('❌ AdminEmployees: Token refresh failed:', refreshError);
-              console.error('❌ AdminEmployees: Token refresh error stack:', refreshError.stack);
+          response = await fetch(`${getApiBase()}/api/admin/employees`, {
+            headers: {
+              'Authorization': `Bearer ${newToken}`,
+              'Content-Type': 'application/json'
             }
-          } else {
-            console.log('⚠️ AdminEmployees: No Firebase user found, checking localStorage');
-            // Try to get token from localStorage as last resort
-            const storedToken = localStorage.getItem("firebaseToken");
-            if (storedToken) {
-              console.log('🔁 AdminEmployees: Trying stored token...');
-              response = await fetch(`${getApiBase()}/api/admin/employees`, {
-                headers: {
-                  'Authorization': `Bearer ${storedToken}`,
-                  'Content-Type': 'application/json'
-                }
-              });
-              console.log('📊 AdminEmployees: Stored token API response status:', response.status);
-            } else {
-              console.log('⚠️ AdminEmployees: No stored token found');
-            }
-          }
-        } else {
-          console.log('⚠️ AdminEmployees: Firebase auth not available');
+          })
+          console.log('📊 Retry response status:', response.status)
         }
 
         if (response.ok) {
-          const data = await response.json();
-          console.log('✅ AdminEmployees: Received employee data:', data.length, 'employees');
+          const data = await response.json()
+          console.log('📊 Total employees from backend:', data.length)
           
-          // Filter only active employees
-          const activeEmployees = data.filter(emp => emp.isActive !== false);
-          console.log('🔍 AdminEmployees: Filtered active employees:', activeEmployees.length);
-          setEmployees(activeEmployees);
+          // ✅ Log all employees with their organization IDs
+          console.log('📋 ALL EMPLOYEES FROM BACKEND:')
+          data.forEach((emp, index) => {
+            console.log(`   ${index + 1}. ${emp.name} (${emp.email})`)
+            console.log(`      - Role: ${emp.role}`)
+            console.log(`      - OrgID: ${emp.organizationId || "❌ MISSING"}`)
+          })
+          
+          // ✅ Filter employees by organization ID
+          const orgEmployees = data.filter(emp => 
+            emp.organizationId === admin.organizationId
+          )
+          
+          console.log('✅ Filtered employees for this organization:', orgEmployees.length)
+          console.log('📋 ORGANIZATION EMPLOYEES:')
+          orgEmployees.forEach((emp, index) => {
+            console.log(`   ${index + 1}. ${emp.name} (${emp.email}) - ${emp.role}`)
+          })
+          
+          // Check for employees from wrong organization
+          const wrongOrg = data.filter(emp => 
+            emp.organizationId && emp.organizationId !== admin.organizationId
+          )
+          if (wrongOrg.length > 0) {
+            console.warn('⚠️ Found employees from other organizations:', wrongOrg.length)
+          }
+          
+          console.log("=".repeat(50))
+          setEmployees(orgEmployees)
+          
         } else {
-          console.error('❌ AdminEmployees: API error response:', response.status, response.statusText);
-          const errorText = await response.text();
-          console.error('❌ AdminEmployees: Error details:', errorText);
+          console.error('❌ API error:', response.status, response.statusText)
+          const errorText = await response.text()
+          console.error('❌ Error details:', errorText)
           
-          // If still unauthorized after refresh attempt, redirect to login
           if (response.status === 401) {
-            console.log('🔗 AdminEmployees: Unauthorized, redirecting to login');
-            localStorage.removeItem("adminLoggedIn");
-            localStorage.removeItem("firebaseToken");
-            safeRedirect(router, "/admin/login");
+            localStorage.removeItem("adminLoggedIn")
+            localStorage.removeItem("firebaseToken")
+            localStorage.removeItem("currentEmployee")
+            safeRedirect(router, "/admin/login")
           }
         }
       } catch (error) {
-        console.error('❌ AdminEmployees: Network error:', error);
+        console.error('❌ Network error:', error)
       } finally {
-        setEmployeesLoading(false);
+        setEmployeesLoading(false)
       }
-    };
+    }
 
-    console.log('👤 AdminEmployees: Current user:', auth.currentUser ? 'exists' : 'null');
-    
-    // Listen for auth state changes and refresh token (if Firebase is available)
-    let unsubscribe = () => {};
-    if (auth) {
-      console.log('👂 AdminEmployees: Setting up auth state listener');
-      // Note: We're not setting up a real listener here since we're handling token refresh manually
-    }
-    
-    // Load existing token if available
-    console.log('🔍 AdminEmployees: Checking for stored token');
-    const storedToken = localStorage.getItem("firebaseToken")
-    if (storedToken) {
-      console.log('✅ AdminEmployees: Found stored token, length:', storedToken.length);
-      setToken(storedToken)
-    } else {
-      console.log('⚠️ AdminEmployees: No stored token found');
-    }
-    
-    // If we have auth but no user, try to load employees anyway (might work with stored token)
-    if (auth && !auth.currentUser && storedToken) {
-      console.log('🔄 AdminEmployees: No current user but have stored token, loading employees');
-      loadEmployees();
-    } else {
-      loadEmployees();
-    }
-    
-    return () => {
-      console.log('🧹 AdminEmployees: Cleaning up auth listener');
-      unsubscribe()
-    }
+    loadEmployees()
   }, [router])
-  
-  useEffect(() => {
-    console.log('🔄 AdminEmployees: Token effect triggered, token:', !!token);
-    if (token) {
-      console.log('✅ AdminEmployees: Token available, loading employees');
-    }
-  }, [token]);
 
   useEffect(() => {
-    console.log('🔍 AdminEmployees: Filtering employees, searchTerm:', searchTerm, 'employees:', employees.length);
+    console.log('🔍 Filtering employees, searchTerm:', searchTerm)
     const filtered = employees.filter(employee =>
       (employee.name && employee.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (employee.email && employee.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (employee.position && employee.position.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (employee.department && employee.department.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
-    console.log('✅ AdminEmployees: Filtered employees:', filtered.length);
-    setFilteredEmployees(filtered);
-  }, [searchTerm, employees]);
+    )
+    console.log('✅ Filtered results:', filtered.length)
+    setFilteredEmployees(filtered)
+  }, [searchTerm, employees])
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    console.log('📝 AdminEmployees: handleSubmit() - Form submitted');
-    console.log('🔐 AdminEmployees: Token available:', !!token);
+    e.preventDefault()
+    console.log('📝 Form submitted')
 
     if (!token) {
-      console.log('❌ AdminEmployees: No token available');
-      alert('Authentication error. Please log in again.');
-      safeRedirect(router, "/admin/login");
-      return;
+      alert('Authentication error. Please log in again.')
+      safeRedirect(router, "/admin/login")
+      return
+    }
+
+    if (!currentAdmin || !currentAdmin.organizationId) {
+      alert('❌ Organization ID not found. Please log in again.')
+      safeRedirect(router, "/admin/login")
+      return
     }
 
     try {
-      console.log('🔗 AdminEmployees: Sending employee data to API...');
-      console.log('📝 AdminEmployees: Form data:', formData);
+      // ✅ Include organizationId in the request
+      const employeeData = {
+        ...formData,
+        organizationId: currentAdmin.organizationId // ✅ IMPORTANT
+      }
+      
+      console.log('📝 Creating/updating employee with data:', {
+        ...employeeData,
+        password: employeeData.password ? '***' : undefined
+      })
       
       const getApiBase = () => {
-        const env = process.env.NEXT_PUBLIC_API_URL || ''
-        if (!env) return 'http://localhost:3000'
-        if (env.includes('5001')) return 'http://localhost:3000'
-        return env
+        return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
       }
+      
       const url = editingId 
         ? `${getApiBase()}/api/admin/employees/${editingId}`
-        : `${getApiBase()}/api/admin/employees`;
+        : `${getApiBase()}/api/admin/employees`
         
-      console.log('🔗 AdminEmployees: API endpoint:', url);
+      console.log('🔗 API endpoint:', url)
       
       const response = await fetch(url, {
         method: editingId ? 'PUT' : 'POST',
@@ -276,25 +232,28 @@ export default function AdminEmployeesPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(formData)
-      });
+        body: JSON.stringify(employeeData)
+      })
 
-      console.log('📊 AdminEmployees: Save response status:', response.status);
+      console.log('📊 Response status:', response.status)
       
       if (response.ok) {
-        console.log('✅ AdminEmployees: Employee saved successfully');
-        const updatedEmployee = await response.json();
+        const result = await response.json()
+        const savedEmployee = result.employee || result
+        
+        console.log('✅ Employee saved:', savedEmployee)
         
         if (editingId) {
-          // Update existing employee
-          setEmployees(employees.map(emp => emp.id === editingId ? updatedEmployee : emp));
+          setEmployees(employees.map(emp => 
+            emp.id === editingId ? savedEmployee : emp
+          ))
         } else {
-          // Add new employee
-          setEmployees([...employees, updatedEmployee]);
+          setEmployees([...employees, savedEmployee])
         }
         
-        // Reset form
-        setEditingId(null);
+        // Reset form and close dialog
+        setEditingId(null)
+        setDialogOpen(false)
         setFormData({
           name: "",
           email: "",
@@ -302,81 +261,94 @@ export default function AdminEmployeesPage() {
           department: "",
           role: "employee",
           password: "",
-          workingType: "full-time" // Add workingType field
-        });
+          workingType: "full-time",
+          salary: ""
+        })
 
-        alert(editingId ? 'Employee updated successfully!' : 'Employee created successfully!');
+        alert(editingId ? 'Employee updated successfully!' : 'Employee created successfully!')
       } else {
-        console.error('❌ AdminEmployees: Failed to save employee:', response.status);
-        const errorData = await response.json();
-        console.error('❌ AdminEmployees: Error response:', errorData);
-        alert(errorData.error || `Failed to ${editingId ? 'update' : 'create'} employee`);
+        const errorData = await response.json()
+        console.error('❌ Save error:', errorData)
+        alert(errorData.error || `Failed to ${editingId ? 'update' : 'create'} employee`)
       }
     } catch (error) {
-      console.error('❌ AdminEmployees: Network error during save:', error);
-      alert('Network error. Please try again.');
+      console.error('❌ Network error:', error)
+      alert('Network error. Please try again.')
     }
-  };
+  }
 
   const handleEdit = (employee) => {
-    console.log('✏️ AdminEmployees: Editing employee:', employee.id);
-    setEditingId(employee.id);
+    console.log('✏️ Editing employee:', employee.id)
+    setEditingId(employee.id)
     setFormData({
       name: employee.name,
       email: employee.email,
       position: employee.position,
       department: employee.department,
       role: employee.role,
-      password: "", // Don't prefill password
-      workingType: employee.workingType || "full-time" // Add workingType field
-    });
-  };
+      password: "",
+      workingType: employee.workingType || "full-time",
+      salary: employee.salary || ""
+    })
+    setDialogOpen(true)
+  }
 
   const handleDelete = async (id) => {
-    console.log('🗑️ AdminEmployees: Deleting employee:', id);
+    console.log('🗑️ Deleting employee:', id)
     
     if (!window.confirm('Are you sure you want to delete this employee?')) {
-      console.log('↩️ AdminEmployees: Delete cancelled by user');
-      return;
+      return
     }
 
     try {
-      console.log('🔗 AdminEmployees: Sending delete request to API...');
-      const getApiBaseDel = () => {
-        const env = process.env.NEXT_PUBLIC_API_URL || ''
-        if (!env) return 'http://localhost:3000'
-        if (env.includes('5001')) return 'http://localhost:3000'
-        return env
+      const getApiBase = () => {
+        return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
       }
-      const response = await fetch(`${getApiBaseDel()}/api/admin/employees/${id}`, {
+      
+      const response = await fetch(`${getApiBase()}/api/admin/employees/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
         }
-      });
+      })
 
-      console.log('📊 AdminEmployees: Delete response status:', response.status);
+      console.log('📊 Delete response:', response.status)
       
       if (response.ok) {
-        console.log('✅ AdminEmployees: Employee deleted successfully');
-        setEmployees(employees.filter(emp => emp.id !== id));
-        alert('Employee deleted successfully!');
+        console.log('✅ Employee deleted')
+        setEmployees(employees.filter(emp => emp.id !== id))
+        alert('Employee deleted successfully!')
       } else {
-        console.error('❌ AdminEmployees: Failed to delete employee:', response.status);
         const errorData = await response.json()
-        alert(errorData.error || 'Failed to delete employee');
+        alert(errorData.error || 'Failed to delete employee')
       }
     } catch (error) {
-      console.error('❌ AdminEmployees: Network error during delete:', error);
-      alert('Network error. Please try again.');
+      console.error('❌ Delete error:', error)
+      alert('Network error. Please try again.')
     }
-  };
+  }
 
   const handleViewDetails = (employee) => {
-    console.log('👁️ AdminEmployees: Viewing employee details:', employee.id);
-    // Implementation for viewing employee details would go here
-    alert(`Viewing details for ${employee.name}\nRole: ${employee.role}\nDepartment: ${employee.department}`);
-  };
+    console.log('👁️ Viewing employee:', employee.id)
+    alert(
+      `Employee Details:\n\n` +
+      `Name: ${employee.name}\n` +
+      `Email: ${employee.email}\n` +
+      `Position: ${employee.position}\n` +
+      `Department: ${employee.department}\n` +
+      `Role: ${employee.role}\n` +
+      `Working Type: ${employee.workingType || 'N/A'}\n` +
+      `Organization ID: ${employee.organizationId || 'N/A'}`
+    )
+  }
+
+  if (!currentAdmin) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -388,16 +360,22 @@ export default function AdminEmployeesPage() {
           <div className="mb-8">
             <h2 className="text-3xl font-bold text-foreground">Employee Management</h2>
             <p className="text-muted-foreground mt-1">Add, edit, and manage employee accounts</p>
+            {currentAdmin.organizationId && (
+              <Badge variant="outline" className="mt-2">
+                <Building2 className="mr-1 h-3 w-3" />
+                Org ID: {currentAdmin.organizationId.substring(0, 12)}...
+              </Badge>
+            )}
           </div>
 
           <Card className="mb-6">
             <CardHeader>
               <CardTitle className="flex justify-between items-center">
-                <span>Employee List</span>
-                <Dialog>
+                <span>Employee List ({filteredEmployees.length})</span>
+                <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                   <DialogTrigger asChild>
                     <Button onClick={() => {
-                      setEditingId(null);
+                      setEditingId(null)
                       setFormData({
                         name: "",
                         email: "",
@@ -405,8 +383,10 @@ export default function AdminEmployeesPage() {
                         department: "",
                         role: "employee",
                         password: "",
-                        workingType: "full-time" // Add workingType field
-                      });
+                        workingType: "full-time",
+                        salary: ""
+                      })
+                      setDialogOpen(true)
                     }}>
                       <UserPlus className="w-4 h-4 mr-2" />
                       Add Employee
@@ -418,44 +398,57 @@ export default function AdminEmployeesPage() {
                     </DialogHeader>
                     <form onSubmit={handleSubmit} className="space-y-4">
                       <div className="space-y-2">
-                        <Label htmlFor="name">Full Name</Label>
+                        <Label htmlFor="name">Full Name *</Label>
                         <Input
                           id="name"
                           value={formData.name}
                           onChange={(e) => setFormData({...formData, name: e.target.value})}
+                          placeholder="John Doe"
                           required
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="email">Email</Label>
+                        <Label htmlFor="email">Email *</Label>
                         <Input
                           id="email"
                           type="email"
                           value={formData.email}
                           onChange={(e) => setFormData({...formData, email: e.target.value})}
+                          placeholder="john@example.com"
                           required
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="position">Position</Label>
+                        <Label htmlFor="position">Position *</Label>
                         <Input
                           id="position"
                           value={formData.position}
                           onChange={(e) => setFormData({...formData, position: e.target.value})}
+                          placeholder="Software Engineer"
                           required
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="department">Department</Label>
+                        <Label htmlFor="department">Department *</Label>
                         <Input
                           id="department"
                           value={formData.department}
                           onChange={(e) => setFormData({...formData, department: e.target.value})}
+                          placeholder="IT"
                           required
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="role">Role</Label>
+                        <Label htmlFor="salary">Salary</Label>
+                        <Input
+                          id="salary"
+                          value={formData.salary}
+                          onChange={(e) => setFormData({...formData, salary: e.target.value})}
+                          placeholder="50000"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="role">Role *</Label>
                         <select
                           id="role"
                           className="w-full p-2 border rounded"
@@ -467,7 +460,7 @@ export default function AdminEmployeesPage() {
                         </select>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="workingType">Working Type</Label>
+                        <Label htmlFor="workingType">Working Type *</Label>
                         <select
                           id="workingType"
                           className="w-full p-2 border rounded"
@@ -481,20 +474,23 @@ export default function AdminEmployeesPage() {
                         </select>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="password">{editingId ? 'New Password (optional)' : 'Password'}</Label>
+                        <Label htmlFor="password">
+                          {editingId ? 'New Password (leave blank to keep current)' : 'Password *'}
+                        </Label>
                         <Input
                           id="password"
                           type="password"
                           value={formData.password}
                           onChange={(e) => setFormData({...formData, password: e.target.value})}
+                          placeholder="Minimum 6 characters"
                           required={!editingId}
+                          minLength={6}
                         />
                       </div>
                       <Button type="submit" className="w-full">
                         {editingId ? 'Update Employee' : 'Create Employee'}
                       </Button>
                     </form>
-
                   </DialogContent>
                 </Dialog>
               </CardTitle>
@@ -509,8 +505,15 @@ export default function AdminEmployeesPage() {
                 />
               </div>
               {employeesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <p className="ml-3 text-sm text-muted-foreground">Loading employees...</p>
+                </div>
+              ) : filteredEmployees.length === 0 ? (
                 <div className="text-center py-8">
-                  <p>Loading employees...</p>
+                  <p className="text-muted-foreground">
+                    {searchTerm ? 'No employees found matching your search.' : 'No employees in your organization yet.'}
+                  </p>
                 </div>
               ) : (
                 <Table>
@@ -521,7 +524,6 @@ export default function AdminEmployeesPage() {
                       <TableHead>Position</TableHead>
                       <TableHead>Department</TableHead>
                       <TableHead>Role</TableHead>
-                      <TableHead>Status</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -536,9 +538,6 @@ export default function AdminEmployeesPage() {
                           <Badge variant={employee.role === 'admin' ? 'default' : 'secondary'}>
                             {employee.role}
                           </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">Active</Badge>
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2">

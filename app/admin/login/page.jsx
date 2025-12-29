@@ -72,7 +72,7 @@ export default function AdminLoginPage() {
       // ✅ ROLE-BASED REDIRECTS (NO extra redirect after this)
       if (data.employee.role === 'manager') {
         console.log('Manager login detected, redirecting to manager dashboard')
-        safeRedirect(router, '/manager-dashboard')
+        safeRedirect(router, '/manager/dashboard')
         return
       }
 

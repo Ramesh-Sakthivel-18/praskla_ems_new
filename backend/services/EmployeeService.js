@@ -8,7 +8,20 @@ class EmployeeService {
     console.log('🔧 EmployeeService.create() - Creating employee in Firebase');
     console.log('Employee data:', employeeData);
     try {
-      const { name, email, password, role, department, position, salary, workingType, skills, address, emergencyContact } = employeeData;
+      const { 
+        name, 
+        email, 
+        password, 
+        role, 
+        department, 
+        position, 
+        salary, 
+        workingType, 
+        skills, 
+        address, 
+        emergencyContact,
+        organizationId // ✅ ADDED
+      } = employeeData;
 
       const employeeRef = db.collection('employees').doc();
       console.log('📄 Generated employee document ID:', employeeRef.id);
@@ -20,18 +33,20 @@ class EmployeeService {
         password, // In real app, this should be hashed
         role: role || 'employee',
         department,
-        position: position || role || 'employee', // Ensure position is never undefined
+        position: position || role || 'employee',
         salary: salary || '0',
         workingType,
         skills: skills || '',
         address: address || '',
         emergencyContact: emergencyContact || '',
+        organizationId: organizationId || null, // ✅ ADDED
         isActive: true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
 
       console.log('💾 Saving employee to Firebase...');
+      console.log('✅ organizationId being saved:', employee.organizationId); // ✅ ADDED LOG
       await employeeRef.set(employee);
       console.log('✅ Employee saved successfully with ID:', employee.id);
       return employee;
