@@ -28,3 +28,8 @@ next-env.d.ts
 
 backend\serviceAccountKey.json
 app\config\serviceAccountKey.json
+app/config/serviceAccountKey.json
+
+
+
+**/serviceAccountKey.json
