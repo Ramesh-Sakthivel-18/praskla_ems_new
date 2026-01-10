@@ -1,264 +1,400 @@
+/**
+ * auth.js (UPDATED)
+ * 
+ * Routes for authentication (login, register, etc.).
+ * Uses EmployeeService and OrganizationRepository from container.
+ */
+
 const express = require('express');
 const router = express.Router();
-const EmployeeService = require('../services/EmployeeService');
-const initFirebaseAdmin = require('../firebase-admin');
+const container = require('../container');
+const admin = require('../firebase-admin');
+const bcrypt = require('bcryptjs');
 
-// ==================== BUSINESS OWNER REGISTRATION ====================
-router.post('/register-business', async (req, res) => {
-  try {
-    const { companyName, ownerName, email, password, phone } = req.body;
+// Get service instances from container
+const employeeService = container.getEmployeeService();
+const orgRepo = container.getOrganizationRepo();
+const userRepo = container.getUserRepo();
 
-    console.log('🏢 Business registration attempt:', { companyName, email });
-
-    // Check if user already exists
-    const existingEmployee = await EmployeeService.findByEmail(email);
-    if (existingEmployee) {
-      return res.status(400).json({ error: 'User already exists with this email' });
-    }
-
-    const admin = initFirebaseAdmin();
-    const db = admin.firestore();
-
-    // Create Organization
-    const orgRef = db.collection('organizations').doc();
-    await orgRef.set({
-      id: orgRef.id,
-      name: companyName,
-      ownerEmail: email,
-      phone: phone || '',
-      isActive: false, // Pending approval
-      createdAt: new Date().toISOString()
-    });
-
-    console.log('✅ Organization created:', orgRef.id);
-
-    // Create Business Owner user in employees collection
-    const userRef = db.collection('employees').doc();
-    await userRef.set({
-      id: userRef.id,
-      name: ownerName,
-      email: email,
-      password: password, // Plain text (matches your current system)
-      role: 'business_owner',
-      organizationId: orgRef.id,
-      createdAt: new Date().toISOString()
-    });
-
-    console.log('✅ Business owner created:', userRef.id);
-
-    res.status(201).json({
-      success: true,
-      message: 'Business registered successfully. Please wait for Manager approval.',
-      organizationId: orgRef.id
-    });
-
-  } catch (error) {
-    console.error('❌ Error registering business:', error);
-    res.status(500).json({ error: 'Failed to register business' });
-  }
-});
-
-// ==================== EXISTING EMPLOYEE REGISTRATION ====================
-router.post('/register', async (req, res) => {
-  try {
-    const { name, email, password, role, department, position } = req.body;
-
-    // Check if employee already exists
-    const existingEmployee = await EmployeeService.findByEmail(email);
-    if (existingEmployee) {
-      return res.status(400).json({ error: 'Employee already exists with this email' });
-    }
-
-    // Create new employee
-    const employee = await EmployeeService.create({
-      name,
-      email,
-      password,
-      role: role || 'employee',
-      department,
-      position
-    });
-
-    res.status(201).json({
-      success: true,
-      message: 'Employee registered successfully',
-      employee: {
-        id: employee.id,
-        name: employee.name,
-        email: employee.email,
-        role: employee.role,
-        department: employee.department,
-        position: employee.position
-      }
-    });
-  } catch (error) {
-    console.error('Error registering employee:', error);
-    res.status(500).json({ error: 'Failed to register employee' });
-  }
-});
-
-// ==================== LOGIN (UPDATED WITH ORGANIZATION CHECK) ====================
+/**
+ * POST /api/auth/login
+ * Universal login endpoint for all roles
+ */
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
-    console.log('🔐 Login attempt for email:', email);
-    console.log('🔐 Password received:', password ? '[PROVIDED]' : '[MISSING]');
+    const { email, password, organizationId } = req.body;
 
-    // ✅ TEMPORARY: Hardcoded manager login (bypass DB)
-    if (email === 'praskla@gmail.com' && password === '123456') {
-      console.log('✅ Hardcoded manager login matched');
+    console.log('🔐 Login attempt for:', email);
 
-      const admin = initFirebaseAdmin();
-      const customToken = await admin.auth().createCustomToken('hardcoded_manager_id');
-
-      const responseData = {
-        success: true,
-        message: 'Login successful (hardcoded manager)',
-        employee: {
-          id: 'hardcoded_manager_id',
-          name: 'Super Manager',
-          email: 'praskla@gmail.com',
-          role: 'manager',
-          department: 'Management',
-          position: 'Manager',
-        },
-        customToken,
-      };
-
-      return res.json(responseData);
-    }
-
-    // 🔽 existing code continues for normal users
-    const employee = await EmployeeService.findByEmail(email);
-    console.log('👤 Employee found:', !!employee);
-    if (employee) {
-      console.log('👤 Employee details:', {
-        id: employee.id,
-        email: employee.email,
-        role: employee.role,
-        passwordMatch: employee.password === password,
+    // Validate required fields
+    if (!email || !password) {
+      return res.status(400).json({
+        error: 'Missing credentials',
+        message: 'Email and password are required'
       });
     }
 
-    if (!employee) {
-      console.log('❌ Login failed: Employee not found');
-      return res.status(401).json({ error: 'Invalid email or password' });
+    // Normalize email
+    const normalizedEmail = email.toLowerCase().trim();
+
+    let user = null;
+    let userOrgId = null;
+
+    // If organizationId provided, search in that org
+    if (organizationId) {
+      console.log('🏢 Searching in organization:', organizationId);
+      user = await userRepo.findByEmail(organizationId, normalizedEmail);
+      if (user) {
+        userOrgId = organizationId;
+      }
+    } else {
+      // Search across all active organizations
+      console.log('🔍 Searching across all organizations...');
+      const allOrgs = await orgRepo.findAllActive();
+      
+      for (const org of allOrgs) {
+        const foundUser = await userRepo.findByEmail(org.id, normalizedEmail);
+        if (foundUser) {
+          user = foundUser;
+          userOrgId = org.id;
+          console.log('✅ User found in organization:', org.name);
+          break;
+        }
+      }
     }
 
-    console.log('🔑 Password comparison:', {
-      provided: password,
-      stored: employee.password,
-      match: employee.password === password,
+    // User not found
+    if (!user) {
+      console.log('❌ User not found:', normalizedEmail);
+      return res.status(401).json({
+        error: 'Invalid credentials',
+        message: 'Email or password is incorrect'
+      });
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      console.log('⚠️ User account is inactive:', normalizedEmail);
+      return res.status(403).json({
+        error: 'Account inactive',
+        message: 'Your account has been deactivated. Please contact your administrator.'
+      });
+    }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    
+    if (!isPasswordValid) {
+      console.log('❌ Invalid password for:', normalizedEmail);
+      return res.status(401).json({
+        error: 'Invalid credentials',
+        message: 'Email or password is incorrect'
+      });
+    }
+
+    // Get Firebase Admin instance
+    const firebaseAdmin = admin();
+
+    // Create custom token with organizationId in claims
+    const customToken = await firebaseAdmin.auth().createCustomToken(user.id, {
+      organizationId: userOrgId,
+      role: user.role,
+      email: user.email
     });
 
-    if (employee.password !== password) {
-      console.log('❌ Login failed: Password mismatch');
-      return res.status(401).json({ error: 'Invalid email or password' });
-    }
+    console.log('✅ Login successful for:', user.name, '(' + user.role + ')');
 
-    console.log('✅ Password verified, generating custom token...');
-    const admin = initFirebaseAdmin();
-    const customToken = await admin.auth().createCustomToken(employee.id);
-    console.log('🎟️ Custom token generated successfully');
+    // Return user data (without password) and token
+    const { passwordHash, ...userWithoutPassword } = user;
 
-    const responseData = {
+    res.json({
       success: true,
       message: 'Login successful',
-      employee: {
-        id: employee.id,
-        name: employee.name,
-        email: employee.email,
-        role: employee.role,
-        department: employee.department,
-        position: employee.position,
+      user: {
+        ...userWithoutPassword,
+        organizationId: userOrgId
       },
-      customToken,
-    };
-
-    console.log('✅ Login successful, sending response');
-    res.json(responseData);
-  } catch (error) {
-    console.error('❌ Error during login:', error);
-    res.status(500).json({ error: 'Login failed' });
-  }
-});
-
-
-// ==================== GET PROFILE ====================
-router.get('/profile', async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Authorization required' });
-    }
-
-    const idToken = authHeader.split('Bearer ')[1];
-    const admin = initFirebaseAdmin();
-
-    const decoded = await admin.auth().verifyIdToken(idToken);
-    const employee = await EmployeeService.findByUidOrEmail(decoded.uid, decoded.email);
-
-    if (!employee) {
-      return res.status(404).json({ error: 'Employee not found' });
-    }
-
-    res.json({
-      id: employee.id,
-      name: employee.name,
-      email: employee.email,
-      role: employee.role,
-      department: employee.department,
-      position: employee.position,
-      organizationId: employee.organizationId || null
+      token: customToken
     });
+
   } catch (error) {
-    console.error('Error fetching profile:', error);
-    res.status(500).json({ error: 'Failed to fetch profile' });
+    console.error('❌ Login error:', error);
+    res.status(500).json({
+      error: 'Login failed',
+      message: 'An error occurred during login. Please try again.'
+    });
   }
 });
 
-// ==================== UPDATE PROFILE ====================
-router.put('/profile', async (req, res) => {
+/**
+ * POST /api/auth/register/organization
+ * Register new organization with business owner
+ */
+router.post('/register/organization', async (req, res) => {
   try {
+    const { 
+      organizationName, 
+      ownerName, 
+      ownerEmail, 
+      ownerPassword, 
+      phone 
+    } = req.body;
+
+    console.log('📝 Organization registration attempt:', organizationName);
+
+    // Validate required fields
+    if (!organizationName || !ownerName || !ownerEmail || !ownerPassword) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        message: 'Organization name, owner name, email, and password are required'
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(ownerEmail)) {
+      return res.status(400).json({
+        error: 'Invalid email format'
+      });
+    }
+
+    // Validate password length
+    if (ownerPassword.length < 6) {
+      return res.status(400).json({
+        error: 'Password too short',
+        message: 'Password must be at least 6 characters'
+      });
+    }
+
+    // Check if organization with this email already exists
+    const existingOrg = await orgRepo.findByOwnerEmail(ownerEmail);
+    if (existingOrg) {
+      return res.status(409).json({
+        error: 'Organization already exists',
+        message: 'An organization with this email already exists'
+      });
+    }
+
+    // Create organization (active by default)
+    const organization = await orgRepo.create({
+      name: organizationName,
+      ownerEmail: ownerEmail.toLowerCase(),
+      ownerName,
+      phone: phone || '',
+      maxBusinessOwners: 5,
+      maxAdmins: 20,
+      maxEmployees: 1000,
+      employeesPerAdmin: 50
+    });
+
+    console.log('✅ Organization created:', organization.id);
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(ownerPassword, 10);
+
+    // Create business owner user
+    const businessOwner = await userRepo.create(organization.id, {
+      name: ownerName,
+      email: ownerEmail.toLowerCase(),
+      passwordHash,
+      role: 'business_owner',
+      department: 'Management',
+      position: 'Business Owner',
+      createdBy: null // Self-registered
+    });
+
+    console.log('✅ Business owner created:', businessOwner.id);
+
+    // Increment business owner count
+    await orgRepo.incrementUserCount(organization.id, 'business_owner');
+
+    // Get Firebase Admin instance
+    const firebaseAdmin = admin();
+
+    // Create custom token
+    const customToken = await firebaseAdmin.auth().createCustomToken(businessOwner.id, {
+      organizationId: organization.id,
+      role: 'business_owner',
+      email: businessOwner.email
+    });
+
+    // Return response (without password)
+    const { passwordHash: _, ...businessOwnerWithoutPassword } = businessOwner;
+
+    res.status(201).json({
+      success: true,
+      message: 'Organization registered successfully',
+      organization: {
+        id: organization.id,
+        name: organization.name,
+        isActive: organization.isActive
+      },
+      user: {
+        ...businessOwnerWithoutPassword,
+        organizationId: organization.id
+      },
+      token: customToken
+    });
+
+  } catch (error) {
+    console.error('❌ Organization registration error:', error);
+    res.status(500).json({
+      error: 'Registration failed',
+      message: error.message || 'An error occurred during registration'
+    });
+  }
+});
+
+/**
+ * POST /api/auth/change-password
+ * Change password for authenticated user
+ */
+router.post('/change-password', async (req, res) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
     const authHeader = req.headers.authorization;
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Authorization required' });
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required'
+      });
     }
 
-    const idToken = authHeader.split('Bearer ')[1];
-    const admin = initFirebaseAdmin();
-
-    const decoded = await admin.auth().verifyIdToken(idToken);
-    const employee = await EmployeeService.findByUidOrEmail(decoded.uid, decoded.email);
-
-    if (!employee) {
-      return res.status(404).json({ error: 'Employee not found' });
+    // Validate passwords
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({
+        error: 'Missing passwords',
+        message: 'Old password and new password are required'
+      });
     }
 
-    // Update allowed fields
-    const { name, department, position } = req.body;
-    const updateData = {};
-    if (name) updateData.name = name;
-    if (department) updateData.department = department;
-    if (position) updateData.position = position;
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        error: 'Password too short',
+        message: 'New password must be at least 6 characters'
+      });
+    }
 
-    const updatedEmployee = await EmployeeService.update(employee.id, updateData);
+    // Decode token to get user info
+    const token = authHeader.split('Bearer ')[1];
+    const firebaseAdmin = admin();
+    
+    let userId, userOrgId;
+    
+    try {
+      const decodedToken = await firebaseAdmin.auth().verifyIdToken(token);
+      userId = decodedToken.uid;
+      userOrgId = decodedToken.organizationId;
+    } catch (error) {
+      // Try decoding as custom token
+      const jwt = require('jsonwebtoken');
+      const decoded = jwt.decode(token);
+      if (!decoded) {
+        throw new Error('Invalid token');
+      }
+      userId = decoded.uid;
+      userOrgId = decoded.organizationId;
+    }
+
+    if (!userOrgId) {
+      return res.status(400).json({
+        error: 'Organization not found',
+        message: 'User is not associated with an organization'
+      });
+    }
+
+    // Change password using EmployeeService
+    await employeeService.changePassword(userOrgId, userId, oldPassword, newPassword);
 
     res.json({
       success: true,
-      message: 'Profile updated successfully',
-      employee: {
-        id: updatedEmployee.id,
-        name: updatedEmployee.name,
-        email: updatedEmployee.email,
-        role: updatedEmployee.role,
-        department: updatedEmployee.department,
-        position: updatedEmployee.position
+      message: 'Password changed successfully'
+    });
+
+  } catch (error) {
+    console.error('❌ Change password error:', error);
+    
+    if (error.message.includes('incorrect')) {
+      return res.status(401).json({
+        error: 'Invalid password',
+        message: error.message
+      });
+    }
+
+    res.status(500).json({
+      error: 'Failed to change password',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/auth/me
+ * Get current user info
+ */
+router.get('/me', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required'
+      });
+    }
+
+    const token = authHeader.split('Bearer ')[1];
+    const firebaseAdmin = admin();
+    
+    let userId, userOrgId;
+    
+    try {
+      const decodedToken = await firebaseAdmin.auth().verifyIdToken(token);
+      userId = decodedToken.uid;
+      userOrgId = decodedToken.organizationId;
+    } catch (error) {
+      const jwt = require('jsonwebtoken');
+      const decoded = jwt.decode(token);
+      if (!decoded) {
+        throw new Error('Invalid token');
+      }
+      userId = decoded.uid;
+      userOrgId = decoded.organizationId;
+    }
+
+    if (!userOrgId) {
+      return res.status(400).json({
+        error: 'Organization not found'
+      });
+    }
+
+    // Get user
+    const user = await userRepo.findById(userOrgId, userId);
+    
+    if (!user) {
+      return res.status(404).json({
+        error: 'User not found'
+      });
+    }
+
+    // Remove password
+    const { passwordHash, ...userWithoutPassword } = user;
+
+    res.json({
+      success: true,
+      user: {
+        ...userWithoutPassword,
+        organizationId: userOrgId
       }
     });
+
   } catch (error) {
-    console.error('Error updating profile:', error);
-    res.status(500).json({ error: 'Failed to update profile' });
+    console.error('❌ Get me error:', error);
+    res.status(500).json({
+      error: 'Failed to get user info',
+      message: error.message
+    });
   }
 });
 

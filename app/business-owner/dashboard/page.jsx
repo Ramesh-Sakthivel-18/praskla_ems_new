@@ -9,33 +9,15 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { 
-  Building2, 
-  Users, 
-  Shield, 
-  UserCheck, 
-  UserX, 
-  Clock, 
-  FileText,
-  Calendar,
-  ArrowRight,
-  Plus,
-  Trash2,
-  Settings,
-  AlertCircle,
-  RefreshCw,
-  Eye,
-  EyeOff
-} from "lucide-react"
+import { Building2, Users, Shield, UserCheck, UserX, Clock, FileText, Calendar, ArrowRight, Plus, Trash2, Settings, AlertCircle, RefreshCw, Eye, EyeOff } from "lucide-react"
 import { safeRedirect } from "@/lib/redirectUtils"
+import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 
 export default function BusinessOwnerDashboardPage() {
   const router = useRouter()
-
   const [loading, setLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState(null)
   const [error, setError] = useState(null)
-
   const [stats, setStats] = useState({
     totalEmployees: 0,
     presentToday: 0,
@@ -44,7 +26,6 @@ export default function BusinessOwnerDashboardPage() {
     pendingLeaves: 0,
     totalLeaves: 0,
   })
-
   const [admins, setAdmins] = useState([])
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [createLoading, setCreateLoading] = useState(false)
@@ -57,26 +38,36 @@ export default function BusinessOwnerDashboardPage() {
     position: "",
   })
 
+  // ✅ NEW: Auth check using centralized helper
   useEffect(() => {
-    const current = localStorage.getItem("currentEmployee")
-    if (!current) {
-      safeRedirect(router, "/business-owner/login")
-      return
-    }
-
-    const emp = JSON.parse(current)
-
-    if (emp.role !== "business_owner") {
-      alert("Unauthorized. Please login as Business Owner.")
-      safeRedirect(router, "/role-selection")
-      return
-    }
-
-    console.log("✅ Business Owner logged in:", emp.email)
-    console.log("🏢 Organization ID:", emp.organizationId)
+    console.log('🔐 Checking authentication...')
     
-    setCurrentUser(emp)
-    loadDashboard(emp)
+    if (!isAuthenticated()) {
+      console.log('❌ Not authenticated, redirecting to login')
+      safeRedirect(router, '/business-owner/login')
+      return
+    }
+
+    const user = getCurrentUser()
+    console.log('✅ User found:', user?.email, 'Role:', user?.role)
+
+    if (!user) {
+      console.log('❌ No user data, redirecting to login')
+      safeRedirect(router, '/business-owner/login')
+      return
+    }
+
+    // ✅ Accept both role formats
+    if (user.role !== 'business_owner' && user.role !== 'businessowner') {
+      alert('Unauthorized. Please login as Business Owner.')
+      safeRedirect(router, '/role-selection')
+      return
+    }
+
+    console.log("✅ Business Owner logged in:", user.email)
+    console.log("🏢 Organization ID:", user.organizationId)
+    setCurrentUser(user)
+    loadDashboard(user)
   }, [router])
 
   const getApiBase = () => {
@@ -87,7 +78,7 @@ export default function BusinessOwnerDashboardPage() {
     console.log("📊 Loading dashboard for organization:", user.organizationId)
     setLoading(true)
     setError(null)
-    
+
     const token = localStorage.getItem("firebaseToken")
     const base = getApiBase()
 
@@ -99,7 +90,7 @@ export default function BusinessOwnerDashboardPage() {
     }
 
     try {
-      // ===== 1. GET ALL EMPLOYEES (BACKEND FILTERS BY ORG) =====
+      // 1. GET ALL EMPLOYEES
       console.log("🔄 Fetching employees from backend...")
       const employeesRes = await fetch(`${base}/api/admin/employees`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -110,22 +101,14 @@ export default function BusinessOwnerDashboardPage() {
         orgEmployees = await employeesRes.json()
         console.log("✅ Fetched employees from backend:", orgEmployees.length)
         
-        // Verify all employees belong to this organization
-        const wrongOrg = orgEmployees.filter(
-          (e) => e.organizationId !== user.organizationId
+        // Filter to only this organization
+        orgEmployees = orgEmployees.filter(e => 
+          e.organizationId === user.organizationId
         )
-        if (wrongOrg.length > 0) {
-          console.warn("⚠️ Backend returned employees from wrong organization:", wrongOrg)
-        }
-        
-        // Filter out inactive employees
-        // No filtering by active status
-        console.log(`✅ Total employees: ${orgEmployees.length}`)
-
+        console.log("✅ Organization employees:", orgEmployees.length)
       } else {
         const errorText = await employeesRes.text()
         console.error("❌ Failed to fetch employees:", employeesRes.status, errorText)
-        
         if (employeesRes.status === 401) {
           setError("Session expired. Please login again.")
           setTimeout(() => {
@@ -134,7 +117,6 @@ export default function BusinessOwnerDashboardPage() {
           }, 2000)
           return
         }
-        
         throw new Error(`Failed to fetch employees: ${employeesRes.status}`)
       }
 
@@ -144,7 +126,7 @@ export default function BusinessOwnerDashboardPage() {
       console.log("👥 Total active employees:", employeeList.length)
       console.log("👑 Total active admins:", adminList.length)
 
-      // ===== 2. GET TODAY'S ATTENDANCE =====
+      // 2. GET TODAY'S ATTENDANCE
       const today = new Date().toLocaleDateString("en-US")
       console.log("📅 Fetching attendance for date:", today)
       
@@ -155,23 +137,19 @@ export default function BusinessOwnerDashboardPage() {
       let presentToday = 0
       if (attendanceRes.ok) {
         const records = await attendanceRes.json()
-        const arr = Array.isArray(records) ? records : records.attendance || []
-        console.log("📅 Total attendance records for today:", arr.length)
+        const arr = Array.isArray(records) ? records : (records.attendance || [])
         
-        // Create set of employee IDs for faster lookup
+        // Filter to org employees
         const orgEmployeeIds = new Set(orgEmployees.map((e) => e.id))
-        
-        // Filter attendance records for organization employees
         const orgAttendance = arr.filter(r => orgEmployeeIds.has(r.employeeId))
-        console.log("📅 Organization attendance records:", orgAttendance.length)
         
         presentToday = orgAttendance.filter(r => r.checkIn).length
-        console.log("✅ Employees present today:", presentToday)
+        console.log("✅ Present today:", presentToday)
       } else {
         console.error("❌ Failed to fetch attendance:", attendanceRes.status)
       }
 
-      // ===== 3. GET LEAVE REQUESTS =====
+      // 3. GET LEAVE REQUESTS
       console.log("📄 Fetching leave requests...")
       const leaveRes = await fetch(`${base}/api/leave/all`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -182,24 +160,19 @@ export default function BusinessOwnerDashboardPage() {
       if (leaveRes.ok) {
         const data = await leaveRes.json()
         const allLeaves = Array.isArray(data.requests) ? data.requests : []
-        console.log("📄 Total leave requests in system:", allLeaves.length)
         
-        // Filter leaves by organization employees
+        // Filter to org employees
         const orgEmployeeIds = new Set(orgEmployees.map((e) => e.id))
-        const orgLeaves = allLeaves.filter((leave) =>
-          orgEmployeeIds.has(leave.employeeId)
-        )
+        const orgLeaves = allLeaves.filter((leave) => orgEmployeeIds.has(leave.employeeId))
         
         totalLeaves = orgLeaves.length
         pendingLeaves = orgLeaves.filter((l) => l.status === "Pending").length
-        
-        console.log("📄 Organization leave requests:", totalLeaves)
-        console.log("⏳ Pending leave requests:", pendingLeaves)
+        console.log("✅ Leaves - Total:", totalLeaves, "Pending:", pendingLeaves)
       } else {
         console.error("❌ Failed to fetch leaves:", leaveRes.status)
       }
 
-      // ===== 4. UPDATE STATE =====
+      // 4. UPDATE STATE
       setStats({
         totalEmployees: employeeList.length,
         presentToday,
@@ -208,19 +181,9 @@ export default function BusinessOwnerDashboardPage() {
         pendingLeaves,
         totalLeaves,
       })
-
       setAdmins(adminList)
-      
       console.log("✅ Dashboard loaded successfully")
-      console.log("📊 Final stats:", {
-        totalEmployees: employeeList.length,
-        presentToday,
-        absentToday: Math.max(employeeList.length - presentToday, 0),
-        admins: adminList.length,
-        pendingLeaves,
-        totalLeaves,
-      })
-      
+
     } catch (err) {
       console.error("❌ Dashboard: Failed to load data", err)
       setError(`Failed to load dashboard: ${err.message}`)
@@ -236,15 +199,12 @@ export default function BusinessOwnerDashboardPage() {
       return
     }
 
-    // ✅ Validate password
     if (!newAdmin.password || newAdmin.password.length < 6) {
       alert("❌ Password must be at least 6 characters long")
       return
     }
 
     console.log("📝 Creating new admin...")
-    console.log("📝 Admin data:", { ...newAdmin, password: "***" }) // Don't log actual password
-    
     setCreateLoading(true)
     const token = localStorage.getItem("firebaseToken")
     const base = getApiBase()
@@ -259,7 +219,7 @@ export default function BusinessOwnerDashboardPage() {
         body: JSON.stringify({
           name: newAdmin.name,
           email: newAdmin.email,
-          password: newAdmin.password, // ✅ Use manually entered password
+          password: newAdmin.password,
           department: newAdmin.department,
           position: newAdmin.position || "Admin",
           role: "admin",
@@ -270,32 +230,17 @@ export default function BusinessOwnerDashboardPage() {
       })
 
       const data = await response.json()
-
       if (response.ok) {
         console.log("✅ Admin created successfully:", data)
         const createdAdmin = data.employee || data
-
-        // Store credentials for display
         const adminEmail = newAdmin.email
         const adminPassword = newAdmin.password
 
-        // Optimistic update
         setAdmins((prev) => [createdAdmin, ...prev])
-        setStats((prev) => ({
-          ...prev,
-          admins: prev.admins + 1,
-        }))
-
+        setStats((prev) => ({ ...prev, admins: prev.admins + 1 }))
         setShowCreateForm(false)
-        setNewAdmin({
-          name: "",
-          email: "",
-          password: "",
-          department: "",
-          position: "",
-        })
+        setNewAdmin({ name: "", email: "", password: "", department: "", position: "" })
 
-        // ✅ Show success message with credentials
         alert(
           `✅ Admin created successfully!\n\n` +
           `📧 Email: ${adminEmail}\n` +
@@ -327,16 +272,11 @@ export default function BusinessOwnerDashboardPage() {
     const base = getApiBase()
 
     try {
-      // Store previous state for rollback
       const prevAdmins = [...admins]
       const prevStats = { ...stats }
 
-      // Optimistic update
       setAdmins((prev) => prev.filter((admin) => admin.id !== adminId))
-      setStats((prev) => ({
-        ...prev,
-        admins: Math.max(0, prev.admins - 1),
-      }))
+      setStats((prev) => ({ ...prev, admins: Math.max(0, prev.admins - 1) }))
 
       const response = await fetch(`${base}/api/admin/employees/${adminId}`, {
         method: "DELETE",
@@ -348,7 +288,6 @@ export default function BusinessOwnerDashboardPage() {
         alert("✅ Admin deleted successfully!")
       } else {
         console.error("❌ Failed to delete admin:", response.status)
-        // Rollback on failure
         setAdmins(prevAdmins)
         setStats(prevStats)
         alert("❌ Failed to delete admin. Please try again.")
@@ -356,7 +295,6 @@ export default function BusinessOwnerDashboardPage() {
     } catch (err) {
       console.error("❌ Delete admin error:", err)
       alert("❌ Network error. Please try again.")
-      // Reload to ensure consistency
       if (currentUser) {
         loadDashboard(currentUser)
       }
@@ -376,7 +314,7 @@ export default function BusinessOwnerDashboardPage() {
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center space-y-4">
           <RefreshCw className="h-8 w-8 animate-spin mx-auto text-primary" />
-          <p className="text-muted-foreground">Loading your organization...</p>
+          <div className="text-muted-foreground">Loading your organization...</div>
         </div>
       </div>
     )
@@ -388,28 +326,17 @@ export default function BusinessOwnerDashboardPage() {
       <div className="flex min-h-screen items-center justify-center p-4">
         <Card className="max-w-md w-full">
           <CardHeader>
-            <div className="flex items-center gap-2 text-destructive">
+            <CardTitle className="text-destructive flex items-center gap-2">
               <AlertCircle className="h-5 w-5" />
-              <CardTitle>Error Loading Dashboard</CardTitle>
-            </div>
+              Error Loading Dashboard
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">{error}</p>
-            <div className="flex gap-2">
-              <Button onClick={handleRefresh} className="flex-1">
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Retry
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  localStorage.clear()
-                  safeRedirect(router, "/business-owner/login")
-                }}
-              >
-                Logout
-              </Button>
-            </div>
+            <Button onClick={() => loadDashboard(currentUser)} className="w-full">
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Retry
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -429,200 +356,141 @@ export default function BusinessOwnerDashboardPage() {
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-7xl px-4 py-8 space-y-6">
         {/* Header */}
-        <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">
-              Welcome back, {currentUser.name?.split(" ")[0]} 👋
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Manage your organization, admins, and employees from one place.
+            <h1 className="text-2xl font-semibold tracking-tight">Organization Dashboard</h1>
+            <p className="text-sm text-muted-foreground">
+              Welcome back, {currentUser.name}
             </p>
-            {currentUser.organizationId && (
-              <Badge variant="outline" className="mt-2">
-                <Building2 className="mr-1 h-3 w-3" />
-                Org ID: {currentUser.organizationId.substring(0, 8)}...
-              </Badge>
-            )}
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={loading}
-            >
-              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" onClick={handleRefresh}>
+              <RefreshCw className="mr-2 h-4 w-4" />
               Refresh
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => safeRedirect(router, "/admin/dashboard")}
-            >
+            <Button onClick={() => router.push('/business-owner/profile')}>
               <Settings className="mr-2 h-4 w-4" />
-              Admin Panel
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (window.confirm("Are you sure you want to logout?")) {
-                  localStorage.clear()
-                  safeRedirect(router, "/role-selection")
-                }
-              }}
-            >
-              Logout
+              Settings
             </Button>
           </div>
         </header>
 
-        {/* Stats Overview */}
-        <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+        {/* Stats Cards */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Employees</CardTitle>
-              <Users className="h-4 w-4 text-primary" />
+              <CardTitle className="text-sm font-medium">Active Employees</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.totalEmployees}</div>
-              <p className="text-xs text-muted-foreground">Active employees</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Total workforce
+              </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Present</CardTitle>
+              <CardTitle className="text-sm font-medium">Present Today</CardTitle>
               <UserCheck className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">
-                {stats.presentToday}
-              </div>
-              <p className="text-xs text-muted-foreground">Checked in today</p>
+              <div className="text-2xl font-bold text-green-600">{stats.presentToday}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Checked in today
+              </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Absent</CardTitle>
+              <CardTitle className="text-sm font-medium">Absent Today</CardTitle>
               <UserX className="h-4 w-4 text-destructive" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-destructive">
-                {stats.absentToday}
-              </div>
-              <p className="text-xs text-muted-foreground">Not checked in</p>
+              <div className="text-2xl font-bold text-destructive">{stats.absentToday}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Not checked in
+              </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Admins</CardTitle>
-              <Shield className="h-4 w-4 text-accent" />
+              <Shield className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.admins}</div>
-              <p className="text-xs text-muted-foreground">Managing org</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Managing org
+              </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Leave Requests</CardTitle>
-              <FileText className="h-4 w-4 text-blue-600" />
+              <FileText className="h-4 w-4 text-accent" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">
-                {stats.totalLeaves}
-              </div>
-              <p className="text-xs text-muted-foreground">Total requests</p>
+              <div className="text-2xl font-bold">{stats.totalLeaves}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Total requests
+              </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Pending</CardTitle>
+              <CardTitle className="text-sm font-medium">Pending Approvals</CardTitle>
               <Clock className="h-4 w-4 text-yellow-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-yellow-600">
-                {stats.pendingLeaves}
-              </div>
-              <p className="text-xs text-muted-foreground">Awaiting approval</p>
+              <div className="text-2xl font-bold text-yellow-600">{stats.pendingLeaves}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Awaiting approval
+              </p>
             </CardContent>
           </Card>
         </div>
 
         {/* Quick Actions */}
         <div className="grid gap-4 md:grid-cols-3">
-          <Card 
-            className="cursor-pointer transition-all hover:shadow-md hover:border-primary" 
-            onClick={() => router.push("/business-owner/employees")}
-          >
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="rounded-lg bg-primary/10 p-2">
-                  <Users className="h-6 w-6 text-primary" />
-                </div>
-                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+          <Card className="hover:border-primary transition-colors cursor-pointer" onClick={() => router.push('/business-owner/employees')}>
+            <CardContent className="flex items-center justify-between p-6">
+              <div>
+                <p className="text-sm font-medium">Manage Employees</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  View and manage all employees
+                </p>
               </div>
-              <CardTitle className="mt-4">View Employees</CardTitle>
-              <CardDescription>
-                Manage organization members and admins
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Total members</span>
-                <span className="font-semibold">{stats.totalEmployees + stats.admins}</span>
-              </div>
+              <ArrowRight className="h-5 w-5 text-muted-foreground" />
             </CardContent>
           </Card>
 
-          <Card 
-            className="cursor-pointer transition-all hover:shadow-md hover:border-primary" 
-            onClick={() => router.push("/business-owner/attendance")}
-          >
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="rounded-lg bg-green-100 p-2 dark:bg-green-900/20">
-                  <Calendar className="h-6 w-6 text-green-600" />
-                </div>
-                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+          <Card className="hover:border-primary transition-colors cursor-pointer" onClick={() => router.push('/business-owner/attendance')}>
+            <CardContent className="flex items-center justify-between p-6">
+              <div>
+                <p className="text-sm font-medium">Attendance Records</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Track employee attendance
+                </p>
               </div>
-              <CardTitle className="mt-4">View Attendance</CardTitle>
-              <CardDescription>
-                Track employee attendance and working hours
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Present today</span>
-                <span className="font-semibold text-green-600">{stats.presentToday}</span>
-              </div>
+              <ArrowRight className="h-5 w-5 text-muted-foreground" />
             </CardContent>
           </Card>
 
-          <Card 
-            className="cursor-pointer transition-all hover:shadow-md hover:border-primary" 
-            onClick={() => router.push("/business-owner/leave-requests")}
-          >
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/20">
-                  <FileText className="h-6 w-6 text-blue-600" />
-                </div>
-                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+          <Card className="hover:border-primary transition-colors cursor-pointer" onClick={() => router.push('/business-owner/leaves')}>
+            <CardContent className="flex items-center justify-between p-6">
+              <div>
+                <p className="text-sm font-medium">Leave Management</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Review leave requests
+                </p>
               </div>
-              <CardTitle className="mt-4">Leave Requests</CardTitle>
-              <CardDescription>
-                View all leave requests and their status
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Pending approval</span>
-                <span className="font-semibold text-yellow-600">{stats.pendingLeaves}</span>
-              </div>
+              <ArrowRight className="h-5 w-5 text-muted-foreground" />
             </CardContent>
           </Card>
         </div>
@@ -631,147 +499,86 @@ export default function BusinessOwnerDashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Shield className="h-4 w-4" />
-                Organization Admins ({admins.length})
-              </CardTitle>
-              <CardDescription className="mt-1">
-                Admins can manage employees, attendance, and leave requests
+              <CardTitle>Admin Management</CardTitle>
+              <CardDescription>
+                Add an admin to help manage employees, attendance, and leave requests for your organization.
               </CardDescription>
             </div>
             <Dialog open={showCreateForm} onOpenChange={setShowCreateForm}>
               <DialogTrigger asChild>
-                <Button disabled={createLoading}>
+                <Button>
                   <Plus className="mr-2 h-4 w-4" />
                   Add Admin
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
+              <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Create New Admin</DialogTitle>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Create a new admin account for your organization. You'll set their password manually.
-                  </p>
                 </DialogHeader>
                 <form onSubmit={handleCreateAdmin} className="space-y-4">
-                  <div>
-                    <Label htmlFor="name">Name *</Label>
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Full Name</Label>
                     <Input
                       id="name"
                       value={newAdmin.name}
-                      onChange={(e) =>
-                        setNewAdmin((s) => ({ ...s, name: e.target.value }))
-                      }
-                      placeholder="John Doe"
+                      onChange={(e) => setNewAdmin({ ...newAdmin, name: e.target.value })}
                       required
-                      disabled={createLoading}
                     />
                   </div>
-                  
-                  <div>
-                    <Label htmlFor="email">Email *</Label>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
                     <Input
                       id="email"
                       type="email"
                       value={newAdmin.email}
-                      onChange={(e) =>
-                        setNewAdmin((s) => ({ ...s, email: e.target.value }))
-                      }
-                      placeholder="john@example.com"
+                      onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })}
                       required
-                      disabled={createLoading}
                     />
                   </div>
-                  
-                  {/* ✅ PASSWORD FIELD WITH SHOW/HIDE */}
-                  <div>
-                    <Label htmlFor="password">Password *</Label>
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Password</Label>
                     <div className="relative">
                       <Input
                         id="password"
                         type={showPassword ? "text" : "password"}
                         value={newAdmin.password}
-                        onChange={(e) =>
-                          setNewAdmin((s) => ({ ...s, password: e.target.value }))
-                        }
-                        placeholder="Minimum 6 characters"
-                        minLength={6}
+                        onChange={(e) => setNewAdmin({ ...newAdmin, password: e.target.value })}
                         required
-                        disabled={createLoading}
-                        className="pr-10"
+                        minLength={6}
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        disabled={createLoading}
+                        className="absolute right-2 top-2.5"
                       >
-                        {showPassword ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      You'll need to share this password securely with the admin
-                    </p>
+                    <p className="text-xs text-muted-foreground">Minimum 6 characters</p>
                   </div>
-                  
-                  <div>
+                  <div className="space-y-2">
                     <Label htmlFor="department">Department</Label>
                     <Input
                       id="department"
                       value={newAdmin.department}
-                      onChange={(e) =>
-                        setNewAdmin((s) => ({ ...s, department: e.target.value }))
-                      }
-                      placeholder="HR, IT, Sales, etc."
-                      disabled={createLoading}
+                      onChange={(e) => setNewAdmin({ ...newAdmin, department: e.target.value })}
                     />
                   </div>
-                  
-                  <div>
+                  <div className="space-y-2">
                     <Label htmlFor="position">Position</Label>
                     <Input
                       id="position"
                       value={newAdmin.position}
-                      onChange={(e) =>
-                        setNewAdmin((s) => ({ ...s, position: e.target.value }))
-                      }
+                      onChange={(e) => setNewAdmin({ ...newAdmin, position: e.target.value })}
                       placeholder="Admin"
-                      disabled={createLoading}
                     />
                   </div>
-                  
-                  <div className="flex justify-end gap-2 pt-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setShowCreateForm(false)
-                        setShowPassword(false)
-                        setNewAdmin({
-                          name: "",
-                          email: "",
-                          password: "",
-                          department: "",
-                          position: "",
-                        })
-                      }}
-                      disabled={createLoading}
-                    >
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" className="flex-1" onClick={() => setShowCreateForm(false)}>
                       Cancel
                     </Button>
-                    <Button type="submit" disabled={createLoading}>
-                      {createLoading ? (
-                        <>
-                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                          Creating...
-                        </>
-                      ) : (
-                        <>Create Admin</>
-                      )}
+                    <Button type="submit" className="flex-1" disabled={createLoading}>
+                      {createLoading ? "Creating..." : "Create Admin"}
                     </Button>
                   </div>
                 </form>
@@ -780,50 +587,44 @@ export default function BusinessOwnerDashboardPage() {
           </CardHeader>
           <CardContent>
             {admins.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="rounded-full bg-muted p-3 mb-4">
-                  <Shield className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <h3 className="font-semibold mb-1">No Admins Yet</h3>
-                <p className="text-sm text-muted-foreground max-w-sm">
-                  Add an admin to help manage employees, attendance, and leave requests for your organization.
-                </p>
+              <div className="text-center py-8 text-muted-foreground">
+                <Shield className="h-12 w-12 mx-auto mb-3 opacity-20" />
+                <p>No admins created yet</p>
+                <p className="text-sm mt-1">Create your first admin to delegate management tasks</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Department</TableHead>
-                      <TableHead>Position</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Position</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {admins.map((admin) => (
+                    <TableRow key={admin.id}>
+                      <TableCell className="font-medium">{admin.name}</TableCell>
+                      <TableCell>{admin.email}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{admin.department || "N/A"}</Badge>
+                      </TableCell>
+                      <TableCell>{admin.position || "Admin"}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteAdmin(admin.id, admin.name)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {admins.map((admin) => (
-                      <TableRow key={admin.id}>
-                        <TableCell className="font-medium">{admin.name}</TableCell>
-                        <TableCell>{admin.email}</TableCell>
-                        <TableCell>{admin.department || "-"}</TableCell>
-                        <TableCell>{admin.position || "Admin"}</TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => handleDeleteAdmin(admin.id, admin.name)}
-                          >
-                            <Trash2 className="mr-1 h-3 w-3" />
-                            Delete
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                  ))}
+                </TableBody>
+              </Table>
             )}
           </CardContent>
         </Card>

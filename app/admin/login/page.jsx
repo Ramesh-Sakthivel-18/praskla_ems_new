@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Shield } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { auth, signInWithCustomToken } from "@/lib/firebaseClient"
+import { loginUser, getRoleRedirectPath } from "@/lib/auth"
 import { safeRedirect } from "@/lib/redirectUtils"
 
 export default function AdminLoginPage() {
@@ -15,97 +15,47 @@ export default function AdminLoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
 
   const handleLogin = async (e) => {
-  e.preventDefault()
-  console.log('🔐 AdminLogin: Starting login process')
-  console.log('📧 AdminLogin: Email:', email)
+    e.preventDefault()
+    setError("")
+    
+    console.log('🔐 AdminLogin: Starting login process')
 
-  if (!email || !password) {
-    alert('Please enter both email and password')
-    return
-  }
+    if (!email || !password) {
+      setError('Please enter both email and password')
+      return
+    }
 
-  setLoading(true)
-  console.log('🔗 AdminLogin: Sending login request to backend...')
+    setLoading(true)
 
-  try {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/auth/login`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      }
-    )
+    try {
+      // Use centralized auth helper
+      const result = await loginUser(email, password)
 
-    console.log('📊 AdminLogin: Response status:', response.status)
-    console.log('📊 AdminLogin: Response ok:', response.ok)
+      if (result.success) {
+        console.log('✅ AdminLogin: Login successful, role:', result.user.role)
 
-    if (response.ok) {
-      const data = await response.json()
-      console.log('✅ AdminLogin: Login successful')
-      console.log('👤 AdminLogin: Employee data:', data.employee)
-      console.log('🔑 AdminLogin: Custom token received')
-
-      let idToken = data.customToken
-
-      if (auth) {
-        try {
-          const userCredential = await signInWithCustomToken(auth, data.customToken)
-          console.log('🔥 AdminLogin: Firebase authentication successful')
-          idToken = await userCredential.user.getIdToken()
-          console.log('🎟️ AdminLogin: Firebase ID token obtained')
-        } catch (firebaseError) {
-          console.warn('⚠️ AdminLogin: Firebase authentication failed, using custom token:', firebaseError.message)
+        // Check if user has correct role
+        if (result.user.role === 'admin' || result.user.role === 'manager') {
+          const redirectPath = getRoleRedirectPath(result.user.role)
+          console.log('🚀 Redirecting to:', redirectPath)
+          safeRedirect(router, redirectPath)
+        } else {
+          setError('Only admin users can access this page. Please use the appropriate login page.')
+          setLoading(false)
         }
       } else {
-        console.warn('⚠️ AdminLogin: Firebase not available, using custom token')
+        setError(result.error || 'Login failed')
+        setLoading(false)
       }
-
-      // Store authentication data
-      localStorage.setItem('adminLoggedIn', 'true')
-      localStorage.setItem('firebaseToken', idToken)
-      localStorage.setItem('currentEmployee', JSON.stringify(data.employee))
-      console.log('💾 AdminLogin: Stored auth data in localStorage')
-
-      // ✅ ROLE-BASED REDIRECTS (NO extra redirect after this)
-      if (data.employee.role === 'manager') {
-        console.log('Manager login detected, redirecting to manager dashboard')
-        safeRedirect(router, '/manager/dashboard')
-        return
-      }
-
-      if (data.employee.role === 'admin') {
-        console.log('Admin login detected, redirecting to admin dashboard')
-        safeRedirect(router, '/admin/dashboard')
-        return
-      }
-
-      // For any other role, block here
-      alert('Employee users should use the employee login page')
+    } catch (error) {
+      console.error('❌ AdminLogin: Unexpected error:', error)
+      setError('An unexpected error occurred')
       setLoading(false)
-      return
-    } else {
-      let errorData
-      try {
-        errorData = await response.json()
-      } catch {
-        errorData = { error: `Login failed with status ${response.status}` }
-      }
-      console.error('❌ AdminLogin: Login failed:', errorData)
-      const errorMessage =
-        errorData?.error || errorData?.message || `Login failed (Status: ${response.status})`
-      alert(errorMessage)
     }
-  } catch (error) {
-    console.error('❌ AdminLogin: Network error:', error)
-    alert('Network error. Please check if the backend is running.')
   }
-
-  setLoading(false)
-}
-
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
@@ -119,22 +69,28 @@ export default function AdminLoginPage() {
           <CardTitle className="text-3xl">Admin Login</CardTitle>
           <CardDescription>Enter your credentials to access the admin panel</CardDescription>
           <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-800">
-            <p className="font-medium">Default Admin Credentials:</p>
-            <p>Email: admin@ems.com</p>
-            <p>Password: admin123</p>
+            <p className="font-medium">Sample Admin Credentials:</p>
+            <p>Email: admin@democompany.com</p>
+            <p>Password: password123</p>
           </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-800">
+                {error}
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="admin@ems.com"
+                placeholder="admin@democompany.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                disabled={loading}
               />
             </div>
             <div className="space-y-2">
@@ -146,6 +102,7 @@ export default function AdminLoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                disabled={loading}
               />
             </div>
             <Button type="submit" className="w-full" size="lg" disabled={loading}>

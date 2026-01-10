@@ -1,205 +1,553 @@
-const { getFirestore } = require('firebase-admin/firestore');
-const initFirebaseAdmin = require('../firebase-admin');
-const db = getFirestore(initFirebaseAdmin());
+/**
+ * EmployeeService.js (REFACTORED)
+ * 
+ * Business logic layer for employee management.
+ * Uses UserRepository for data access.
+ * Uses QuotaService for quota enforcement.
+ * 
+ * SOLID Principles:
+ * - Single Responsibility: Only employee business logic
+ * - Dependency Inversion: Depends on abstractions (repositories)
+ * - Open/Closed: Can extend without modifying existing code
+ */
+
+const bcrypt = require('bcryptjs');
 
 class EmployeeService {
-  // Create employee
-  static async create(employeeData) {
-    console.log('🔧 EmployeeService.create() - Creating employee in Firebase');
-    console.log('Employee data:', employeeData);
+  /**
+   * Constructor with dependency injection
+   * @param {UserRepository} userRepository
+   * @param {QuotaService} quotaService
+   * @param {OrganizationRepository} organizationRepository (optional)
+   */
+  constructor(userRepository, quotaService, organizationRepository = null) {
+    this.userRepo = userRepository;
+    this.quotaService = quotaService;
+    this.orgRepo = organizationRepository;
+  }
+
+  /**
+   * Create a new employee
+   * @param {string} orgId - Organization ID
+   * @param {Object} employeeData - Employee data
+   * @param {string} creatorId - User creating the employee
+   * @param {string} creatorRole - Creator's role (admin/business_owner)
+   * @returns {Promise<Object>} Created employee (without password)
+   */
+  async createEmployee(orgId, employeeData, creatorId, creatorRole) {
+    console.log(`👤 EmployeeService.createEmployee() - Org: ${orgId}, Creator: ${creatorRole}`);
+
     try {
-      const { 
-        name, 
-        email, 
-        password, 
-        role, 
-        department, 
-        position, 
-        salary, 
-        workingType, 
-        skills, 
-        address, 
-        emergencyContact,
-        organizationId // ✅ ADDED
-      } = employeeData;
+      // 1. Validate organization exists and is active
+      if (this.orgRepo) {
+        const isActive = await this.orgRepo.isActive(orgId);
+        if (!isActive) {
+          throw new Error('Organization is inactive. Cannot create employees.');
+        }
+      }
 
-      const employeeRef = db.collection('employees').doc();
-      console.log('📄 Generated employee document ID:', employeeRef.id);
+      // 2. Validate quota (organization limit + admin quota if applicable)
+      const validation = await this.quotaService.validateUserCreation(
+        orgId,
+        'employee',
+        creatorId,
+        creatorRole
+      );
 
-      const employee = {
-        id: employeeRef.id,
-        name,
-        email: email.toLowerCase(),
-        password, // In real app, this should be hashed
-        role: role || 'employee',
-        department,
-        position: position || role || 'employee',
-        salary: salary || '0',
-        workingType,
-        skills: skills || '',
-        address: address || '',
-        emergencyContact: emergencyContact || '',
-        organizationId: organizationId || null, // ✅ ADDED
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
+      if (!validation.allowed) {
+        console.log(`⛔ Quota validation failed: ${validation.reason}`);
+        throw new Error(validation.reason);
+      }
 
-      console.log('💾 Saving employee to Firebase...');
-      console.log('✅ organizationId being saved:', employee.organizationId); // ✅ ADDED LOG
-      await employeeRef.set(employee);
-      console.log('✅ Employee saved successfully with ID:', employee.id);
-      return employee;
+      // 3. Check if email already exists in organization
+      const existingEmployee = await this.userRepo.findByEmail(orgId, employeeData.email);
+      if (existingEmployee) {
+        throw new Error(`Employee with email ${employeeData.email} already exists in this organization.`);
+      }
+
+      // 4. Hash password
+      const passwordHash = await bcrypt.hash(employeeData.password, 10);
+
+      // 5. Create employee
+      const employee = await this.userRepo.create(orgId, {
+        name: employeeData.name,
+        email: employeeData.email.toLowerCase(),
+        passwordHash,
+        role: 'employee',
+        department: employeeData.department || '',
+        position: employeeData.position || 'Employee',
+        salary: employeeData.salary || '0',
+        workingType: employeeData.workingType || 'full-time',
+        skills: employeeData.skills || '',
+        address: employeeData.address || '',
+        emergencyContact: employeeData.emergencyContact || '',
+        phone: employeeData.phone || '',
+        createdBy: creatorId
+      });
+
+      // 6. Record creation in quota system
+      await this.quotaService.recordUserCreation(orgId, 'employee', creatorId, creatorRole);
+
+      // 7. Remove password hash from response
+      const { passwordHash: _, ...employeeWithoutPassword } = employee;
+
+      console.log(`✅ Employee created successfully: ${employee.name} (${employee.id})`);
+      return employeeWithoutPassword;
     } catch (error) {
-      console.error('❌ Error in EmployeeService.create():', error);
+      console.error(`❌ EmployeeService: Error creating employee:`, error);
       throw new Error(`Failed to create employee: ${error.message}`);
     }
   }
 
-  // Find employee by email
-  static async findByEmail(email) {
-    console.log('🔍 EmployeeService.findByEmail() - Searching for:', email);
+  /**
+   * Get employee by ID
+   * @param {string} orgId - Organization ID
+   * @param {string} employeeId - Employee ID
+   * @returns {Promise<Object|null>} Employee data (without password)
+   */
+  async getEmployeeById(orgId, employeeId) {
+    console.log(`🔍 EmployeeService.getEmployeeById() - ID: ${employeeId}`);
+
     try {
-      const snapshot = await db
-        .collection('employees')
-        .where('email', '==', email.toLowerCase())
-        .limit(1)
-        .get();
-
-      console.log('📊 Query result - documents found:', snapshot.size);
-
-      if (snapshot.empty) {
-        console.log('⚠️ No employee found with email:', email);
+      const employee = await this.userRepo.findById(orgId, employeeId);
+      
+      if (!employee) {
+        console.log(`⚠️ Employee not found: ${employeeId}`);
         return null;
       }
 
-      const doc = snapshot.docs[0];
-      const employee = { id: doc.id, ...doc.data() };
-      console.log('✅ Employee found:', employee.id);
-      return employee;
+      // Remove password hash
+      const { passwordHash, ...employeeWithoutPassword } = employee;
+      
+      console.log(`✅ Employee retrieved: ${employee.name}`);
+      return employeeWithoutPassword;
     } catch (error) {
-      console.error('❌ Error in EmployeeService.findByEmail():', error);
-      throw new Error(`Failed to find employee: ${error.message}`);
+      console.error(`❌ EmployeeService: Error getting employee:`, error);
+      throw new Error(`Failed to get employee: ${error.message}`);
     }
   }
 
-  // Find employee by ID
-  static async findById(id) {
-    console.log('🔍 EmployeeService.findById() - Searching for ID:', id);
-    try {
-      const doc = await db.collection('employees').doc(id).get();
-      console.log('📄 Document exists:', doc.exists);
+  /**
+   * Get all employees in organization
+   * @param {string} orgId - Organization ID
+   * @param {Object} filters - Optional filters { isActive }
+   * @returns {Promise<Array>} List of employees (without passwords)
+   */
+  async getAllEmployees(orgId, filters = {}) {
+    console.log(`📋 EmployeeService.getAllEmployees() - Org: ${orgId}`);
 
-      if (!doc.exists) {
-        console.log('⚠️ No employee found with ID:', id);
-        return null;
+    try {
+      const employees = await this.userRepo.findByRole(orgId, 'employee');
+
+      // Apply filters
+      let filteredEmployees = employees;
+      
+      if (filters.isActive !== undefined) {
+        filteredEmployees = employees.filter(emp => emp.isActive === filters.isActive);
       }
 
-      const employee = { id: doc.id, ...doc.data() };
-      console.log('✅ Employee found:', employee.id);
-      return employee;
+      // Remove password hashes
+      const employeesWithoutPasswords = filteredEmployees.map(emp => {
+        const { passwordHash, ...empWithoutPassword } = emp;
+        return empWithoutPassword;
+      });
+
+      console.log(`✅ Retrieved ${employeesWithoutPasswords.length} employees`);
+      return employeesWithoutPasswords;
     } catch (error) {
-      console.error('❌ Error in EmployeeService.findById():', error);
-      throw new Error(`Failed to find employee: ${error.message}`);
-    }
-  }
-
-  // Get all employees
-  static async getAll() {
-    console.log('🔍 EmployeeService.getAll() - Fetching all employees');
-    try {
-      const snapshot = await db.collection('employees').get();
-      const employees = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      console.log(`📊 Found ${employees.length} employees`);
-
-      // Filter only active employees
-      const activeEmployees = employees.filter(emp => emp.isActive !== false);
-      console.log(`✅ Returning ${activeEmployees.length} active employees`);
-
-      return activeEmployees;
-    } catch (error) {
-      console.error('❌ Error in EmployeeService.getAll():', error);
+      console.error(`❌ EmployeeService: Error getting all employees:`, error);
       throw new Error(`Failed to get employees: ${error.message}`);
     }
   }
 
-  // Update employee
-  static async update(id, updateData) {
-    console.log('🔧 EmployeeService.update() - Updating employee:', id);
-    console.log('Update data:', updateData);
+  /**
+   * Get active employees only
+   * @param {string} orgId - Organization ID
+   * @returns {Promise<Array>} List of active employees
+   */
+  async getActiveEmployees(orgId) {
+    return await this.getAllEmployees(orgId, { isActive: true });
+  }
+
+  /**
+   * Update employee information
+   * @param {string} orgId - Organization ID
+   * @param {string} employeeId - Employee ID
+   * @param {Object} updateData - Data to update
+   * @returns {Promise<Object>} Updated employee (without password)
+   */
+  async updateEmployee(orgId, employeeId, updateData) {
+    console.log(`📝 EmployeeService.updateEmployee() - ID: ${employeeId}`);
+
     try {
-      const employeeRef = db.collection('employees').doc(id);
-      const updatedData = {
-        ...updateData,
-        updatedAt: new Date().toISOString()
-      };
+      // Check if employee exists
+      const existingEmployee = await this.userRepo.findById(orgId, employeeId);
+      if (!existingEmployee) {
+        throw new Error('Employee not found');
+      }
 
-      console.log('💾 Updating employee in Firebase...');
-      await employeeRef.update(updatedData);
+      // If updating email, check for duplicates
+      if (updateData.email && updateData.email !== existingEmployee.email) {
+        const duplicate = await this.userRepo.findByEmail(orgId, updateData.email);
+        if (duplicate) {
+          throw new Error(`Email ${updateData.email} is already in use`);
+        }
+        updateData.email = updateData.email.toLowerCase();
+      }
 
-      const updated = await employeeRef.get();
-      const employee = { id: updated.id, ...updated.data() };
-      console.log('✅ Employee updated successfully');
-      return employee;
+      // If updating password, hash it
+      if (updateData.password) {
+        updateData.passwordHash = await bcrypt.hash(updateData.password, 10);
+        delete updateData.password;
+      }
+
+      // Don't allow changing role, createdBy, or organizationId
+      delete updateData.role;
+      delete updateData.createdBy;
+      delete updateData.organizationId;
+
+      // Update employee
+      const updated = await this.userRepo.update(orgId, employeeId, updateData);
+
+      // Remove password hash
+      const { passwordHash, ...updatedWithoutPassword } = updated;
+
+      console.log(`✅ Employee updated successfully: ${updated.name}`);
+      return updatedWithoutPassword;
     } catch (error) {
-      console.error('❌ Error in EmployeeService.update():', error);
+      console.error(`❌ EmployeeService: Error updating employee:`, error);
       throw new Error(`Failed to update employee: ${error.message}`);
     }
   }
 
-  // Delete employee (mark as inactive)
-  static async delete(id) {
-    console.log('🗑️ EmployeeService.delete() - Marking employee as inactive:', id);
+  /**
+   * Delete employee (soft delete - mark as inactive)
+   * @param {string} orgId - Organization ID
+   * @param {string} employeeId - Employee ID
+   * @param {string} deletedBy - User performing deletion
+   * @returns {Promise<Object>} Deleted employee info
+   */
+  async deleteEmployee(orgId, employeeId, deletedBy) {
+    console.log(`🗑️ EmployeeService.deleteEmployee() - ID: ${employeeId}`);
+
     try {
-      await this.update(id, { isActive: false });
-      console.log('✅ Employee marked as inactive');
-      return true;
+      // Check if employee exists
+      const employee = await this.userRepo.findById(orgId, employeeId);
+      if (!employee) {
+        throw new Error('Employee not found');
+      }
+
+      if (!employee.isActive) {
+        throw new Error('Employee is already inactive');
+      }
+
+      // Soft delete (mark as inactive)
+      const deleted = await this.userRepo.softDelete(orgId, employeeId);
+
+      // Record deletion in quota system (decrement counts)
+      await this.quotaService.recordUserDeletion(
+        orgId,
+        'employee',
+        employee.createdBy // Original creator ID
+      );
+
+      console.log(`✅ Employee deactivated: ${employee.name}`);
+      return {
+        id: deleted.id,
+        name: deleted.name,
+        email: deleted.email,
+        isActive: deleted.isActive,
+        deletedAt: deleted.deletedAt,
+        deletedBy
+      };
     } catch (error) {
-      console.error('❌ Error in EmployeeService.delete():', error);
+      console.error(`❌ EmployeeService: Error deleting employee:`, error);
       throw new Error(`Failed to delete employee: ${error.message}`);
     }
   }
 
-  // Find employee by Firebase UID or email (for authentication middleware)
-  static async findByUidOrEmail(uid, email) {
-    console.log('🔍 EmployeeService.findByUidOrEmail() - Searching by UID:', uid, 'or email:', email);
+  /**
+   * Permanently delete employee (hard delete - use with caution)
+   * @param {string} orgId - Organization ID
+   * @param {string} employeeId - Employee ID
+   * @returns {Promise<boolean>} True if deleted
+   */
+  async permanentlyDeleteEmployee(orgId, employeeId) {
+    console.log(`⚠️ EmployeeService.permanentlyDeleteEmployee() - ID: ${employeeId}`);
+
     try {
-      // First try to find by Firebase UID
-      if (uid) {
-        const snapshot = await db
-          .collection('employees')
-          .where('firebaseUid', '==', uid)
-          .limit(1)
-          .get();
-
-        if (!snapshot.empty) {
-          const doc = snapshot.docs[0];
-          const employee = { id: doc.id, ...doc.data() };
-          console.log('✅ Employee found by UID:', employee.id);
-          return employee;
-        }
+      // Get employee info before deletion
+      const employee = await this.userRepo.findById(orgId, employeeId);
+      if (!employee) {
+        throw new Error('Employee not found');
       }
 
-      // If not found by UID, try by email
-      if (email) {
-        const employee = await this.findByEmail(email);
-        if (employee) {
-          console.log('✅ Employee found by email:', employee.id);
-          // Update employee with Firebase UID for future lookups
-          if (uid && !employee.firebaseUid) {
-            await this.update(employee.id, { firebaseUid: uid });
-            console.log('✅ Updated employee with Firebase UID');
-            employee.firebaseUid = uid;
-          }
-          return employee;
-        }
-      }
+      // Hard delete
+      await this.userRepo.delete(orgId, employeeId);
 
-      console.log('⚠️ No employee found with UID or email');
-      return null;
+      // Record deletion in quota system
+      await this.quotaService.recordUserDeletion(
+        orgId,
+        'employee',
+        employee.createdBy
+      );
+
+      console.log(`⚠️ Employee permanently deleted: ${employee.name}`);
+      return true;
     } catch (error) {
-      console.error('❌ Error in EmployeeService.findByUidOrEmail():', error);
-      throw new Error(`Failed to find employee: ${error.message}`);
+      console.error(`❌ EmployeeService: Error permanently deleting employee:`, error);
+      throw new Error(`Failed to permanently delete employee: ${error.message}`);
+    }
+  }
+
+  /**
+   * Restore soft-deleted employee
+   * @param {string} orgId - Organization ID
+   * @param {string} employeeId - Employee ID
+   * @returns {Promise<Object>} Restored employee
+   */
+  async restoreEmployee(orgId, employeeId) {
+    console.log(`♻️ EmployeeService.restoreEmployee() - ID: ${employeeId}`);
+
+    try {
+      // Check if employee exists
+      const employee = await this.userRepo.findById(orgId, employeeId);
+      if (!employee) {
+        throw new Error('Employee not found');
+      }
+
+      if (employee.isActive) {
+        throw new Error('Employee is already active');
+      }
+
+      // Check quota before restoring
+      const validation = await this.quotaService.canAddUserToOrg(orgId, 'employee');
+      if (!validation.allowed) {
+        throw new Error('Cannot restore: ' + validation.reason);
+      }
+
+      // Restore (mark as active)
+      const restored = await this.userRepo.update(orgId, employeeId, {
+        isActive: true,
+        deletedAt: null
+      });
+
+      // Record restoration in quota system
+      await this.quotaService.recordUserCreation(
+        orgId,
+        'employee',
+        employee.createdBy,
+        'admin' // Assume original creator was admin
+      );
+
+      // Remove password hash
+      const { passwordHash, ...restoredWithoutPassword } = restored;
+
+      console.log(`✅ Employee restored: ${restored.name}`);
+      return restoredWithoutPassword;
+    } catch (error) {
+      console.error(`❌ EmployeeService: Error restoring employee:`, error);
+      throw new Error(`Failed to restore employee: ${error.message}`);
+    }
+  }
+
+  /**
+   * Search employees by name or email
+   * @param {string} orgId - Organization ID
+   * @param {string} searchTerm - Search term
+   * @returns {Promise<Array>} Matching employees
+   */
+  async searchEmployees(orgId, searchTerm) {
+    console.log(`🔍 EmployeeService.searchEmployees() - Term: ${searchTerm}`);
+
+    try {
+      const allEmployees = await this.getAllEmployees(orgId, { isActive: true });
+
+      const lowercaseSearch = searchTerm.toLowerCase();
+      
+      const matches = allEmployees.filter(emp => 
+        emp.name.toLowerCase().includes(lowercaseSearch) ||
+        emp.email.toLowerCase().includes(lowercaseSearch) ||
+        (emp.department && emp.department.toLowerCase().includes(lowercaseSearch))
+      );
+
+      console.log(`✅ Found ${matches.length} matching employees`);
+      return matches;
+    } catch (error) {
+      console.error(`❌ EmployeeService: Error searching employees:`, error);
+      throw new Error(`Failed to search employees: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get employees by department
+   * @param {string} orgId - Organization ID
+   * @param {string} department - Department name
+   * @returns {Promise<Array>} Employees in department
+   */
+  async getEmployeesByDepartment(orgId, department) {
+    console.log(`📋 EmployeeService.getEmployeesByDepartment() - Dept: ${department}`);
+
+    try {
+      const allEmployees = await this.getActiveEmployees(orgId);
+      
+      const deptEmployees = allEmployees.filter(emp => 
+        emp.department && emp.department.toLowerCase() === department.toLowerCase()
+      );
+
+      console.log(`✅ Found ${deptEmployees.length} employees in ${department}`);
+      return deptEmployees;
+    } catch (error) {
+      console.error(`❌ EmployeeService: Error getting employees by department:`, error);
+      throw new Error(`Failed to get employees by department: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get employee count for organization
+   * @param {string} orgId - Organization ID
+   * @returns {Promise<Object>} Employee counts
+   */
+  async getEmployeeCount(orgId) {
+    console.log(`📊 EmployeeService.getEmployeeCount() - Org: ${orgId}`);
+
+    try {
+      const allEmployees = await this.userRepo.findByRole(orgId, 'employee');
+      
+      const counts = {
+        total: allEmployees.length,
+        active: allEmployees.filter(emp => emp.isActive).length,
+        inactive: allEmployees.filter(emp => !emp.isActive).length
+      };
+
+      console.log(`✅ Employee counts:`, counts);
+      return counts;
+    } catch (error) {
+      console.error(`❌ EmployeeService: Error getting employee count:`, error);
+      throw new Error(`Failed to get employee count: ${error.message}`);
+    }
+  }
+
+  /**
+   * Validate employee credentials (for login)
+   * @param {string} orgId - Organization ID
+   * @param {string} email - Employee email
+   * @param {string} password - Plain text password
+   * @returns {Promise<Object|null>} Employee data (without password) if valid, null if invalid
+   */
+  async validateCredentials(orgId, email, password) {
+    console.log(`🔐 EmployeeService.validateCredentials() - Email: ${email}`);
+
+    try {
+      const employee = await this.userRepo.findByEmail(orgId, email);
+      
+      if (!employee) {
+        console.log(`⚠️ Employee not found: ${email}`);
+        return null;
+      }
+
+      if (!employee.isActive) {
+        console.log(`⚠️ Employee account is inactive: ${email}`);
+        return null;
+      }
+
+      // Compare password
+      const isValid = await bcrypt.compare(password, employee.passwordHash);
+      
+      if (!isValid) {
+        console.log(`⚠️ Invalid password for: ${email}`);
+        return null;
+      }
+
+      // Remove password hash
+      const { passwordHash, ...employeeWithoutPassword } = employee;
+
+      console.log(`✅ Credentials validated for: ${employee.name}`);
+      return employeeWithoutPassword;
+    } catch (error) {
+      console.error(`❌ EmployeeService: Error validating credentials:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Change employee password
+   * @param {string} orgId - Organization ID
+   * @param {string} employeeId - Employee ID
+   * @param {string} oldPassword - Current password
+   * @param {string} newPassword - New password
+   * @returns {Promise<boolean>} True if password changed
+   */
+  async changePassword(orgId, employeeId, oldPassword, newPassword) {
+    console.log(`🔑 EmployeeService.changePassword() - ID: ${employeeId}`);
+
+    try {
+      const employee = await this.userRepo.findById(orgId, employeeId);
+      
+      if (!employee) {
+        throw new Error('Employee not found');
+      }
+
+      // Verify old password
+      const isValid = await bcrypt.compare(oldPassword, employee.passwordHash);
+      if (!isValid) {
+        throw new Error('Current password is incorrect');
+      }
+
+      // Hash new password
+      const newPasswordHash = await bcrypt.hash(newPassword, 10);
+
+      // Update password
+      await this.userRepo.update(orgId, employeeId, {
+        passwordHash: newPasswordHash
+      });
+
+      console.log(`✅ Password changed successfully for: ${employee.name}`);
+      return true;
+    } catch (error) {
+      console.error(`❌ EmployeeService: Error changing password:`, error);
+      throw new Error(`Failed to change password: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get employees created by specific admin
+   * @param {string} orgId - Organization ID
+   * @param {string} adminId - Admin user ID
+   * @returns {Promise<Array>} Employees created by this admin
+   */
+  async getEmployeesCreatedByAdmin(orgId, adminId) {
+    console.log(`📋 EmployeeService.getEmployeesCreatedByAdmin() - Admin: ${adminId}`);
+
+    try {
+      const allEmployees = await this.getActiveEmployees(orgId);
+      
+      const adminEmployees = allEmployees.filter(emp => emp.createdBy === adminId);
+
+      console.log(`✅ Found ${adminEmployees.length} employees created by admin`);
+      return adminEmployees;
+    } catch (error) {
+      console.error(`❌ EmployeeService: Error getting admin's employees:`, error);
+      throw new Error(`Failed to get admin's employees: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get employee statistics
+   * @param {string} orgId - Organization ID
+   * @returns {Promise<Object>} Employee statistics
+   */
+  async getEmployeeStats(orgId) {
+    console.log(`📊 EmployeeService.getEmployeeStats() - Org: ${orgId}`);
+
+    try {
+      const stats = await this.userRepo.getStats(orgId);
+      
+      console.log(`✅ Employee statistics generated:`, stats);
+      return stats;
+    } catch (error) {
+      console.error(`❌ EmployeeService: Error getting employee stats:`, error);
+      throw new Error(`Failed to get employee stats: ${error.message}`);
     }
   }
 }

@@ -1,201 +1,400 @@
+/**
+ * leave.js (UPDATED)
+ * 
+ * Routes for leave request management.
+ * Uses LeaveService from container.
+ */
+
 const express = require('express');
 const router = express.Router();
-const LeaveService = require('../services/LeaveService');
-const { authenticateToken, requireAdmin } = require('../middleware');
+const container = require('../container');
+const { authenticateToken, requireEmployee, requireAdminOrBusinessOwner } = require('../middleware');
 
-console.log('📄 Leave routes loaded');
+// Get service instance from container
+const leaveService = container.getLeaveService();
 
-// GET /api/leave/all - Get all leave requests (Admin only)
-router.get('/all', authenticateToken, requireAdmin, async (req, res) => {
-  console.log('🔍 LeaveRoutes: GET /all - Fetching all leave requests');
-  console.log('👤 Requested by:', req.user?.email || req.user?.uid);
-  
+/**
+ * POST /api/leave/apply
+ * Apply for leave
+ * Employee only
+ */
+router.post('/apply', authenticateToken, requireEmployee, async (req, res) => {
   try {
-    const leaves = await LeaveService.getAll();  // ✅ Changed from getAllLeaves()
-    console.log('✅ LeaveRoutes: Found', leaves.length, 'leave requests');
-    
-    res.json({ 
-      success: true,
-      requests: leaves 
-    });
-  } catch (error) {
-    console.error('❌ LeaveRoutes: Error fetching leaves:', error);
-    res.status(500).json({ 
-      success: false,
-      error: 'Failed to fetch leave requests',
-      message: error.message 
-    });
-  }
-});
+    const { leaveType, startDate, endDate, reason } = req.body;
+    const orgId = req.user.organizationId;
+    const userId = req.user.uid;
+    const userName = req.user.name;
 
-// GET /api/leave/employee/:employeeId - Get leaves for specific employee
-router.get('/employee/:employeeId', authenticateToken, async (req, res) => {
-  console.log('🔍 LeaveRoutes: GET /employee/:employeeId');
-  
-  try {
-    const { employeeId } = req.params;
-    
-    // Admins can view any employee's leaves, employees can only view their own
-    if (req.user.role !== 'admin' && req.user.uid !== employeeId) {
-      console.log('❌ LeaveRoutes: Unauthorized access attempt');
-      return res.status(403).json({ 
-        success: false,
-        error: 'You can only view your own leave requests' 
+    // Validate required fields
+    if (!leaveType || !startDate || !endDate) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        message: 'leaveType, startDate, and endDate are required'
       });
     }
 
-    const leaves = await LeaveService.getByEmployee(employeeId);  // ✅ Correct method
-    console.log('✅ LeaveRoutes: Found', leaves.length, 'leaves for employee');
-    
-    res.json({ 
+    // Apply for leave
+    const leave = await leaveService.applyForLeave(
+      orgId,
+      userId,
+      {
+        leaveType,
+        startDate,
+        endDate,
+        reason: reason || ''
+      }
+    );
+
+    res.status(201).json({
       success: true,
-      requests: leaves 
+      message: 'Leave request submitted successfully',
+      data: leave
     });
   } catch (error) {
-    console.error('❌ LeaveRoutes: Error fetching employee leaves:', error);
-    res.status(500).json({ 
-      success: false,
-      error: 'Failed to fetch leave requests' 
-    });
-  }
-});
-
-// POST /api/leave/request - Submit new leave request
-router.post('/request', authenticateToken, async (req, res) => {
-  console.log('🔍 LeaveRoutes: POST /request');
-  console.log('📝 Request body:', req.body);
-  
-  try {
-    const leaveData = {
-      ...req.body,
-      employeeId: req.user.uid,
-      employeeName: req.user.name || req.user.email
-    };
-
-    const leaveRequest = await LeaveService.create(leaveData);  // ✅ Correct method
-    console.log('✅ LeaveRoutes: Leave request created:', leaveRequest.id);
+    console.error('Error applying for leave:', error);
     
-    res.status(201).json({ 
-      success: true,
-      request: leaveRequest 
-    });
-  } catch (error) {
-    console.error('❌ LeaveRoutes: Error creating leave request:', error);
-    res.status(500).json({ 
-      success: false,
-      error: 'Failed to create leave request',
-      message: error.message 
-    });
-  }
-});
-
-// PUT /api/leave/:id/status - Update leave request status (Admin only)
-router.put('/:id/status', authenticateToken, requireAdmin, async (req, res) => {
-  console.log('🔍 LeaveRoutes: PUT /:id/status');
-  console.log('📝 Request params:', req.params);
-  console.log('📝 Request body:', req.body);
-  
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-
-    if (!['Approved', 'Rejected'].includes(status)) {
-      return res.status(400).json({ 
-        success: false,
-        error: 'Invalid status. Must be Approved or Rejected' 
+    if (error.message.includes('overlap')) {
+      return res.status(409).json({
+        error: 'Date conflict',
+        message: error.message
       });
     }
 
-    const updatedLeave = await LeaveService.updateStatus(id, status);  // ✅ Correct method
-    console.log('✅ LeaveRoutes: Leave status updated:', id);
-    
-    res.json({ 
-      success: true,
-      request: updatedLeave 
-    });
-  } catch (error) {
-    console.error('❌ LeaveRoutes: Error updating leave status:', error);
-    res.status(500).json({ 
-      success: false,
-      error: 'Failed to update leave status',
-      message: error.message 
+    if (error.message.includes('Invalid date') || error.message.includes('past')) {
+      return res.status(400).json({
+        error: 'Invalid dates',
+        message: error.message
+      });
+    }
+
+    res.status(500).json({
+      error: 'Failed to apply for leave',
+      message: error.message
     });
   }
 });
 
-// GET /api/leave/:id - Get single leave request by ID
-router.get('/:id', authenticateToken, async (req, res) => {
-  console.log('🔍 LeaveRoutes: GET /:id');
-  
+/**
+ * GET /api/leave/my-leaves
+ * Get my leave requests
+ * Employee only
+ */
+router.get('/my-leaves', authenticateToken, requireEmployee, async (req, res) => {
   try {
-    const { id } = req.params;
-    const leave = await LeaveService.getById(id);  // ✅ Correct method
-    
+    const { status, limit } = req.query;
+    const orgId = req.user.organizationId;
+    const userId = req.user.uid;
+
+    const options = {};
+    if (status) options.status = status;
+    if (limit) options.limit = parseInt(limit);
+
+    const leaves = await leaveService.getUserLeaves(orgId, userId, options);
+
+    res.json({
+      success: true,
+      count: leaves.length,
+      data: leaves
+    });
+  } catch (error) {
+    console.error('Error getting my leaves:', error);
+    res.status(500).json({
+      error: 'Failed to get leave requests',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/leave/:leaveId
+ * Get specific leave request
+ * Employee (own), Admin, or Business Owner
+ */
+router.get('/:leaveId', authenticateToken, requireEmployee, async (req, res) => {
+  try {
+    const { leaveId } = req.params;
+    const orgId = req.user.organizationId;
+
+    const leave = await leaveService.getLeaveById(orgId, leaveId);
+
     if (!leave) {
-      return res.status(404).json({ 
-        success: false,
-        error: 'Leave request not found' 
+      return res.status(404).json({
+        error: 'Leave request not found'
       });
     }
-    
-    // Check access rights
-    if (req.user.role !== 'admin' && req.user.uid !== leave.employeeId) {
-      return res.status(403).json({ 
-        success: false,
-        error: 'You can only view your own leave requests' 
+
+    // Check if user is authorized to view this leave
+    const isOwner = leave.userId === req.user.uid;
+    const isAdminOrOwner = ['admin', 'business_owner', 'businessowner'].includes(req.user.role);
+
+    if (!isOwner && !isAdminOrOwner) {
+      return res.status(403).json({
+        error: 'Access denied',
+        message: 'You can only view your own leave requests'
       });
     }
-    
-    console.log('✅ LeaveRoutes: Leave request found');
-    res.json({ 
+
+    res.json({
       success: true,
-      request: leave 
+      data: leave
     });
   } catch (error) {
-    console.error('❌ LeaveRoutes: Error fetching leave:', error);
-    res.status(500).json({ 
-      success: false,
-      error: 'Failed to fetch leave request' 
+    console.error('Error getting leave:', error);
+    res.status(500).json({
+      error: 'Failed to get leave request',
+      message: error.message
     });
   }
 });
 
-// DELETE /api/leave/:id - Delete leave request (Admin only or own request if pending)
-router.delete('/:id', authenticateToken, async (req, res) => {
-  console.log('🔍 LeaveRoutes: DELETE /:id');
-  
+/**
+ * PUT /api/leave/:leaveId
+ * Update leave request (only if pending)
+ * Employee only (own leaves)
+ */
+router.put('/:leaveId', authenticateToken, requireEmployee, async (req, res) => {
   try {
-    const { id } = req.params;
-    const leave = await LeaveService.getById(id);
+    const { leaveId } = req.params;
+    const updateData = req.body;
+    const orgId = req.user.organizationId;
+    const userId = req.user.uid;
+
+    // Only allow updating certain fields
+    const allowedFields = ['leaveType', 'startDate', 'endDate', 'reason'];
+    const filteredData = {};
     
-    if (!leave) {
-      return res.status(404).json({ 
-        success: false,
-        error: 'Leave request not found' 
+    for (const field of allowedFields) {
+      if (updateData[field] !== undefined) {
+        filteredData[field] = updateData[field];
+      }
+    }
+
+    if (Object.keys(filteredData).length === 0) {
+      return res.status(400).json({
+        error: 'No valid fields to update'
       });
     }
-    
-    // Only admins or employee (if pending) can delete
-    if (req.user.role !== 'admin' && 
-        (req.user.uid !== leave.employeeId || leave.status !== 'Pending')) {
-      return res.status(403).json({ 
-        success: false,
-        error: 'You can only delete your own pending leave requests' 
-      });
-    }
-    
-    await db.collection('leaves').doc(id).delete();
-    console.log('✅ LeaveRoutes: Leave request deleted:', id);
-    
-    res.json({ 
+
+    const updated = await leaveService.updateLeave(
+      orgId,
+      leaveId,
+      userId,
+      filteredData
+    );
+
+    res.json({
       success: true,
-      message: 'Leave request deleted successfully' 
+      message: 'Leave request updated successfully',
+      data: updated
     });
   } catch (error) {
-    console.error('❌ LeaveRoutes: Error deleting leave:', error);
-    res.status(500).json({ 
-      success: false,
-      error: 'Failed to delete leave request' 
+    console.error('Error updating leave:', error);
+    
+    if (error.message.includes('not found')) {
+      return res.status(404).json({
+        error: 'Leave request not found'
+      });
+    }
+
+    if (error.message.includes('only update your own')) {
+      return res.status(403).json({
+        error: 'Access denied',
+        message: error.message
+      });
+    }
+
+    if (error.message.includes('already been reviewed')) {
+      return res.status(409).json({
+        error: 'Cannot update',
+        message: error.message
+      });
+    }
+
+    if (error.message.includes('overlap')) {
+      return res.status(409).json({
+        error: 'Date conflict',
+        message: error.message
+      });
+    }
+
+    res.status(500).json({
+      error: 'Failed to update leave request',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * DELETE /api/leave/:leaveId
+ * Cancel/delete leave request (only if pending)
+ * Employee only (own leaves)
+ */
+router.delete('/:leaveId', authenticateToken, requireEmployee, async (req, res) => {
+  try {
+    const { leaveId } = req.params;
+    const orgId = req.user.organizationId;
+    const userId = req.user.uid;
+
+    await leaveService.cancelLeave(orgId, leaveId, userId);
+
+    res.json({
+      success: true,
+      message: 'Leave request cancelled successfully'
+    });
+  } catch (error) {
+    console.error('Error cancelling leave:', error);
+    
+    if (error.message.includes('not found')) {
+      return res.status(404).json({
+        error: 'Leave request not found'
+      });
+    }
+
+    if (error.message.includes('only cancel your own')) {
+      return res.status(403).json({
+        error: 'Access denied',
+        message: error.message
+      });
+    }
+
+    if (error.message.includes('already been reviewed')) {
+      return res.status(409).json({
+        error: 'Cannot cancel',
+        message: error.message
+      });
+    }
+
+    res.status(500).json({
+      error: 'Failed to cancel leave request',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/leave/stats/my-stats
+ * Get my leave statistics for the year
+ * Employee only
+ */
+router.get('/stats/my-stats', authenticateToken, requireEmployee, async (req, res) => {
+  try {
+    const { year } = req.query;
+    const orgId = req.user.organizationId;
+    const userId = req.user.uid;
+    const statsYear = year ? parseInt(year) : new Date().getFullYear();
+
+    const stats = await leaveService.getUserLeaveStats(orgId, userId, statsYear);
+
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    console.error('Error getting leave stats:', error);
+    res.status(500).json({
+      error: 'Failed to get leave statistics',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/leave/balance
+ * Get leave balance (available vs used)
+ * Employee only
+ */
+router.get('/balance', authenticateToken, requireEmployee, async (req, res) => {
+  try {
+    const { year } = req.query;
+    const orgId = req.user.organizationId;
+    const userId = req.user.uid;
+    const balanceYear = year ? parseInt(year) : new Date().getFullYear();
+
+    const balance = await leaveService.getUserLeaveBalance(orgId, userId, balanceYear);
+
+    res.json({
+      success: true,
+      data: balance
+    });
+  } catch (error) {
+    console.error('Error getting leave balance:', error);
+    res.status(500).json({
+      error: 'Failed to get leave balance',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/leave/check/:date
+ * Check if I'm on leave on a specific date
+ * Employee only
+ */
+router.get('/check/:date', authenticateToken, requireEmployee, async (req, res) => {
+  try {
+    const { date } = req.params;
+    const orgId = req.user.organizationId;
+    const userId = req.user.uid;
+
+    // Validate date format
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({
+        error: 'Invalid date format',
+        message: 'Date must be in YYYY-MM-DD format'
+      });
+    }
+
+    const leave = await leaveService.isUserOnLeave(orgId, userId, date);
+
+    res.json({
+      success: true,
+      onLeave: leave !== null,
+      leave: leave
+    });
+  } catch (error) {
+    console.error('Error checking leave:', error);
+    res.status(500).json({
+      error: 'Failed to check leave status',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/leave/upcoming
+ * Get upcoming approved leaves (next 30 days)
+ * Employee only
+ */
+router.get('/upcoming', authenticateToken, requireEmployee, async (req, res) => {
+  try {
+    const orgId = req.user.organizationId;
+    const userId = req.user.uid;
+
+    // Get user's upcoming leaves
+    const today = new Date();
+    const endDate = new Date();
+    endDate.setDate(today.getDate() + 30);
+
+    const leaves = await leaveService.getUserLeaves(orgId, userId, {
+      status: 'approved'
+    });
+
+    // Filter for upcoming leaves
+    const upcomingLeaves = leaves.filter(leave => {
+      const leaveStart = new Date(leave.startDate);
+      return leaveStart >= today && leaveStart <= endDate;
+    });
+
+    res.json({
+      success: true,
+      count: upcomingLeaves.length,
+      data: upcomingLeaves
+    });
+  } catch (error) {
+    console.error('Error getting upcoming leaves:', error);
+    res.status(500).json({
+      error: 'Failed to get upcoming leaves',
+      message: error.message
     });
   }
 });

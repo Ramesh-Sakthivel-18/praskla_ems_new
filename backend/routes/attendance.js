@@ -1,80 +1,88 @@
 const express = require('express');
 const router = express.Router();
-const AttendanceService = require('../services/AttendanceService');
-const { authenticateToken } = require('../middleware');
+const container = require('../container');
+const { authenticateToken, requireEmployee, requireAdmin, requireAdminOrBusinessOwner } = require('../middleware');
 
-// Get employee's attendance records
-router.get('/my-records', authenticateToken, async (req, res) => {
+// Get service instances from container (ONCE at the top)
+const attendanceService = container.getAttendanceService();
+const statisticsService = container.getStatisticsService();
+
+// Now use them in routes without re-declaring
+router.post('/record', authenticateToken, requireEmployee, async (req, res) => {
   try {
-    const employeeId = req.user.employee.id;
-    const records = await AttendanceService.getEmployeeRecords(employeeId);
+    const { action, employeeId } = req.body;
+    // Don't declare attendanceService again here!
+    
+    let userId = req.user.uid;
+    let userName = req.user.name;
+    const orgId = req.user.organizationId;
+
+    if (req.user.role === 'admin' && employeeId) {
+      const userRepo = container.getUserRepo();
+      const employee = await userRepo.findById(orgId, employeeId);
+      if (employee) {
+        userId = employee.id;
+        userName = employee.name;
+      }
+    }
+
+    const result = await attendanceService.recordAttendance(
+      orgId,
+      userId,
+      userName,
+      action
+    );
+
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Error recording attendance:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get my records
+router.get('/my-records', authenticateToken, requireEmployee, async (req, res) => {
+  try {
+    const attendanceService = container.getAttendanceService();
+    const records = await attendanceService.getEmployeeRecords(
+      req.user.organizationId,
+      req.user.uid,
+      { limit: 10 }
+    );
     res.json(records);
   } catch (error) {
-    console.error('Error fetching attendance records:', error);
-    res.status(500).json({ error: 'Failed to fetch attendance records' });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Get weekly hours summary for the logged-in employee
-router.get('/weekly-hours', authenticateToken, async (req, res) => {
+// Get today's status
+router.get('/today', authenticateToken, requireEmployee, async (req, res) => {
   try {
-    const employeeId = req.user.employee.id;
-    const result = await AttendanceService.getWeeklyHours(employeeId);
-    res.json(result);
-  } catch (error) {
-    console.error('Error fetching weekly hours:', error);
-    res.status(500).json({ error: 'Failed to fetch weekly hours' });
-  }
-});
-
-// Record attendance action (check-in, check-out, break-in, break-out)
-router.post('/record', authenticateToken, async (req, res) => {
-  console.log('📋 AttendanceRoutes: POST /record - Recording attendance action');
-  try {
-    const { action, employeeId: overrideEmployeeId } = req.body; // action: 'checkIn', 'checkOut', 'breakIn', 'breakOut'
-    let employeeId = req.user.employee.id;
-    let employeeName = req.user.employee.name;
-    // Allow admin to record actions for a specific employee
-    if (overrideEmployeeId && req.user.employee.role === 'admin') {
-      const EmployeeService = require('../services/EmployeeService');
-      const target = await EmployeeService.findById(overrideEmployeeId);
-      if (!target) {
-        return res.status(404).json({ error: 'Target employee not found' });
-      }
-      employeeId = target.id;
-      employeeName = target.name;
-    }
-    const now = new Date();
-    const date = now.toLocaleDateString('en-US');
-
-    console.log(`👤 AttendanceRoutes: Employee: ${employeeName} (${employeeId})`);
-    console.log(`🎯 AttendanceRoutes: Action: ${action}, Date: ${date}`);
-
-    // Validate action
-    const validActions = ['checkIn', 'checkOut', 'breakIn', 'breakOut'];
-    if (!validActions.includes(action)) {
-      console.log('❌ AttendanceRoutes: Invalid action provided:', action);
-      return res.status(400).json({ error: 'Invalid action' });
-    }
-
-    const attendance = await AttendanceService.recordAttendance(employeeId, employeeName, action, date);
-    console.log('✅ AttendanceRoutes: Attendance recorded successfully');
-    res.json({ success: true, attendance });
-  } catch (error) {
-    console.error('❌ AttendanceRoutes: Error recording attendance:', error);
-    res.status(500).json({ error: 'Failed to record attendance' });
-  }
-});
-
-// Get today's attendance status for employee
-router.get('/today', authenticateToken, async (req, res) => {
-  try {
-    const employeeId = req.user.employee.id;
-    const status = await AttendanceService.getTodayStatus(employeeId);
+    const attendanceService = container.getAttendanceService();
+    const status = await attendanceService.getTodayStatus(
+      req.user.organizationId,
+      req.user.uid
+    );
     res.json(status);
   } catch (error) {
-    console.error('Error fetching today\'s attendance:', error);
-    res.status(500).json({ error: 'Failed to fetch attendance status' });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get weekly hours
+router.get('/weekly-hours', authenticateToken, requireEmployee, async (req, res) => {
+  try {
+    const { weekStart, weekEnd } = req.query;
+    const attendanceService = container.getAttendanceService();
+    const stats = await attendanceService.getWeeklyHours(
+      req.user.organizationId,
+      req.user.uid,
+      weekStart,
+      weekEnd
+    );
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

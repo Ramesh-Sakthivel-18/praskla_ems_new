@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Building2 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { auth, signInWithCustomToken } from "@/lib/firebaseClient"
+import { loginUser, getRoleRedirectPath } from "@/lib/auth"
 import { safeRedirect } from "@/lib/redirectUtils"
 
 export default function BusinessOwnerLoginPage() {
@@ -15,89 +15,46 @@ export default function BusinessOwnerLoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
 
   const handleLogin = async (e) => {
     e.preventDefault()
-    console.log("🔐 BO Login: Starting login process", email)
+    setError("")
+    
+    console.log('🔐 BusinessOwnerLogin: Starting login process')
 
     if (!email || !password) {
-      alert("Please enter both email and password")
+      setError('Please enter both email and password')
       return
     }
 
     setLoading(true)
 
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"}/api/auth/login`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
-        }
-      )
+      // Use centralized auth helper
+      const result = await loginUser(email, password)
 
-      console.log("📊 BO Login: Response status:", response.status)
+      if (result.success) {
+        console.log('✅ BusinessOwnerLogin: Login successful, role:', result.user.role)
 
-      if (!response.ok) {
-        let errorData
-        try {
-          errorData = await response.json()
-        } catch {
-          errorData = { error: `Login failed with status ${response.status}` }
-        }
-        console.error("❌ BO Login: Login failed:", errorData)
-        const errorMessage =
-          errorData?.error || errorData?.message || `Login failed (Status: ${response.status})`
-        alert(errorMessage)
-        setLoading(false)
-        return
-      }
-
-      const data = await response.json()
-      console.log("✅ BO Login: Login successful")
-      console.log("👤 BO Login: Employee data:", data.employee)
-
-      // Only allow business_owner here
-      if (data.employee.role !== "business_owner") {
-        alert("This login is only for Business Owners. Please use the correct login page.")
-        setLoading(false)
-        return
-      }
-
-      // Handle Firebase custom token → ID token
-      let idToken = data.customToken
-
-      if (auth) {
-        try {
-          const userCredential = await signInWithCustomToken(auth, data.customToken)
-          console.log("🔥 BO Login: Firebase authentication successful")
-          idToken = await userCredential.user.getIdToken()
-          console.log("🎟️ BO Login: Firebase ID token obtained")
-        } catch (firebaseError) {
-          console.warn(
-            "⚠️ BO Login: Firebase authentication failed, using custom token:",
-            firebaseError?.message
-          )
+        // Check if user has correct role
+        if (result.user.role === 'business_owner' || result.user.role === 'businessowner') {
+          const redirectPath = getRoleRedirectPath(result.user.role)
+          console.log('🚀 Redirecting to:', redirectPath)
+          safeRedirect(router, redirectPath)
+        } else {
+          setError('Only business owners can access this page. Please use the appropriate login page.')
+          setLoading(false)
         }
       } else {
-        console.warn("⚠️ BO Login: Firebase not available, using custom token")
+        setError(result.error || 'Login failed')
+        setLoading(false)
       }
-
-      // Store authentication data
-      localStorage.setItem("adminLoggedIn", "true") // reuse same flag as admin
-      localStorage.setItem("firebaseToken", idToken)
-      localStorage.setItem("currentEmployee", JSON.stringify(data.employee))
-      console.log("💾 BO Login: Stored auth data in localStorage")
-
-      // Redirect to Business Owner Dashboard
-      safeRedirect(router, "/business-owner/dashboard")
     } catch (error) {
-      console.error("❌ BO Login: Network error:", error)
-      alert("Network error. Please check if the backend is running.")
+      console.error('❌ BusinessOwnerLogin: Unexpected error:', error)
+      setError('An unexpected error occurred')
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   return (
@@ -105,24 +62,35 @@ export default function BusinessOwnerLoginPage() {
       <Card className="w-full max-w-md border-2">
         <CardHeader className="text-center pb-4">
           <div className="flex justify-center mb-4">
-            <div className="p-4 bg-purple-50 rounded-xl">
-              <Building2 className="w-12 h-12 text-purple-600" />
+            <div className="p-4 bg-primary/10 rounded-xl">
+              <Building2 className="w-12 h-12 text-primary" />
             </div>
           </div>
           <CardTitle className="text-3xl">Business Owner Login</CardTitle>
-          <CardDescription>Login to manage your organization and admins</CardDescription>
+          <CardDescription>Access your organization management dashboard</CardDescription>
+          <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-800">
+            <p className="font-medium">Sample Business Owner Credentials:</p>
+            <p>Email: owner@democompany.com</p>
+            <p>Password: password123</p>
+          </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-800">
+                {error}
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="owner@company.com"
+                placeholder="owner@democompany.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                disabled={loading}
               />
             </div>
             <div className="space-y-2">
@@ -134,6 +102,7 @@ export default function BusinessOwnerLoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                disabled={loading}
               />
             </div>
             <Button type="submit" className="w-full" size="lg" disabled={loading}>
