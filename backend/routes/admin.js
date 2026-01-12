@@ -1,730 +1,648 @@
 /**
- * admin.js (UPDATED)
+ * admin.js (UPDATED - RBAC Fixed)
  * 
- * Routes for admin operations (employee management, attendance, leaves).
- * Uses EmployeeService, QuotaService, AttendanceService, LeaveService from container.
+ * Routes for Admin and Business Owner with proper access control:
+ * - Admin: Create/Update/Delete employees, Approve leaves
+ * - Business Owner: View-only + Admin management
+ * - Both: View employees, attendance, leaves
  */
 
 const express = require('express');
 const router = express.Router();
 const container = require('../container');
-const { authenticateToken, requireAdmin, requireAdminOrBusinessOwner } = require('../middleware');
+const {
+  authenticateToken,
+  requireAdmin,
+  requireBusinessOwner,
+  requireAdminOrBusinessOwner
+} = require('../middleware');
 
-// Get service instances from container
+// Get services
 const employeeService = container.getEmployeeService();
-const quotaService = container.getQuotaService();
 const attendanceService = container.getAttendanceService();
 const leaveService = container.getLeaveService();
-const statisticsService = container.getStatisticsService();
+const quotaService = container.getQuotaService();
+
+// ============================================
+// EMPLOYEE MANAGEMENT
+// ============================================
 
 /**
+ * CREATE Employee (ADMIN ONLY)
  * POST /api/admin/employees
- * Create new employee
- * Admin only
  */
 router.post('/employees', authenticateToken, requireAdmin, async (req, res) => {
+  console.log('📝 POST /api/admin/employees - Create employee');
   try {
     const { name, email, password, department, position, salary, workingType, skills, address, emergencyContact, phone } = req.body;
-    const orgId = req.user.organizationId;
-    const adminId = req.user.uid;
+    const { organizationId, uid: creatorId, role: creatorRole } = req.user;
 
     // Validate required fields
     if (!name || !email || !password) {
-      return res.status(400).json({
-        error: 'Missing required fields',
-        message: 'name, email, and password are required'
-      });
+      return res.status(400).json({ error: 'Name, email, and password are required' });
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({
-        error: 'Invalid email format'
-      });
-    }
-
-    // Validate password length
-    if (password.length < 6) {
-      return res.status(400).json({
-        error: 'Password too short',
-        message: 'Password must be at least 6 characters'
-      });
-    }
-
-    // Create employee (automatically checks quota)
+    // Create employee (quota validation happens in service)
     const employee = await employeeService.createEmployee(
-      orgId,
-      {
-        name,
-        email,
-        password,
-        department: department || '',
-        position: position || 'Employee',
-        salary: salary || '0',
-        workingType: workingType || 'full-time',
-        skills: skills || '',
-        address: address || '',
-        emergencyContact: emergencyContact || '',
-        phone: phone || ''
-      },
-      adminId,
-      'admin'
+      organizationId,
+      { name, email, password, department, position, salary, workingType, skills, address, emergencyContact, phone },
+      creatorId,
+      creatorRole
     );
 
     res.status(201).json({
-      success: true,
       message: 'Employee created successfully',
-      data: employee
+      employee
     });
-  } catch (error) {
-    console.error('Error creating employee:', error);
-    
-    // Handle specific errors
-    if (error.message.includes('quota') || error.message.includes('limit')) {
-      return res.status(403).json({
-        error: 'Quota exceeded',
-        message: error.message
-      });
-    }
-    
-    if (error.message.includes('already exists')) {
-      return res.status(409).json({
-        error: 'Employee already exists',
-        message: error.message
-      });
-    }
 
-    res.status(500).json({
-      error: 'Failed to create employee',
-      message: error.message
-    });
+  } catch (error) {
+    console.error('❌ Error creating employee:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
+ * GET All Employees (ADMIN + BUSINESS OWNER - Read Only)
  * GET /api/admin/employees
- * Get all employees in organization
- * Admin or Business Owner
+ * Returns all organization members (admins + employees) for Business Owner view
  */
 router.get('/employees', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+  console.log('📋 GET /api/admin/employees - Get all employees');
   try {
-    const orgId = req.user.organizationId;
-    const { isActive } = req.query;
+    const { organizationId } = req.user;
+    const { isActive, role } = req.query;
 
+    // Use userRepo.findAll() to get all org members (admins + employees)
     const filters = {};
     if (isActive !== undefined) {
       filters.isActive = isActive === 'true';
     }
+    if (role) {
+      filters.role = role;
+    }
 
-    const employees = await employeeService.getAllEmployees(orgId, filters);
+    // Access userRepo from the container
+    const { userRepo } = require('../container');
+    const allUsers = await userRepo.findAll(organizationId, filters);
+
+    // Remove password hashes from response
+    const usersWithoutPasswords = allUsers.map(user => {
+      const { passwordHash, ...userWithoutPassword } = user;
+      return userWithoutPassword;
+    });
 
     res.json({
-      success: true,
-      count: employees.length,
-      data: employees
+      count: usersWithoutPasswords.length,
+      employees: usersWithoutPasswords
     });
+
   } catch (error) {
-    console.error('Error getting employees:', error);
-    res.status(500).json({
-      error: 'Failed to get employees',
-      message: error.message
-    });
+    console.error('❌ Error getting employees:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
+ * GET Active Employees Only (ADMIN + BUSINESS OWNER)
  * GET /api/admin/employees/active
- * Get only active employees
- * Admin or Business Owner
  */
 router.get('/employees/active', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+  console.log('📋 GET /api/admin/employees/active');
   try {
-    const orgId = req.user.organizationId;
-    const employees = await employeeService.getActiveEmployees(orgId);
+    const { organizationId } = req.user;
+    const employees = await employeeService.getActiveEmployees(organizationId);
 
     res.json({
-      success: true,
       count: employees.length,
-      data: employees
+      employees
     });
+
   } catch (error) {
-    console.error('Error getting active employees:', error);
-    res.status(500).json({
-      error: 'Failed to get active employees',
-      message: error.message
-    });
+    console.error('❌ Error getting active employees:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * GET /api/admin/employees/:employeeId
- * Get specific employee by ID
- * Admin or Business Owner
+ * GET Employee by ID (ADMIN + BUSINESS OWNER)
+ * GET /api/admin/employees/:id
  */
-router.get('/employees/:employeeId', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+router.get('/employees/:id', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+  console.log(`📋 GET /api/admin/employees/${req.params.id}`);
   try {
-    const { employeeId } = req.params;
-    const orgId = req.user.organizationId;
+    const { organizationId } = req.user;
+    const { id } = req.params;
 
-    const employee = await employeeService.getEmployeeById(orgId, employeeId);
+    const employee = await employeeService.getEmployeeById(organizationId, id);
 
     if (!employee) {
-      return res.status(404).json({
-        error: 'Employee not found'
-      });
+      return res.status(404).json({ error: 'Employee not found' });
     }
 
-    res.json({
-      success: true,
-      data: employee
-    });
+    res.json({ employee });
+
   } catch (error) {
-    console.error('Error getting employee:', error);
-    res.status(500).json({
-      error: 'Failed to get employee',
-      message: error.message
-    });
+    console.error('❌ Error getting employee:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * PUT /api/admin/employees/:employeeId
- * Update employee information
- * Admin only
+ * UPDATE Employee (ADMIN ONLY)
+ * PUT /api/admin/employees/:id
  */
-router.put('/employees/:employeeId', authenticateToken, requireAdmin, async (req, res) => {
+router.put('/employees/:id', authenticateToken, requireAdmin, async (req, res) => {
+  console.log(`📝 PUT /api/admin/employees/${req.params.id} - Update employee`);
   try {
-    const { employeeId } = req.params;
-    const orgId = req.user.organizationId;
+    const { organizationId } = req.user;
+    const { id } = req.params;
     const updateData = req.body;
 
-    // Don't allow updating certain fields through this endpoint
-    delete updateData.role;
-    delete updateData.createdBy;
-    delete updateData.organizationId;
-    delete updateData.id;
-
-    const updated = await employeeService.updateEmployee(orgId, employeeId, updateData);
+    const employee = await employeeService.updateEmployee(organizationId, id, updateData);
 
     res.json({
-      success: true,
       message: 'Employee updated successfully',
-      data: updated
+      employee
     });
+
   } catch (error) {
-    console.error('Error updating employee:', error);
-    
-    if (error.message.includes('not found')) {
-      return res.status(404).json({
-        error: 'Employee not found'
-      });
-    }
-
-    if (error.message.includes('already in use')) {
-      return res.status(409).json({
-        error: 'Email already in use',
-        message: error.message
-      });
-    }
-
-    res.status(500).json({
-      error: 'Failed to update employee',
-      message: error.message
-    });
+    console.error('❌ Error updating employee:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * DELETE /api/admin/employees/:employeeId
- * Delete employee (soft delete - mark as inactive)
- * Admin only
+ * DELETE Employee (ADMIN ONLY)
+ * DELETE /api/admin/employees/:id
  */
-router.delete('/employees/:employeeId', authenticateToken, requireAdmin, async (req, res) => {
+router.delete('/employees/:id', authenticateToken, requireAdmin, async (req, res) => {
+  console.log(`🗑️ DELETE /api/admin/employees/${req.params.id}`);
   try {
-    const { employeeId } = req.params;
-    const orgId = req.user.organizationId;
-    const adminId = req.user.uid;
+    const { organizationId, uid: deletedBy } = req.user;
+    const { id } = req.params;
 
-    const result = await employeeService.deleteEmployee(orgId, employeeId, adminId);
+    const result = await employeeService.deleteEmployee(organizationId, id, deletedBy);
 
     res.json({
-      success: true,
-      message: 'Employee deactivated successfully',
-      data: result
+      message: 'Employee deleted successfully',
+      employee: result
     });
-  } catch (error) {
-    console.error('Error deleting employee:', error);
-    
-    if (error.message.includes('not found')) {
-      return res.status(404).json({
-        error: 'Employee not found'
-      });
-    }
 
-    res.status(500).json({
-      error: 'Failed to delete employee',
-      message: error.message
-    });
+  } catch (error) {
+    console.error('❌ Error deleting employee:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * POST /api/admin/employees/:employeeId/restore
- * Restore soft-deleted employee
- * Admin only
+ * RESTORE Employee (ADMIN ONLY)
+ * POST /api/admin/employees/:id/restore
  */
-router.post('/employees/:employeeId/restore', authenticateToken, requireAdmin, async (req, res) => {
+router.post('/employees/:id/restore', authenticateToken, requireAdmin, async (req, res) => {
+  console.log(`♻️ POST /api/admin/employees/${req.params.id}/restore`);
   try {
-    const { employeeId } = req.params;
-    const orgId = req.user.organizationId;
+    const { organizationId } = req.user;
+    const { id } = req.params;
 
-    const restored = await employeeService.restoreEmployee(orgId, employeeId);
+    const employee = await employeeService.restoreEmployee(organizationId, id);
 
     res.json({
-      success: true,
       message: 'Employee restored successfully',
-      data: restored
+      employee
     });
+
   } catch (error) {
-    console.error('Error restoring employee:', error);
-    
-    if (error.message.includes('not found')) {
-      return res.status(404).json({
-        error: 'Employee not found'
-      });
-    }
-
-    if (error.message.includes('quota') || error.message.includes('limit')) {
-      return res.status(403).json({
-        error: 'Cannot restore',
-        message: error.message
-      });
-    }
-
-    res.status(500).json({
-      error: 'Failed to restore employee',
-      message: error.message
-    });
+    console.error('❌ Error restoring employee:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * GET /api/admin/employees/search/:searchTerm
- * Search employees by name, email, or department
- * Admin or Business Owner
+ * SEARCH Employees (ADMIN + BUSINESS OWNER)
+ * GET /api/admin/employees/search/:term
  */
-router.get('/employees/search/:searchTerm', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+router.get('/employees/search/:term', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+  console.log(`🔍 GET /api/admin/employees/search/${req.params.term}`);
   try {
-    const { searchTerm } = req.params;
-    const orgId = req.user.organizationId;
+    const { organizationId } = req.user;
+    const { term } = req.params;
 
-    if (!searchTerm || searchTerm.length < 2) {
-      return res.status(400).json({
-        error: 'Invalid search term',
-        message: 'Search term must be at least 2 characters'
-      });
-    }
-
-    const results = await employeeService.searchEmployees(orgId, searchTerm);
+    const employees = await employeeService.searchEmployees(organizationId, term);
 
     res.json({
-      success: true,
-      count: results.length,
-      data: results
-    });
-  } catch (error) {
-    console.error('Error searching employees:', error);
-    res.status(500).json({
-      error: 'Failed to search employees',
-      message: error.message
-    });
-  }
-});
-
-/**
- * GET /api/admin/employees/department/:department
- * Get employees by department
- * Admin or Business Owner
- */
-router.get('/employees/department/:department', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
-  try {
-    const { department } = req.params;
-    const orgId = req.user.organizationId;
-
-    const employees = await employeeService.getEmployeesByDepartment(orgId, department);
-
-    res.json({
-      success: true,
       count: employees.length,
-      data: employees
+      employees
     });
+
   } catch (error) {
-    console.error('Error getting employees by department:', error);
-    res.status(500).json({
-      error: 'Failed to get employees',
-      message: error.message
-    });
+    console.error('❌ Error searching employees:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * GET /api/admin/employees/stats/count
- * Get employee counts
- * Admin or Business Owner
+ * GET Employees by Department (ADMIN + BUSINESS OWNER)
+ * GET /api/admin/employees/department/:dept
  */
-router.get('/employees/stats/count', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+router.get('/employees/department/:dept', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+  console.log(`📋 GET /api/admin/employees/department/${req.params.dept}`);
   try {
-    const orgId = req.user.organizationId;
-    const counts = await employeeService.getEmployeeCount(orgId);
+    const { organizationId } = req.user;
+    const { dept } = req.params;
+
+    const employees = await employeeService.getEmployeesByDepartment(organizationId, dept);
 
     res.json({
-      success: true,
-      data: counts
+      department: dept,
+      count: employees.length,
+      employees
     });
+
   } catch (error) {
-    console.error('Error getting employee count:', error);
-    res.status(500).json({
-      error: 'Failed to get employee count',
-      message: error.message
-    });
+    console.error('❌ Error getting employees by department:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * GET /api/admin/employees/stats/overview
- * Get employee statistics overview
- * Admin or Business Owner
- */
-router.get('/employees/stats/overview', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
-  try {
-    const orgId = req.user.organizationId;
-    const stats = await employeeService.getEmployeeStats(orgId);
-
-    res.json({
-      success: true,
-      data: stats
-    });
-  } catch (error) {
-    console.error('Error getting employee stats:', error);
-    res.status(500).json({
-      error: 'Failed to get employee statistics',
-      message: error.message
-    });
-  }
-});
-
-/**
+ * GET Employees Created by Me (ADMIN ONLY)
  * GET /api/admin/employees/created-by-me
- * Get employees created by current admin
- * Admin only
  */
 router.get('/employees/created-by-me', authenticateToken, requireAdmin, async (req, res) => {
+  console.log('📋 GET /api/admin/employees/created-by-me');
   try {
-    const orgId = req.user.organizationId;
-    const adminId = req.user.uid;
+    const { organizationId, uid: adminId } = req.user;
 
-    const employees = await employeeService.getEmployeesCreatedByAdmin(orgId, adminId);
+    const employees = await employeeService.getEmployeesCreatedByAdmin(organizationId, adminId);
 
     res.json({
-      success: true,
       count: employees.length,
-      data: employees
+      employees
     });
+
   } catch (error) {
-    console.error('Error getting admin employees:', error);
-    res.status(500).json({
-      error: 'Failed to get employees',
-      message: error.message
-    });
+    console.error('❌ Error getting admin employees:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
-/**
- * GET /api/admin/quota
- * Get admin's quota information
- * Admin only
- */
-router.get('/quota', authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const orgId = req.user.organizationId;
-    const adminId = req.user.uid;
+// ============================================
+// ATTENDANCE MANAGEMENT (View Only for Both)
+// ============================================
 
-    const quotaInfo = await quotaService.getMyQuotaInfo(orgId, adminId, 'admin');
+/**
+ * GET Attendance Records (ADMIN + BUSINESS OWNER - Read Only)
+ * GET /api/admin/attendance
+ */
+router.get('/attendance', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+  console.log('📊 GET /api/admin/attendance');
+  try {
+    const { organizationId } = req.user;
+    const { date, userId, startDate, endDate } = req.query;
+
+    const filters = {};
+    if (date) filters.date = date;
+    if (userId) filters.userId = userId;
+    if (startDate) filters.startDate = startDate;
+    if (endDate) filters.endDate = endDate;
+
+    const records = await attendanceService.getAllRecords(organizationId, filters);
 
     res.json({
-      success: true,
-      data: quotaInfo
+      count: records.length,
+      records
     });
+
   } catch (error) {
-    console.error('Error getting quota info:', error);
-    res.status(500).json({
-      error: 'Failed to get quota information',
-      message: error.message
-    });
+    console.error('❌ Error getting attendance records:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * GET /api/admin/quota/check
- * Check if admin can create more employees
- * Admin only
+ * GET Attendance Summary (ADMIN + BUSINESS OWNER - Read Only)
+ * GET /api/admin/attendance/summary
  */
-router.get('/quota/check', authenticateToken, requireAdmin, async (req, res) => {
+router.get('/attendance/summary', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+  console.log('📊 GET /api/admin/attendance/summary');
   try {
-    const orgId = req.user.organizationId;
-    const adminId = req.user.uid;
+    const { organizationId } = req.user;
+    const date = req.query.date || new Date().toISOString().split('T')[0];
 
-    const check = await quotaService.canAdminCreateEmployee(orgId, adminId);
+    const summary = await attendanceService.getSummary(organizationId, date);
 
-    res.json({
-      success: true,
-      data: check
-    });
+    res.json({ date, summary });
+
   } catch (error) {
-    console.error('Error checking quota:', error);
-    res.status(500).json({
-      error: 'Failed to check quota',
-      message: error.message
-    });
+    console.error('❌ Error getting attendance summary:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
+// ============================================
+// LEAVE MANAGEMENT
+// ============================================
+
 /**
+ * GET All Leave Requests (ADMIN + BUSINESS OWNER - Read Only)
  * GET /api/admin/leaves
- * Get all leave requests (or filter by status)
- * Admin or Business Owner
  */
 router.get('/leaves', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+  console.log('📋 GET /api/admin/leaves');
   try {
-    const orgId = req.user.organizationId;
-    const { status, userId, startDate, endDate, limit } = req.query;
+    const { organizationId } = req.user;
+    const { status, userId, startDate, endDate } = req.query;
 
     const filters = {};
     if (status) filters.status = status;
     if (userId) filters.userId = userId;
     if (startDate) filters.startDate = startDate;
     if (endDate) filters.endDate = endDate;
-    if (limit) filters.limit = parseInt(limit);
 
-    const leaves = await leaveService.getAllLeaves(orgId, filters);
+    const leaves = await leaveService.getAllLeaves(organizationId, filters);
 
     res.json({
-      success: true,
       count: leaves.length,
-      data: leaves
+      leaves
     });
+
   } catch (error) {
-    console.error('Error getting leaves:', error);
-    res.status(500).json({
-      error: 'Failed to get leave requests',
-      message: error.message
-    });
+    console.error('❌ Error getting leaves:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
+ * GET Pending Leave Requests (ADMIN + BUSINESS OWNER - Read Only)
  * GET /api/admin/leaves/pending
- * Get pending leave requests for approval
- * Admin only
  */
-router.get('/leaves/pending', authenticateToken, requireAdmin, async (req, res) => {
+router.get('/leaves/pending', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+  console.log('⏳ GET /api/admin/leaves/pending');
   try {
-    const orgId = req.user.organizationId;
-    const pendingLeaves = await leaveService.getPendingLeaves(orgId);
+    const { organizationId } = req.user;
+
+    const pendingLeaves = await leaveService.getPendingLeaves(organizationId);
 
     res.json({
-      success: true,
       count: pendingLeaves.length,
-      data: pendingLeaves
+      leaves: pendingLeaves
     });
+
   } catch (error) {
-    console.error('Error getting pending leaves:', error);
-    res.status(500).json({
-      error: 'Failed to get pending leave requests',
-      message: error.message
-    });
+    console.error('❌ Error getting pending leaves:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * POST /api/admin/leaves/:leaveId/approve
- * Approve leave request
- * Admin only
+ * APPROVE Leave Request (ADMIN ONLY)
+ * POST /api/admin/leaves/:id/approve
  */
-router.post('/leaves/:leaveId/approve', authenticateToken, requireAdmin, async (req, res) => {
+router.post('/leaves/:id/approve', authenticateToken, requireAdmin, async (req, res) => {
+  console.log(`✅ POST /api/admin/leaves/${req.params.id}/approve`);
   try {
-    const { leaveId } = req.params;
+    const { organizationId, uid: reviewerId } = req.user;
+    const { id } = req.params;
     const { comments } = req.body;
-    const orgId = req.user.organizationId;
-    const adminId = req.user.uid;
 
-    const approved = await leaveService.approveLeave(
-      orgId,
-      leaveId,
-      adminId,
-      comments || null
-    );
+    const leave = await leaveService.approveLeave(organizationId, id, reviewerId, comments);
 
     res.json({
-      success: true,
       message: 'Leave request approved',
-      data: approved
+      leave
     });
-  } catch (error) {
-    console.error('Error approving leave:', error);
-    
-    if (error.message.includes('not found')) {
-      return res.status(404).json({
-        error: 'Leave request not found'
-      });
-    }
 
-    res.status(500).json({
-      error: 'Failed to approve leave',
-      message: error.message
-    });
+  } catch (error) {
+    console.error('❌ Error approving leave:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * POST /api/admin/leaves/:leaveId/reject
- * Reject leave request
- * Admin only
+ * REJECT Leave Request (ADMIN ONLY)
+ * POST /api/admin/leaves/:id/reject
  */
-router.post('/leaves/:leaveId/reject', authenticateToken, requireAdmin, async (req, res) => {
+router.post('/leaves/:id/reject', authenticateToken, requireAdmin, async (req, res) => {
+  console.log(`❌ POST /api/admin/leaves/${req.params.id}/reject`);
   try {
-    const { leaveId } = req.params;
+    const { organizationId, uid: reviewerId } = req.user;
+    const { id } = req.params;
     const { comments } = req.body;
-    const orgId = req.user.organizationId;
-    const adminId = req.user.uid;
 
     if (!comments) {
-      return res.status(400).json({
-        error: 'Rejection reason required',
-        message: 'Please provide a reason for rejection in the comments field'
-      });
+      return res.status(400).json({ error: 'Rejection reason (comments) is required' });
     }
 
-    const rejected = await leaveService.rejectLeave(
-      orgId,
-      leaveId,
-      adminId,
-      comments
-    );
+    const leave = await leaveService.rejectLeave(organizationId, id, reviewerId, comments);
 
     res.json({
-      success: true,
       message: 'Leave request rejected',
-      data: rejected
+      leave
     });
-  } catch (error) {
-    console.error('Error rejecting leave:', error);
-    
-    if (error.message.includes('not found')) {
-      return res.status(404).json({
-        error: 'Leave request not found'
-      });
-    }
 
-    res.status(500).json({
-      error: 'Failed to reject leave',
-      message: error.message
-    });
+  } catch (error) {
+    console.error('❌ Error rejecting leave:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
+ * GET Leave Statistics (ADMIN + BUSINESS OWNER)
  * GET /api/admin/leaves/stats/summary
- * Get leave summary (counts by status)
- * Admin or Business Owner
  */
 router.get('/leaves/stats/summary', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+  console.log('📊 GET /api/admin/leaves/stats/summary');
   try {
-    const orgId = req.user.organizationId;
-    const summary = await leaveService.getLeaveSummary(orgId);
+    const { organizationId } = req.user;
+    const year = parseInt(req.query.year) || new Date().getFullYear();
 
-    res.json({
-      success: true,
-      data: summary
-    });
+    const stats = await leaveService.getOrganizationLeaveStats(organizationId, year);
+
+    res.json({ year, stats });
+
   } catch (error) {
-    console.error('Error getting leave summary:', error);
-    res.status(500).json({
-      error: 'Failed to get leave summary',
-      message: error.message
-    });
+    console.error('❌ Error getting leave stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// QUOTA MANAGEMENT
+// ============================================
+
+/**
+ * GET My Quota (ADMIN ONLY)
+ * GET /api/admin/quota
+ */
+router.get('/quota', authenticateToken, requireAdmin, async (req, res) => {
+  console.log('📊 GET /api/admin/quota');
+  try {
+    const { organizationId, uid: userId, role } = req.user;
+
+    const quotaInfo = await quotaService.getMyQuotaInfo(organizationId, userId, role);
+
+    res.json(quotaInfo);
+
+  } catch (error) {
+    console.error('❌ Error getting quota:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * GET /api/admin/leaves/stats/organization
- * Get organization leave statistics
- * Admin or Business Owner
+ * CHECK if Admin Can Create Employee (ADMIN ONLY)
+ * GET /api/admin/quota/check
  */
-router.get('/leaves/stats/organization', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+router.get('/quota/check', authenticateToken, requireAdmin, async (req, res) => {
+  console.log('🔍 GET /api/admin/quota/check');
   try {
-    const { startDate, endDate } = req.query;
-    
-    if (!startDate || !endDate) {
-      return res.status(400).json({
-        error: 'Missing parameters',
-        message: 'startDate and endDate are required (YYYY-MM-DD format)'
-      });
+    const { organizationId, uid: adminId } = req.user;
+
+    const canCreate = await quotaService.canAdminCreateEmployee(organizationId, adminId);
+
+    res.json(canCreate);
+
+  } catch (error) {
+    console.error('❌ Error checking quota:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET Admin Quota Status (BUSINESS OWNER ONLY)
+ * GET /api/admin/admins/quota-status
+ */
+router.get('/admins/quota-status', authenticateToken, requireBusinessOwner, async (req, res) => {
+  console.log('📊 GET /api/admin/admins/quota-status');
+  try {
+    const { organizationId } = req.user;
+
+    const adminsQuota = await quotaService.getAdminQuotaStatus(organizationId);
+
+    res.json({
+      count: adminsQuota.length,
+      admins: adminsQuota
+    });
+
+  } catch (error) {
+    console.error('❌ Error getting admin quota status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * UPDATE Admin Quota (BUSINESS OWNER ONLY)
+ * PUT /api/admin/admins/:id/quota
+ */
+router.put('/admins/:id/quota', authenticateToken, requireBusinessOwner, async (req, res) => {
+  console.log(`📝 PUT /api/admin/admins/${req.params.id}/quota`);
+  try {
+    const { organizationId } = req.user;
+    const { id: adminId } = req.params;
+    const { limit } = req.body;
+
+    if (!limit || limit < 1) {
+      return res.status(400).json({ error: 'Valid limit is required (minimum 1)' });
     }
 
-    const orgId = req.user.organizationId;
-    const stats = await leaveService.getOrgLeaveStats(orgId, startDate, endDate);
+    const admin = await quotaService.updateAdminQuota(organizationId, adminId, limit);
 
     res.json({
-      success: true,
-      data: stats
+      message: 'Admin quota updated successfully',
+      admin
     });
+
   } catch (error) {
-    console.error('Error getting org leave stats:', error);
-    res.status(500).json({
-      error: 'Failed to get organization leave statistics',
-      message: error.message
+    console.error('❌ Error updating admin quota:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// DASHBOARD
+// ============================================
+
+/**
+ * GET Dashboard Statistics (ADMIN + BUSINESS OWNER)
+ * GET /api/admin/dashboard/stats
+ */
+router.get('/dashboard/stats', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+  console.log('📊 GET /api/admin/dashboard/stats');
+  try {
+    const { organizationId, role, uid } = req.user;
+
+    // Get employee counts
+    const employeeCounts = await employeeService.getEmployeeCount(organizationId);
+
+    // Get today's attendance summary
+    const today = new Date().toISOString().split('T')[0];
+    const attendanceSummary = await attendanceService.getSummary(organizationId, today);
+
+    // Get pending leaves
+    const pendingLeaves = await leaveService.getPendingLeaves(organizationId);
+
+    // Get quota info (admin-specific)
+    let quotaInfo = null;
+    if (role === 'admin') {
+      quotaInfo = await quotaService.getMyQuotaInfo(organizationId, uid, role);
+    } else if (role === 'business_owner') {
+      quotaInfo = await quotaService.getOrgQuotaSummary(organizationId);
+    }
+
+    res.json({
+      employees: employeeCounts,
+      attendance: attendanceSummary,
+      leaves: {
+        pendingCount: pendingLeaves.length,
+        pending: pendingLeaves
+      },
+      quota: quotaInfo
     });
+
+  } catch (error) {
+    console.error('❌ Error getting dashboard stats:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * GET /api/admin/dashboard/stats
- * Get dashboard statistics (combined stats for admin dashboard)
- * Admin or Business Owner
+ * GET My Organization Details (ADMIN + BUSINESS OWNER)
+ * GET /api/admin/organization
  */
-router.get('/dashboard/stats', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+router.get('/organization', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+  console.log('🏢 GET /api/admin/organization');
   try {
-    const orgId = req.user.organizationId;
-    const today = new Date().toISOString().split('T')[0];
+    const { organizationId } = req.user;
 
-    // Get multiple stats in parallel
-    const [
-      employeeCounts,
-      todayAttendance,
-      leaveSummary
-    ] = await Promise.all([
-      employeeService.getEmployeeCount(orgId),
-      statisticsService.getDailyStats(orgId, today),
-      leaveService.getLeaveSummary(orgId)
-    ]);
+    // Get organization repo from container
+    const { organizationRepo, employeeService } = require('../container'); // Re-requiring to ensure access if not in scope
+    // Note: Assuming container is available as it was required at top
+    // Better to use the variables defined at top if possible, but let's be safe or just use container.
+    const orgRepo = require('../container').getOrganizationRepo();
+    const empService = require('../container').getEmployeeService();
+
+    const organization = await orgRepo.findById(organizationId);
+
+    if (!organization) {
+      return res.status(404).json({ error: 'Organization not found' });
+    }
+
+    // Get current counts using existing service or repo
+    const employeeCounts = await empService.getEmployeeCount(organizationId);
 
     res.json({
-      success: true,
-      data: {
-        employees: employeeCounts,
-        attendance: todayAttendance,
-        leaves: leaveSummary,
-        date: today
-      }
+      id: organization.id,
+      name: organization.name,
+      isActive: organization.isActive,
+      createdAt: organization.createdAt,
+      adminCount: employeeCounts.admins,
+      employeeCount: employeeCounts.employees,
+      limits: organization.limits || {}
     });
+
   } catch (error) {
-    console.error('Error getting dashboard stats:', error);
-    res.status(500).json({
-      error: 'Failed to get dashboard statistics',
-      message: error.message
-    });
+    console.error('❌ Error getting organization details:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

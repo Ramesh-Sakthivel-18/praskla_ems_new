@@ -2,108 +2,80 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { 
-  Building2, 
-  Users, 
-  CheckCircle, 
-  Clock, 
-  TrendingUp,
-  ArrowRight,
-  Shield,
-  BarChart3,
-  Activity
+import { Progress } from "@/components/ui/progress"
+import {
+  Building2, Users, CheckCircle, XCircle, Shield,
+  RefreshCw, TrendingUp, ChevronRight, Eye, BarChart3,
+  Activity, AlertTriangle
 } from "lucide-react"
-import { safeRedirect } from "@/lib/redirectUtils"
+import { getCurrentUser, isAuthenticated } from "@/lib/auth"
+import { getValidIdToken } from "@/lib/firebaseClient"
 
 export default function ManagerDashboardPage() {
   const router = useRouter()
-  
   const [loading, setLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState(null)
-  
-  const [stats, setStats] = useState({
-    totalOrganizations: 0,
-    activeOrganizations: 0,
-    pendingOrganizations: 0,
-    totalBusinessOwners: 0,
-    totalAdmins: 0,
-    totalEmployees: 0,
-  })
-
-  const [recentOrgs, setRecentOrgs] = useState([])
+  const [error, setError] = useState(null)
+  const [dashboardData, setDashboardData] = useState(null)
 
   useEffect(() => {
-    const current = localStorage.getItem("currentEmployee")
-    if (!current) {
-      safeRedirect(router, "/admin/login")
+    if (!isAuthenticated()) {
+      router.push("/manager/login")
       return
     }
 
-    const emp = JSON.parse(current)
-    if (emp.role !== "manager") {
+    const user = getCurrentUser()
+    if (!user || user.role !== "manager") {
       alert("Unauthorized. Manager access required.")
-      safeRedirect(router, "/admin/login")
+      router.push("/manager/login")
       return
     }
 
-    setCurrentUser(emp)
+    setCurrentUser(user)
     loadDashboard()
   }, [router])
 
   const getApiBase = () => {
-    return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
+    return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api"
   }
 
   const loadDashboard = async () => {
     setLoading(true)
-    const token = localStorage.getItem("firebaseToken")
+    setError(null)
+    const token = await getValidIdToken()
     const base = getApiBase()
 
+    if (!token) {
+      setError("Authentication token not found. Please login again.")
+      setLoading(false)
+      return
+    }
+
     try {
-      const response = await fetch(`${base}/api/manager/dashboard`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const response = await fetch(`${base}/manager/dashboard/stats`, {
+        headers: { Authorization: `Bearer ${token}` },
       })
 
       if (response.ok) {
         const data = await response.json()
-        const organizations = data.organizations || []
-
-        const activeOrgs = organizations.filter((o) => o.isActive)
-        const pendingOrgs = organizations.filter((o) => !o.isActive)
-
-        let totalAdmins = 0
-        let totalEmployees = 0
-
-        organizations.forEach((org) => {
-          totalAdmins += org.adminCount || 0
-          totalEmployees += org.employeeCount || 0
-        })
-
-        setStats({
-          totalOrganizations: organizations.length,
-          activeOrganizations: activeOrgs.length,
-          pendingOrganizations: pendingOrgs.length,
-          totalBusinessOwners: organizations.length, // One owner per org
-          totalAdmins,
-          totalEmployees,
-        })
-
-        // Get 3 most recent organizations
-        const sorted = [...organizations].sort(
-          (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-        )
-        setRecentOrgs(sorted.slice(0, 3))
+        setDashboardData(data)
       } else if (response.status === 401) {
-        alert("Session expired. Please login again.")
-        safeRedirect(router, "/admin/login")
+        setError("Session expired. Please login again.")
+        setTimeout(() => router.push("/manager/login"), 2000)
+        return
+      } else if (response.status === 403) {
+        setError("Access denied. Manager privileges required.")
+        return
+      } else {
+        const errData = await response.json()
+        setError(errData.error || "Failed to load dashboard")
       }
     } catch (error) {
       console.error("Failed to load dashboard:", error)
+      setError(`Failed to connect to server: ${error.message}`)
     } finally {
       setLoading(false)
     }
@@ -111,8 +83,8 @@ export default function ManagerDashboardPage() {
 
   const formatDate = (dateString) => {
     try {
-      const date = new Date(dateString)
-      return date.toLocaleDateString("en-US", {
+      if (!dateString) return "N/A"
+      return new Date(dateString).toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
         year: "numeric",
@@ -122,261 +94,269 @@ export default function ManagerDashboardPage() {
     }
   }
 
-  if (!currentUser) {
+  if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-orange-500" />
+          <p className="text-muted-foreground">Loading dashboard...</p>
+        </div>
       </div>
     )
   }
 
-  return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-7xl px-4 py-8 space-y-6">
-        {/* Header */}
-        <header>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Welcome back, {currentUser.name?.split(" ")[0] || "Manager"} 👋
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Manage all organizations and business owners from your central dashboard
-          </p>
-        </header>
-
-        {/* Stats Overview */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">
-                Total Organizations
-              </CardTitle>
-              <Building2 className="h-4 w-4 text-primary" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalOrganizations}</div>
-              <p className="text-xs text-muted-foreground">
-                Registered businesses
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">
-                Active Organizations
-              </CardTitle>
-              <CheckCircle className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">
-                {stats.activeOrganizations}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Currently operational
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">
-                Pending Approval
-              </CardTitle>
-              <Clock className="h-4 w-4 text-yellow-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-yellow-600">
-                {stats.pendingOrganizations}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Awaiting activation
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">
-                Business Owners
-              </CardTitle>
-              <Shield className="h-4 w-4 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-600">
-                {stats.totalBusinessOwners}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Organization owners
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">
-                Total Admins
-              </CardTitle>
-              <Users className="h-4 w-4 text-purple-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-purple-600">
-                {stats.totalAdmins}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Across all organizations
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">
-                Total Employees
-              </CardTitle>
-              <TrendingUp className="h-4 w-4 text-accent" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalEmployees}</div>
-              <p className="text-xs text-muted-foreground">
-                Across all organizations
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card 
-            className="cursor-pointer transition-all hover:shadow-md hover:border-primary"
-            onClick={() => router.push("/manager/organizations")}
-          >
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="rounded-lg bg-primary/10 p-2">
-                  <Building2 className="h-6 w-6 text-primary" />
-                </div>
-                <ArrowRight className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <CardTitle className="mt-4">Manage Organizations</CardTitle>
-              <CardDescription>
-                View all organizations, approve new registrations, and manage status
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Pending approval</span>
-                <Badge variant="secondary">{stats.pendingOrganizations}</Badge>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-dashed">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="rounded-lg bg-muted p-2">
-                  <BarChart3 className="h-6 w-6 text-muted-foreground" />
-                </div>
-              </div>
-              <CardTitle className="mt-4">Analytics (Coming Soon)</CardTitle>
-              <CardDescription>
-                View detailed analytics and reports across all organizations
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Badge variant="outline">Coming Soon</Badge>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Recent Organizations */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Activity className="h-4 w-4" />
-                Recent Registrations
-              </CardTitle>
-              <CardDescription className="mt-1">
-                Latest organizations that registered
-              </CardDescription>
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-red-600 mb-2">Error</h3>
+              <p className="text-muted-foreground mb-4">{error}</p>
+              <Button onClick={loadDashboard} className="bg-orange-500 hover:bg-orange-600">
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => router.push("/manager/organizations")}
-            >
-              View All
-            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (!currentUser) return null
+
+  // Parse dashboard data with safe defaults
+  const system = dashboardData?.system || {}
+  const users = dashboardData?.users || {}
+  const organizations = dashboardData?.organizations || []
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-slate-100">
+            System Dashboard
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Welcome back, {currentUser.name}. Manage organizations and system settings.
+          </p>
+        </div>
+        <Button
+          onClick={loadDashboard}
+          variant="outline"
+          className="border-orange-200 hover:bg-orange-50 hover:border-orange-300"
+        >
+          <RefreshCw className="mr-2 h-4 w-4" />
+          Refresh
+        </Button>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* Total Organizations */}
+        <Card className="transition-all duration-300 hover:shadow-lg border-l-4 border-l-orange-500">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Organizations
+            </CardTitle>
+            <div className="p-2 rounded-lg bg-orange-50 dark:bg-orange-950/30">
+              <Building2 className="h-4 w-4 text-orange-600" />
+            </div>
           </CardHeader>
           <CardContent>
-            {loading ? (
-              <p className="text-sm text-muted-foreground">Loading...</p>
-            ) : recentOrgs.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <Building2 className="h-12 w-12 text-muted-foreground/50 mb-3" />
-                <p className="text-sm text-muted-foreground">
-                  No organizations registered yet
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {recentOrgs.map((org) => (
-                  <div
-                    key={org.id}
-                    className="flex items-center justify-between rounded-lg border p-3 transition-colors hover:bg-accent"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-full bg-primary/10 p-2">
-                        <Building2 className="h-4 w-4 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-medium">{org.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {org.ownerEmail}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-right text-sm">
-                        <p className="text-muted-foreground">
-                          {formatDate(org.createdAt)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {org.adminCount} admins, {org.employeeCount} employees
-                        </p>
-                      </div>
-                      <Badge
-                        variant={org.isActive ? "default" : "secondary"}
-                      >
-                        {org.isActive ? "Active" : "Pending"}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="text-3xl font-bold">{system.totalOrganizations || 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Registered in system
+            </p>
           </CardContent>
         </Card>
 
-        {/* Info Banner */}
-        <Card className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
-          <CardContent className="pt-6">
-            <div className="flex items-start gap-3">
-              <div className="rounded-full bg-blue-100 p-2 dark:bg-blue-900">
-                <Shield className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                  Manager Privileges
-                </p>
-                <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                  You have full access to manage all organizations, approve registrations, 
-                  and view aggregate statistics. Use the Organizations page to manage individual businesses.
-                </p>
-              </div>
+        {/* Active Organizations */}
+        <Card className="transition-all duration-300 hover:shadow-lg border-l-4 border-l-green-500">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Active
+            </CardTitle>
+            <div className="p-2 rounded-lg bg-green-50 dark:bg-green-950/30">
+              <CheckCircle className="h-4 w-4 text-green-600" />
             </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-green-600">{system.activeOrganizations || 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Currently active organizations
+            </p>
           </CardContent>
         </Card>
+
+        {/* Inactive Organizations */}
+        <Card className="transition-all duration-300 hover:shadow-lg border-l-4 border-l-gray-400">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Inactive
+            </CardTitle>
+            <div className="p-2 rounded-lg bg-gray-50 dark:bg-gray-800">
+              <XCircle className="h-4 w-4 text-gray-500" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-gray-500">{system.inactiveOrganizations || 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Deactivated organizations
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Total Users */}
+        <Card className="transition-all duration-300 hover:shadow-lg border-l-4 border-l-blue-500">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Users
+            </CardTitle>
+            <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/30">
+              <Users className="h-4 w-4 text-blue-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-blue-600">
+              {(users.totalBusinessOwners || 0) + (users.totalAdmins || 0) + (users.totalEmployees || 0)}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Across all organizations
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* User Breakdown */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="transition-all duration-300 hover:shadow-lg">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Shield className="h-4 w-4 text-purple-500" />
+              Business Owners
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{users.totalBusinessOwners || 0}</div>
+          </CardContent>
+        </Card>
+        <Card className="transition-all duration-300 hover:shadow-lg">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Activity className="h-4 w-4 text-blue-500" />
+              Administrators
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{users.totalAdmins || 0}</div>
+          </CardContent>
+        </Card>
+        <Card className="transition-all duration-300 hover:shadow-lg">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Users className="h-4 w-4 text-green-500" />
+              Employees
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{users.totalEmployees || 0}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Organizations List */}
+      <Card className="transition-all duration-300 hover:shadow-lg">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg font-semibold">Organizations Overview</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                Manage and monitor all registered organizations
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push("/manager/organizations")}
+              className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+            >
+              View All
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {organizations.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Building2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <p>No organizations registered yet</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {organizations.slice(0, 5).map((org) => (
+                <div
+                  key={org.id}
+                  className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border hover:border-orange-200 transition-all"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={`p-2 rounded-lg ${org.isActive ? 'bg-green-100 dark:bg-green-950/30' : 'bg-gray-100 dark:bg-gray-800'}`}>
+                      <Building2 className={`h-5 w-5 ${org.isActive ? 'text-green-600' : 'text-gray-400'}`} />
+                    </div>
+                    <div>
+                      <p className="font-medium">{org.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(org.counts?.businessOwners || 0) + (org.counts?.admins || 0) + (org.counts?.employees || 0)} users
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Badge variant={org.isActive ? "default" : "secondary"} className={org.isActive ? "bg-green-500" : ""}>
+                      {org.isActive ? "Active" : "Inactive"}
+                    </Badge>
+                    {/* Quota indicators */}
+                    <div className="hidden md:flex items-center gap-2">
+                      <div className="text-xs text-muted-foreground">
+                        <span className="font-medium">{org.utilization?.employeesPercent || 0}%</span> capacity
+                      </div>
+                      <Progress value={org.utilization?.employeesPercent || 0} className="w-16 h-2" />
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => router.push(`/manager/organizations?id=${org.id}`)}
+                      className="hover:bg-orange-50"
+                    >
+                      <Eye className="h-4 w-4 text-orange-600" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Quick Actions */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Button
+          className="h-16 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-md"
+          onClick={() => router.push("/manager/organizations")}
+        >
+          <Building2 className="mr-2 h-5 w-5" />
+          Manage Organizations
+        </Button>
+        <Button
+          variant="outline"
+          className="h-16 border-orange-200 hover:bg-orange-50 hover:border-orange-300"
+          onClick={() => router.push("/manager/profile")}
+        >
+          <BarChart3 className="mr-2 h-5 w-5 text-orange-600" />
+          View System Reports
+        </Button>
       </div>
     </div>
   )

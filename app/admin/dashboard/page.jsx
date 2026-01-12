@@ -2,272 +2,309 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { AdminSidebar } from "@/components/admin-sidebar"
-import { AdminNavbar } from "@/components/admin-navbar"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Users, UserCheck, UserX, FileText } from "lucide-react"
-import { format } from "date-fns"
-import { Spinner } from "@/components/ui/spinner"
-import { safeRedirect } from "@/lib/redirectUtils"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
+import {
+  Users, UserCheck, UserX, FileText, RefreshCw, AlertCircle,
+  Clock, TrendingUp, Calendar, ChevronRight, Plus, Building2
+} from "lucide-react"
+import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 import { getValidIdToken } from "@/lib/firebaseClient"
 
 export default function AdminDashboardPage() {
   const router = useRouter()
-
-  useEffect(() => {
-    if (!localStorage.getItem("adminLoggedIn")) {
-      safeRedirect(router, "/admin/login")
-    }
-  }, [router])
-
-  const [stats, setStats] = useState({
-    totalEmployees: 0,
-    presentToday: 0,
-    absentToday: 0,
-    leaveRequests: 0
-  })
-  const [recentActivity, setRecentActivity] = useState([])
+  const [currentUser, setCurrentUser] = useState(null)
+  const [dashboardData, setDashboardData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // Helper to get API base URL
+  // Auth Check
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      router.push("/admin/login")
+      return
+    }
+
+    const user = getCurrentUser()
+    if (!user || (user.role !== "admin" && user.role !== "manager")) {
+      router.push("/admin/login")
+      return
+    }
+
+    setCurrentUser(user)
+    loadDashboard()
+  }, [router])
+
   const getApiBase = () => {
-    // Priority: env variable > localhost:3000 (Next.js default proxy)
-    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
+    return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
   }
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true)
-      setError(null)
-      
-      const today = format(new Date(), "M/d/yyyy")
-      const token = await getValidIdToken()
-      
-      if (!token) {
-        setError("Authentication failed. Please login again.")
-        setLoading(false)
-        return
+  const loadDashboard = async () => {
+    setLoading(true)
+    setError(null)
+
+    const token = await getValidIdToken()
+    if (!token) {
+      setError("Authentication failed. Please login again.")
+      setLoading(false)
+      return
+    }
+
+    const apiBase = getApiBase()
+
+    try {
+      // Use the dedicated dashboard stats endpoint
+      const response = await fetch(`${apiBase}/api/admin/dashboard/stats`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setDashboardData(data)
+      } else if (response.status === 401) {
+        setError("Session expired. Please login again.")
+      } else {
+        const errData = await response.json()
+        setError(errData.error || "Failed to load dashboard")
       }
 
-      const apiBase = getApiBase()
-      console.log("📡 Fetching from API:", apiBase)
-
-      try {
-        const [employeesRes, attendanceRes, leavesRes] = await Promise.all([
-          fetch(`${apiBase}/api/admin/employees`, {
-            headers: { 
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          }),
-          fetch(`${apiBase}/api/admin/all?date=${today}`, {
-            headers: { 
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          }),
-          fetch(`${apiBase}/api/leave/all`, {
-            headers: { 
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          })
-        ])
-
-        console.log("✅ Response status:", {
-          employees: employeesRes.status,
-          attendance: attendanceRes.status,
-          leaves: leavesRes.status
-        })
-
-        let totalEmployees = 0
-        if (employeesRes.ok) {
-          const employees = await employeesRes.json()
-          const employeeList = Array.isArray(employees) ? employees : employees.employees || []
-          totalEmployees = employeeList.length
-          console.log("👥 Total employees:", totalEmployees)
-        } else {
-          console.error("❌ Failed to fetch employees:", employeesRes.status)
-        }
-
-        let presentToday = 0
-        let recent = []
-        if (attendanceRes.ok) {
-          const records = await attendanceRes.json()
-          const arr = Array.isArray(records) ? records : (records.attendance || [])
-          presentToday = arr.filter(r => r.date === today && r.checkIn).length
-          recent = arr
-            .sort((a, b) => new Date(b.updatedAt || b.date) - new Date(a.updatedAt || a.date))
-            .slice(0, 4)
-            .map(r => ({
-              type: 'attendance',
-              message: `${r.employeeName} ${r.checkOut ? `checked out at ${r.checkOut}` : r.checkIn ? `checked in at ${r.checkIn}` : 'updated'}`,
-              time: r.updatedAt || ''
-            }))
-          console.log("📅 Present today:", presentToday)
-        } else {
-          console.error("❌ Failed to fetch attendance:", attendanceRes.status)
-        }
-
-        let leaveRequests = 0
-        if (leavesRes.ok) {
-          const leaves = await leavesRes.json()
-          const arr = Array.isArray(leaves) ? leaves : (leaves.requests || leaves.leaveRequests || [])
-          leaveRequests = arr.filter(l => l.status === 'Pending').length
-          console.log("📄 Pending leave requests:", leaveRequests)
-        } else {
-          console.error("❌ Failed to fetch leaves:", leavesRes.status)
-        }
-
-        setStats({ 
-          totalEmployees, 
-          presentToday, 
-          absentToday: Math.max(totalEmployees - presentToday, 0), 
-          leaveRequests 
-        })
-        setRecentActivity(recent)
-      } catch (e) {
-        console.error('❌ AdminDashboard: Failed to load stats', e)
-        setError(`Failed to connect to backend: ${e.message}. Make sure your backend is running on ${apiBase}`)
-      }
+    } catch (e) {
+      console.error('Failed to load dashboard:', e)
+      setError("Failed to connect to backend server")
+    } finally {
       setLoading(false)
     }
-    load()
-  }, [])
+  }
 
-  const absentToday = stats.totalEmployees - stats.presentToday
+  // Calculate quota percentage
+  const getQuotaPercentage = () => {
+    if (!dashboardData?.quota) return 0
+    // Admin quota structure: { employeesCreated, canCreateUpTo, remaining }
+    const { employeesCreated, canCreateUpTo } = dashboardData.quota
+    if (!canCreateUpTo) return 0
+    return Math.min(Math.round((employeesCreated / canCreateUpTo) * 100), 100)
+  }
+
+  const getQuotaColor = () => {
+    const percentage = getQuotaPercentage()
+    if (percentage >= 90) return "bg-red-500"
+    if (percentage >= 70) return "bg-yellow-500"
+    return "bg-green-500"
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <RefreshCw className="h-10 w-10 animate-spin mx-auto mb-4 text-blue-600" />
+          <p className="text-muted-foreground animate-pulse">Loading dashboard data...</p>
+        </div>
+      </div>
+    )
+  }
+
+  const employees = dashboardData?.employees || { total: 0, active: 0, inactive: 0 }
+  const attendance = dashboardData?.attendance || { presentCount: 0, totalRecords: 0 } // Adjusted key
+  const leaves = dashboardData?.leaves || { pendingCount: 0, pending: [] }
+  const quota = dashboardData?.quota || { employeesCreated: 0, canCreateUpTo: 0, remaining: 0 }
 
   const statsData = [
-    { title: "Total Employees", value: stats.totalEmployees, icon: Users, color: "text-primary" },
-    { title: "Present Today", value: stats.presentToday, icon: UserCheck, color: "text-green-600" },
-    { title: "Absent Today", value: absentToday, icon: UserX, color: "text-destructive" },
-    { title: "Leave Requests", value: stats.leaveRequests, icon: FileText, color: "text-accent" },
+    {
+      title: "Active Employees",
+      value: employees.active || 0,
+      subtitle: `${employees.inactive || 0} inactive`,
+      icon: Users,
+      color: "text-blue-600",
+      bgColor: "bg-blue-100 dark:bg-blue-900/30",
+    },
+    {
+      title: "Present Today",
+      value: attendance.presentCount || 0,
+      subtitle: "Checked in",
+      icon: UserCheck,
+      color: "text-emerald-600",
+      bgColor: "bg-emerald-100 dark:bg-emerald-900/30",
+    },
+    {
+      title: "Absent",
+      value: (employees.active || 0) - (attendance.presentCount || 0),
+      subtitle: "Not checked in",
+      icon: UserX,
+      color: "text-red-600",
+      bgColor: "bg-red-100 dark:bg-red-900/30",
+    },
+    {
+      title: "Pending Requests",
+      value: leaves.pendingCount || 0,
+      subtitle: "Leaves awaiting",
+      icon: FileText,
+      color: "text-amber-600",
+      bgColor: "bg-amber-100 dark:bg-amber-900/30",
+    },
   ]
 
   return (
-    <div className="min-h-screen bg-background">
-      <AdminSidebar />
-      <AdminNavbar />
+    <div className="space-y-8 animate-in fade-in-50 duration-500">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
+            Dashboard
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Overview for {currentUser?.name}
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <Button onClick={loadDashboard} variant="outline" size="sm" className="gap-2">
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </Button>
+          <Button onClick={() => router.push("/admin/employees")} size="sm" className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md">
+            <Plus className="h-4 w-4" />
+            Add Employee
+          </Button>
+        </div>
+      </div>
 
-      <div className="ml-64 pt-16">
-        <div className="p-8">
-          <div className="mb-8">
-            <h2 className="text-3xl font-bold text-foreground">Dashboard Overview</h2>
-            <p className="text-muted-foreground mt-1">Welcome back! Here's your overview for today.</p>
-          </div>
+      {/* Error Alert */}
+      {error && (
+        <Card className="border-red-200 bg-red-50 dark:bg-red-950/30">
+          <CardContent className="pt-6 flex gap-4 items-center text-red-700 dark:text-red-300">
+            <AlertCircle className="h-6 w-6" />
+            <div className="flex-1">
+              <p className="font-semibold">Error Loading Dashboard</p>
+              <p className="text-sm">{error}</p>
+            </div>
+            <Button size="sm" variant="outline" onClick={loadDashboard} className="border-red-200 hover:bg-red-100">Retry</Button>
+          </CardContent>
+        </Card>
+      )}
 
-          {/* Error State */}
-          {error && (
-            <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg mb-6">
-              <p className="font-semibold">⚠️ Connection Error</p>
-              <p className="text-sm mt-1">{error}</p>
-              <p className="text-xs mt-2">
-                <strong>Troubleshooting:</strong><br/>
-                1. Make sure your backend server is running<br/>
-                2. Check if it's running on port 3000 or 5001<br/>
-                3. Verify CORS is enabled on the backend<br/>
-                4. Check browser console for detailed errors
+      {/* Stats Grid */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        {statsData.map((stat, index) => {
+          const Icon = stat.icon
+          return (
+            <Card key={index} className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between space-y-0 pb-2">
+                  <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
+                  <div className={`p-2.5 rounded-xl ${stat.bgColor}`}>
+                    <Icon className={`h-5 w-5 ${stat.color}`} />
+                  </div>
+                </div>
+                <div className="flex items-baseline gap-2 mt-2">
+                  <h3 className="text-3xl font-bold">{stat.value}</h3>
+                  <p className="text-xs text-muted-foreground">{stat.subtitle}</p>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+
+      {/* Main Content Grid */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Left Column (2/3) */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Quota Usage */}
+          <Card className="border-0 shadow-lg overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-b">
+              <CardTitle className="flex items-center gap-2 text-blue-900 dark:text-blue-100">
+                <TrendingUp className="h-5 w-5 text-blue-600" />
+                Employee Creation Quota
+              </CardTitle>
+              <CardDescription>
+                You can create up to {quota.canCreateUpTo || 0} employees
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <span className="text-3xl font-bold text-gray-900 dark:text-gray-100">{quota.employeesCreated || 0}</span>
+                  <span className="text-muted-foreground ml-2">used</span>
+                </div>
+                <Badge variant="outline" className="text-base px-3 py-1">
+                  {quota.remaining || 0} left
+                </Badge>
+              </div>
+              <Progress value={getQuotaPercentage()} className={`h-3 rounded-full ${getQuotaColor().replace('bg-', '[&>div]:bg-')}`} />
+              <p className="text-xs text-muted-foreground mt-2 text-right">
+                {getQuotaPercentage()}% capacity used
               </p>
-            </div>
-          )}
+            </CardContent>
+          </Card>
 
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Card key={i}>
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Loading...</CardTitle>
-                    <Spinner className="w-5 h-5" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold text-muted-foreground">...</div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              {statsData.map((stat) => {
-                const Icon = stat.icon
-                return (
-                  <Card key={stat.title}>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                      <CardTitle className="text-sm font-medium text-muted-foreground">{stat.title}</CardTitle>
-                      <Icon className={`w-5 h-5 ${stat.color}`} />
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold text-foreground">{stat.value}</div>
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Activity</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {recentActivity.length > 0 ? (
-                    recentActivity.map((activity, index) => (
-                      <div key={index} className="flex items-center gap-3 text-sm">
-                        <div className={`w-2 h-2 rounded-full ${
-                          activity.type === "attendance" ? "bg-green-600" : "bg-accent"
-                        }`}></div>
-                        <span className="text-foreground">{activity.message}</span>
-                        {activity.time && <span className="text-muted-foreground ml-auto text-xs">({activity.time})</span>}
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-muted-foreground text-sm">No recent activity</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Quick Stats</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-muted-foreground">Attendance Rate</span>
-                      <span className="text-foreground font-medium">
-                        {stats.totalEmployees > 0 
-                          ? `${Math.round((stats.presentToday / stats.totalEmployees) * 100)}%` 
-                          : '0%'}
-                      </span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div 
-                        className="bg-green-600 h-2 rounded-full" 
-                        style={{ 
-                          width: stats.totalEmployees > 0 
-                            ? `${(stats.presentToday / stats.totalEmployees) * 100}%` 
-                            : '0%' 
-                        }}
-                      ></div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-muted-foreground">On Time Check-ins</span>
-                      <span className="text-foreground font-medium">92%</span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div className="bg-accent h-2 rounded-full" style={{ width: "92%" }}></div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          {/* Quick Actions */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <Button
+              variant="outline"
+              className="h-24 flex flex-col gap-2 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+              onClick={() => router.push("/admin/employees")}
+            >
+              <Users className="h-6 w-6 text-blue-600" />
+              Manage Staff
+            </Button>
+            <Button
+              variant="outline"
+              className="h-24 flex flex-col gap-2 hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+              onClick={() => router.push("/admin/attendance")}
+            >
+              <Calendar className="h-6 w-6 text-emerald-600" />
+              Check Attendance
+            </Button>
+            <Button
+              variant="outline"
+              className="h-24 flex flex-col gap-2 hover:border-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+              onClick={() => router.push("/admin/leave-requests")}
+            >
+              <FileText className="h-6 w-6 text-amber-600" />
+              Review Leaves
+            </Button>
           </div>
+        </div>
+
+        {/* Right Column (1/3) */}
+        <div>
+          <Card className="border-0 shadow-lg h-full">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">Pending Leaves</CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => router.push("/admin/leave-requests")}>View All</Button>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {leaves.pending?.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-3 opacity-20" />
+                  <p>No pending requests</p>
+                </div>
+              ) : (
+                <div className="space-y-4 pt-2">
+                  {leaves.pending?.slice(0, 5).map((leave, i) => (
+                    <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                      <div className="p-2 rounded-full bg-amber-100 dark:bg-amber-900/30">
+                        <Clock className="h-4 w-4 text-amber-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{leave.userName || leave.employeeName || 'Employee'}</p>
+                        <p className="text-xs text-muted-foreground truncate">{leave.leaveType}</p>
+                      </div>
+                      <Badge variant="secondary" className="text-xs bg-white dark:bg-gray-700">
+                        {leave.startDate}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

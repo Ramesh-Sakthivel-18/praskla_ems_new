@@ -280,36 +280,49 @@ class QuotaService {
         throw new Error('Organization not found');
       }
 
+      // Support both nested limits object and root-level fields
+      const limits = org.limits || {
+        maxBusinessOwners: org.maxBusinessOwners || 5,
+        maxAdmins: org.maxAdmins || 20,
+        maxEmployees: org.maxEmployees || 1000
+      };
+
+      const counts = org.counts || {
+        businessOwners: 0,
+        admins: 0,
+        employees: 0
+      };
+
       const summary = {
         organizationId: orgId,
         organizationName: org.name,
         isActive: org.isActive,
-        limits: org.limits,
-        counts: org.counts,
+        limits: limits,
+        counts: counts,
         utilization: {
           businessOwners: {
-            current: org.counts.businessOwners || 0,
-            max: org.limits.maxBusinessOwners || 0,
-            percentage: org.limits.maxBusinessOwners > 0
-              ? Math.round((org.counts.businessOwners / org.limits.maxBusinessOwners) * 100)
+            current: counts.businessOwners || 0,
+            max: limits.maxBusinessOwners || 5,
+            percentage: limits.maxBusinessOwners > 0
+              ? Math.round((counts.businessOwners / limits.maxBusinessOwners) * 100)
               : 0,
-            remaining: Math.max(0, (org.limits.maxBusinessOwners || 0) - (org.counts.businessOwners || 0))
+            remaining: Math.max(0, (limits.maxBusinessOwners || 5) - (counts.businessOwners || 0))
           },
           admins: {
-            current: org.counts.admins || 0,
-            max: org.limits.maxAdmins || 0,
-            percentage: org.limits.maxAdmins > 0
-              ? Math.round((org.counts.admins / org.limits.maxAdmins) * 100)
+            current: counts.admins || 0,
+            max: limits.maxAdmins || 20,
+            percentage: limits.maxAdmins > 0
+              ? Math.round((counts.admins / limits.maxAdmins) * 100)
               : 0,
-            remaining: Math.max(0, (org.limits.maxAdmins || 0) - (org.counts.admins || 0))
+            remaining: Math.max(0, (limits.maxAdmins || 20) - (counts.admins || 0))
           },
           employees: {
-            current: org.counts.employees || 0,
-            max: org.limits.maxEmployees || 0,
-            percentage: org.limits.maxEmployees > 0
-              ? Math.round((org.counts.employees / org.limits.maxEmployees) * 100)
+            current: counts.employees || 0,
+            max: limits.maxEmployees || 1000,
+            percentage: limits.maxEmployees > 0
+              ? Math.round((counts.employees / limits.maxEmployees) * 100)
               : 0,
-            remaining: Math.max(0, (org.limits.maxEmployees || 0) - (org.counts.employees || 0))
+            remaining: Math.max(0, (limits.maxEmployees || 1000) - (counts.employees || 0))
           }
         }
       };
@@ -369,7 +382,7 @@ class QuotaService {
     try {
       // Validate limits are positive numbers
       const validatedLimits = {};
-      
+
       if (newLimits.maxBusinessOwners !== undefined) {
         validatedLimits.maxBusinessOwners = Math.max(1, parseInt(newLimits.maxBusinessOwners));
       }
@@ -382,7 +395,7 @@ class QuotaService {
 
       // Update limits
       const updated = await this.orgRepo.updateLimits(orgId, validatedLimits);
-      
+
       console.log(`✅ Organization limits updated successfully`);
       return updated;
     } catch (error) {
@@ -407,7 +420,7 @@ class QuotaService {
 
       // Update admin limit
       const updated = await this.userRepo.updateAdminLimit(orgId, adminId, validatedLimit);
-      
+
       console.log(`✅ Admin quota updated successfully`);
       return updated;
     } catch (error) {

@@ -448,6 +448,67 @@ class StatisticsService {
 
     return workingDays;
   }
+
+/**
+ * Get organization info for Manager (NO ATTENDANCE DATA)
+ * @param {string} orgId - Organization ID
+ * @returns {Promise} Organization info only
+ */
+async getOrganizationInfoForManager(orgId) {
+  console.log(`📊 StatisticsService.getOrganizationInfoForManager() - Org: ${orgId}`);
+  try {
+    const org = await this.orgRepo.findById(orgId);
+    
+    if (!org) {
+      throw new Error('Organization not found');
+    }
+
+    return {
+      organizationId: orgId,
+      name: org.name,
+      isActive: org.isActive,
+      
+      // User counts (NO ATTENDANCE)
+      counts: {
+        businessOwners: org.counts?.businessOwners || 0,
+        admins: org.counts?.admins || 0,
+        employees: org.counts?.employees || 0,
+        totalUsers: (org.counts?.businessOwners || 0) + 
+                   (org.counts?.admins || 0) + 
+                   (org.counts?.employees || 0)
+      },
+      
+      // Limits
+      limits: {
+        maxBusinessOwners: org.limits?.maxBusinessOwners || 0,
+        maxAdmins: org.limits?.maxAdmins || 0,
+        maxEmployees: org.limits?.maxEmployees || 0
+      },
+      
+      // Utilization percentages (NO ATTENDANCE)
+      utilization: {
+        businessOwnersPercent: org.limits?.maxBusinessOwners 
+          ? Math.round((org.counts?.businessOwners || 0) / org.limits.maxBusinessOwners * 100)
+          : 0,
+        adminsPercent: org.limits?.maxAdmins
+          ? Math.round((org.counts?.admins || 0) / org.limits.maxAdmins * 100)
+          : 0,
+        employeesPercent: org.limits?.maxEmployees
+          ? Math.round((org.counts?.employees || 0) / org.limits.maxEmployees * 100)
+          : 0
+      },
+      
+      timestamps: {
+        createdAt: org.createdAt,
+        updatedAt: org.updatedAt
+      }
+    };
+    
+  } catch (error) {
+    console.error('❌ StatisticsService: Error getting org info for manager:', error);
+    throw new Error(`Failed to get organization info: ${error.message}`);
+  }
+}
 }
 
 module.exports = StatisticsService;

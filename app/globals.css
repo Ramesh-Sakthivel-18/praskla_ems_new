@@ -82,6 +82,96 @@
   --sidebar-ring: oklch(0.439 0 0);
 }
 
+/* ========================================
+   BROWSER COMPATIBILITY & MOBILE FIXES
+   ======================================== */
+
+/* Safe area insets for iPhone X+ notch/home indicator */
+html {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* Fix 100vh issue on mobile Safari (includes URL bar) */
+.min-h-screen {
+  min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport height - excludes UI */
+}
+
+/* Webkit prefix for backdrop-blur (Safari < 15) */
+.backdrop-blur,
+.backdrop-blur-sm,
+.backdrop-blur-md,
+.backdrop-blur-lg,
+.backdrop-blur-xl,
+.backdrop-blur-2xl,
+.backdrop-blur-3xl {
+  -webkit-backdrop-filter: var(--tw-backdrop-blur);
+}
+
+/* Performance hints for animations */
+.animate-pulse {
+  will-change: opacity;
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse,
+  .animate-spin,
+  .animate-bounce {
+    animation: none !important;
+  }
+  
+  * {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Touch target minimum size for mobile */
+@media (pointer: coarse) {
+  button,
+  a,
+  [role="button"],
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Ensure clickable text links are still usable */
+  a:not(.btn):not([class*="button"]) {
+    display: inline-block;
+    padding: 8px 4px;
+    margin: -8px -4px;
+  }
+}
+
+/* Prevent text selection on interactive elements (app-like feel) */
+button,
+[role="button"] {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Smooth scrolling with momentum on iOS */
+.overflow-auto,
+.overflow-y-auto,
+.overflow-x-auto,
+.overflow-scroll {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Hide scrollbars on mobile for cleaner app-like feel */
+@media (max-width: 768px) {
+  ::-webkit-scrollbar {
+    display: none;
+  }
+  
+  * {
+    scrollbar-width: none;
+  }
+}
+
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);

@@ -1,9 +1,11 @@
 /**
- * manager.js (UPDATED)
+ * manager.js (UPDATED - No Attendance Access)
  * 
- * Routes for manager operations (system-wide admin).
- * Manages organizations, sets limits, activates/deactivates orgs.
- * Uses OrganizationRepository and QuotaService from container.
+ * Routes for System Manager:
+ * - View organization info (counts, limits)
+ * - Manage organizations (activate, deactivate)
+ * - Set organization limits
+ * - NO ACCESS to attendance data
  */
 
 const express = require('express');
@@ -11,154 +13,195 @@ const router = express.Router();
 const container = require('../container');
 const { authenticateToken, requireManager } = require('../middleware');
 
-// Get service instances from container
-const orgRepo = container.getOrganizationRepo();
+// Get services
+const organizationRepo = container.getOrganizationRepo();
+const userRepo = container.getUserRepo();
 const quotaService = container.getQuotaService();
 
+// ============================================
+// ORGANIZATION MANAGEMENT
+// ============================================
+
 /**
+ * GET All Organizations
  * GET /api/manager/organizations
- * Get all organizations (active and inactive)
- * Manager only
  */
 router.get('/organizations', authenticateToken, requireManager, async (req, res) => {
+  console.log('📋 GET /api/manager/organizations');
   try {
-    const organizations = await orgRepo.getAllWithStats();
+    const organizations = await organizationRepo.findAll();
 
     res.json({
-      success: true,
       count: organizations.length,
-      data: organizations
+      organizations: organizations.map(org => ({
+        id: org.id,
+        name: org.name,
+        isActive: org.isActive,
+        counts: org.counts || {},
+        limits: org.limits || {},
+        createdAt: org.createdAt,
+        updatedAt: org.updatedAt
+      }))
     });
+
   } catch (error) {
-    console.error('Error getting organizations:', error);
-    res.status(500).json({
-      error: 'Failed to get organizations',
-      message: error.message
-    });
+    console.error('❌ Error getting organizations:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
+ * GET Active Organizations
  * GET /api/manager/organizations/active
- * Get all active organizations
- * Manager only
  */
 router.get('/organizations/active', authenticateToken, requireManager, async (req, res) => {
+  console.log('📋 GET /api/manager/organizations/active');
   try {
-    const organizations = await orgRepo.findAllActive();
+    const organizations = await organizationRepo.findAll();
+    const activeOrgs = organizations.filter(org => org.isActive);
 
     res.json({
-      success: true,
-      count: organizations.length,
-      data: organizations
+      count: activeOrgs.length,
+      organizations: activeOrgs.map(org => ({
+        id: org.id,
+        name: org.name,
+        counts: org.counts || {},
+        limits: org.limits || {},
+        createdAt: org.createdAt
+      }))
     });
+
   } catch (error) {
-    console.error('Error getting active organizations:', error);
-    res.status(500).json({
-      error: 'Failed to get active organizations',
-      message: error.message
-    });
+    console.error('❌ Error getting active organizations:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
+ * GET Inactive Organizations
  * GET /api/manager/organizations/inactive
- * Get all inactive organizations
- * Manager only
  */
 router.get('/organizations/inactive', authenticateToken, requireManager, async (req, res) => {
+  console.log('📋 GET /api/manager/organizations/inactive');
   try {
-    const organizations = await orgRepo.findAllInactive();
+    const organizations = await organizationRepo.findAll();
+    const inactiveOrgs = organizations.filter(org => !org.isActive);
 
     res.json({
-      success: true,
-      count: organizations.length,
-      data: organizations
+      count: inactiveOrgs.length,
+      organizations: inactiveOrgs.map(org => ({
+        id: org.id,
+        name: org.name,
+        counts: org.counts || {},
+        limits: org.limits || {},
+        deactivatedAt: org.deactivatedAt
+      }))
     });
+
   } catch (error) {
-    console.error('Error getting inactive organizations:', error);
-    res.status(500).json({
-      error: 'Failed to get inactive organizations',
-      message: error.message
-    });
+    console.error('❌ Error getting inactive organizations:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * GET /api/manager/organizations/:orgId
- * Get specific organization by ID
- * Manager only
+ * GET Organization by ID
+ * GET /api/manager/organizations/:id
  */
-router.get('/organizations/:orgId', authenticateToken, requireManager, async (req, res) => {
+router.get('/organizations/:id', authenticateToken, requireManager, async (req, res) => {
+  console.log(`📋 GET /api/manager/organizations/${req.params.id}`);
   try {
-    const { orgId } = req.params;
-    const organization = await orgRepo.findById(orgId);
+    const { id } = req.params;
+
+    const organization = await organizationRepo.findById(id);
 
     if (!organization) {
-      return res.status(404).json({
-        error: 'Organization not found'
-      });
+      return res.status(404).json({ error: 'Organization not found' });
     }
 
+    // Get user breakdown
+    const businessOwners = await userRepo.findByRole(id, 'business_owner');
+    const admins = await userRepo.findByRole(id, 'admin');
+    const employees = await userRepo.findByRole(id, 'employee');
+
     res.json({
-      success: true,
-      data: organization
+      organization: {
+        id: organization.id,
+        name: organization.name,
+        isActive: organization.isActive,
+        counts: organization.counts || {},
+        limits: organization.limits || {},
+        createdAt: organization.createdAt,
+        updatedAt: organization.updatedAt
+      },
+      users: {
+        businessOwners: {
+          count: businessOwners.length,
+          users: businessOwners.map(u => ({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            isActive: u.isActive
+          }))
+        },
+        admins: {
+          count: admins.length,
+          users: admins.map(u => ({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            isActive: u.isActive,
+            quota: {
+              created: u.adminSettings?.employeesCreated || 0,
+              limit: u.adminSettings?.canCreateUpTo || 0
+            }
+          }))
+        },
+        employees: {
+          count: employees.length,
+          activeCount: employees.filter(e => e.isActive).length,
+          inactiveCount: employees.filter(e => !e.isActive).length
+        }
+      }
     });
+
   } catch (error) {
-    console.error('Error getting organization:', error);
-    res.status(500).json({
-      error: 'Failed to get organization',
-      message: error.message
-    });
+    console.error('❌ Error getting organization:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * GET /api/manager/organizations/:orgId/quota
- * Get organization quota summary
- * Manager only
+ * GET Organization Quota Summary
+ * GET /api/manager/organizations/:id/quota
  */
-router.get('/organizations/:orgId/quota', authenticateToken, requireManager, async (req, res) => {
+router.get('/organizations/:id/quota', authenticateToken, requireManager, async (req, res) => {
+  console.log(`📊 GET /api/manager/organizations/${req.params.id}/quota`);
   try {
-    const { orgId } = req.params;
-    const quotaSummary = await quotaService.getOrgQuotaSummary(orgId);
+    const { id } = req.params;
 
-    res.json({
-      success: true,
-      data: quotaSummary
-    });
+    const quotaSummary = await quotaService.getOrgQuotaSummary(id);
+
+    res.json(quotaSummary);
+
   } catch (error) {
-    console.error('Error getting quota summary:', error);
-    
-    if (error.message.includes('not found')) {
-      return res.status(404).json({
-        error: 'Organization not found'
-      });
-    }
-
-    res.status(500).json({
-      error: 'Failed to get quota summary',
-      message: error.message
-    });
+    console.error('❌ Error getting quota summary:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * PUT /api/manager/organizations/:orgId/limits
- * Update organization limits
- * Manager only
+ * UPDATE Organization Limits
+ * PUT /api/manager/organizations/:id/limits
  */
-router.put('/organizations/:orgId/limits', authenticateToken, requireManager, async (req, res) => {
+router.put('/organizations/:id/limits', authenticateToken, requireManager, async (req, res) => {
+  console.log(`📝 PUT /api/manager/organizations/${req.params.id}/limits`);
   try {
-    const { orgId } = req.params;
+    const { id } = req.params;
     const { maxBusinessOwners, maxAdmins, maxEmployees } = req.body;
 
-    // Validate that at least one limit is being updated
     if (!maxBusinessOwners && !maxAdmins && !maxEmployees) {
-      return res.status(400).json({
-        error: 'No limits provided',
-        message: 'At least one limit (maxBusinessOwners, maxAdmins, maxEmployees) is required'
-      });
+      return res.status(400).json({ error: 'At least one limit must be provided' });
     }
 
     const newLimits = {};
@@ -166,124 +209,155 @@ router.put('/organizations/:orgId/limits', authenticateToken, requireManager, as
     if (maxAdmins) newLimits.maxAdmins = parseInt(maxAdmins);
     if (maxEmployees) newLimits.maxEmployees = parseInt(maxEmployees);
 
-    const updated = await quotaService.updateOrgLimits(orgId, newLimits);
+    const organization = await quotaService.updateOrgLimits(id, newLimits);
 
     res.json({
-      success: true,
       message: 'Organization limits updated successfully',
-      data: updated
+      organization: {
+        id: organization.id,
+        name: organization.name,
+        limits: organization.limits
+      }
     });
-  } catch (error) {
-    console.error('Error updating organization limits:', error);
-    
-    if (error.message.includes('not found')) {
-      return res.status(404).json({
-        error: 'Organization not found'
-      });
-    }
 
-    res.status(500).json({
-      error: 'Failed to update organization limits',
-      message: error.message
-    });
+  } catch (error) {
+    console.error('❌ Error updating org limits:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * POST /api/manager/organizations/:orgId/activate
- * Activate an organization
- * Manager only
+ * ACTIVATE Organization
+ * POST /api/manager/organizations/:id/activate
  */
-router.post('/organizations/:orgId/activate', authenticateToken, requireManager, async (req, res) => {
+router.post('/organizations/:id/activate', authenticateToken, requireManager, async (req, res) => {
+  console.log(`✅ POST /api/manager/organizations/${req.params.id}/activate`);
   try {
-    const { orgId } = req.params;
-    const updated = await orgRepo.activate(orgId);
+    const { id } = req.params;
+
+    const organization = await organizationRepo.activate(id);
 
     res.json({
-      success: true,
       message: 'Organization activated successfully',
-      data: updated
+      organization: {
+        id: organization.id,
+        name: organization.name,
+        isActive: organization.isActive
+      }
     });
-  } catch (error) {
-    console.error('Error activating organization:', error);
-    
-    if (error.message.includes('not found')) {
-      return res.status(404).json({
-        error: 'Organization not found'
-      });
-    }
 
-    res.status(500).json({
-      error: 'Failed to activate organization',
-      message: error.message
-    });
+  } catch (error) {
+    console.error('❌ Error activating organization:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * POST /api/manager/organizations/:orgId/deactivate
- * Deactivate an organization
- * Manager only
+ * DEACTIVATE Organization
+ * POST /api/manager/organizations/:id/deactivate
  */
-router.post('/organizations/:orgId/deactivate', authenticateToken, requireManager, async (req, res) => {
+router.post('/organizations/:id/deactivate', authenticateToken, requireManager, async (req, res) => {
+  console.log(`❌ POST /api/manager/organizations/${req.params.id}/deactivate`);
   try {
-    const { orgId } = req.params;
-    const updated = await orgRepo.deactivate(orgId);
+    const { id } = req.params;
+
+    const organization = await organizationRepo.deactivate(id);
 
     res.json({
-      success: true,
       message: 'Organization deactivated successfully',
-      data: updated
+      organization: {
+        id: organization.id,
+        name: organization.name,
+        isActive: organization.isActive
+      }
     });
-  } catch (error) {
-    console.error('Error deactivating organization:', error);
-    
-    if (error.message.includes('not found')) {
-      return res.status(404).json({
-        error: 'Organization not found'
-      });
-    }
 
-    res.status(500).json({
-      error: 'Failed to deactivate organization',
-      message: error.message
-    });
+  } catch (error) {
+    console.error('❌ Error deactivating organization:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
+// ============================================
+// MANAGER DASHBOARD (NO ATTENDANCE DATA)
+// ============================================
+
 /**
+ * GET Manager Dashboard Statistics
  * GET /api/manager/dashboard/stats
- * Get manager dashboard statistics
- * Manager only
+ * 
+ * Returns ONLY organization info, counts, limits
+ * NO attendance data
  */
 router.get('/dashboard/stats', authenticateToken, requireManager, async (req, res) => {
+  console.log('📊 GET /api/manager/dashboard/stats');
   try {
-    const allOrgs = await orgRepo.findAll();
-    
+    const organizations = await organizationRepo.findAll();
+
+    // Calculate system-wide statistics
     const stats = {
-      totalOrganizations: allOrgs.length,
-      activeOrganizations: allOrgs.filter(org => org.isActive).length,
-      inactiveOrganizations: allOrgs.filter(org => !org.isActive).length,
-      totalUsers: allOrgs.reduce((sum, org) => {
-        return sum + (org.counts?.businessOwners || 0) + 
-               (org.counts?.admins || 0) + 
-               (org.counts?.employees || 0);
-      }, 0),
-      totalBusinessOwners: allOrgs.reduce((sum, org) => sum + (org.counts?.businessOwners || 0), 0),
-      totalAdmins: allOrgs.reduce((sum, org) => sum + (org.counts?.admins || 0), 0),
-      totalEmployees: allOrgs.reduce((sum, org) => sum + (org.counts?.employees || 0), 0)
+      system: {
+        totalOrganizations: organizations.length,
+        activeOrganizations: organizations.filter(o => o.isActive).length,
+        inactiveOrganizations: organizations.filter(o => !o.isActive).length
+      },
+      
+      // Aggregate user counts across all organizations
+      users: {
+        totalBusinessOwners: organizations.reduce((sum, o) => sum + (o.counts?.businessOwners || 0), 0),
+        totalAdmins: organizations.reduce((sum, o) => sum + (o.counts?.admins || 0), 0),
+        totalEmployees: organizations.reduce((sum, o) => sum + (o.counts?.employees || 0), 0),
+        grandTotal: 0 // Will calculate below
+      },
+      
+      // Organization details
+      organizations: organizations.map(org => ({
+        id: org.id,
+        name: org.name,
+        isActive: org.isActive,
+        
+        // User counts (NO ATTENDANCE)
+        counts: {
+          businessOwners: org.counts?.businessOwners || 0,
+          admins: org.counts?.admins || 0,
+          employees: org.counts?.employees || 0,
+          total: (org.counts?.businessOwners || 0) + 
+                 (org.counts?.admins || 0) + 
+                 (org.counts?.employees || 0)
+        },
+        
+        // Limits
+        limits: {
+          maxBusinessOwners: org.limits?.maxBusinessOwners || 0,
+          maxAdmins: org.limits?.maxAdmins || 0,
+          maxEmployees: org.limits?.maxEmployees || 0
+        },
+        
+        // Utilization percentages
+        utilization: {
+          businessOwnersPercent: org.limits?.maxBusinessOwners 
+            ? Math.round((org.counts?.businessOwners || 0) / org.limits.maxBusinessOwners * 100)
+            : 0,
+          adminsPercent: org.limits?.maxAdmins
+            ? Math.round((org.counts?.admins || 0) / org.limits.maxAdmins * 100)
+            : 0,
+          employeesPercent: org.limits?.maxEmployees
+            ? Math.round((org.counts?.employees || 0) / org.limits.maxEmployees * 100)
+            : 0
+        }
+      }))
     };
 
-    res.json({
-      success: true,
-      data: stats
-    });
+    // Calculate grand total
+    stats.users.grandTotal = stats.users.totalBusinessOwners + 
+                            stats.users.totalAdmins + 
+                            stats.users.totalEmployees;
+
+    res.json(stats);
+
   } catch (error) {
-    console.error('Error getting manager dashboard stats:', error);
-    res.status(500).json({
-      error: 'Failed to get dashboard statistics',
-      message: error.message
-    });
+    console.error('❌ Error getting manager dashboard stats:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

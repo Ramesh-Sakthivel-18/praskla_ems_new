@@ -2,565 +2,439 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { AdminSidebar } from "@/components/admin-sidebar"
-import { AdminNavbar } from "@/components/admin-navbar"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { UserPlus, Edit, Trash2, Eye, Building2, RefreshCw } from "lucide-react"
-import { auth } from "@/lib/firebaseClient"
-import { safeRedirect } from "@/lib/redirectUtils"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import {
+  Users,
+  Search,
+  UserCheck,
+  Plus,
+  RefreshCw,
+  AlertCircle,
+  Building2,
+  Eye,
+  EyeOff,
+  ArrowLeft,
+  Mail,
+  User,
+  Briefcase,
+  Trash2
+} from "lucide-react"
+import { getCurrentUser, isAuthenticated } from "@/lib/auth"
+import { getValidIdToken } from "@/lib/firebaseClient"
 
 export default function AdminEmployeesPage() {
   const router = useRouter()
-  const [currentAdmin, setCurrentAdmin] = useState(null) // ✅ Store current admin
+
+  const [currentUser, setCurrentUser] = useState(null)
   const [employees, setEmployees] = useState([])
   const [filteredEmployees, setFilteredEmployees] = useState([])
-  const [searchTerm, setSearchTerm] = useState("")
-  const [token, setToken] = useState("")
-  const [employeesLoading, setEmployeesLoading] = useState(true)
-  const [editingId, setEditingId] = useState(null)
-  const [dialogOpen, setDialogOpen] = useState(false) // ✅ Control dialog state
-  const [formData, setFormData] = useState({
+  const [searchQuery, setSearchQuery] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  const [showCreateEmployee, setShowCreateEmployee] = useState(false)
+  const [createLoading, setCreateLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [newEmployee, setNewEmployee] = useState({
     name: "",
     email: "",
-    position: "",
-    department: "",
-    role: "employee",
     password: "",
-    workingType: "full-time",
-    salary: "" // ✅ Add salary field
+    department: "",
+    position: "",
+    workingType: "Full-time",
+    salary: "",
   })
 
+  // Auth Check
   useEffect(() => {
-    console.log('👥 AdminEmployees: Component mounted');
-    
-    // ✅ Get current admin from localStorage
-    const currentEmployee = localStorage.getItem("currentEmployee")
-    if (!currentEmployee) {
-      console.log('⚠️ AdminEmployees: No current employee found, redirecting to login');
-      safeRedirect(router, "/admin/login")
+    if (!isAuthenticated()) {
+      router.push("/admin/login")
       return
     }
 
-    const admin = JSON.parse(currentEmployee)
-    if (admin.role !== "admin") {
-      console.log('⚠️ AdminEmployees: Not an admin, redirecting');
-      alert("Unauthorized. Admin access required.")
-      safeRedirect(router, "/role-selection")
+    const user = getCurrentUser()
+    if (!user || (user.role !== "admin" && user.role !== "manager")) {
+      router.push("/admin/login")
       return
     }
 
-    console.log('✅ Admin logged in:', admin.email)
-    console.log('🏢 Organization ID:', admin.organizationId)
-    setCurrentAdmin(admin) // ✅ Store admin info
-
-    const loadEmployees = async () => {
-      console.log("=".repeat(50))
-      console.log('🔄 AdminEmployees: Loading employees for organization:', admin.organizationId)
-      console.log("=".repeat(50))
-      setEmployeesLoading(true)
-      
-      try {
-        // Get fresh token
-        let freshToken = localStorage.getItem("firebaseToken")
-        console.log('🔑 AdminEmployees: Using token, length:', freshToken?.length || 0)
-        
-        if (auth && auth.currentUser) {
-          try {
-            freshToken = await auth.currentUser.getIdToken(true)
-            localStorage.setItem("firebaseToken", freshToken)
-            console.log('✅ AdminEmployees: Token refreshed')
-          } catch (refreshError) {
-            console.error('❌ Token refresh failed:', refreshError)
-          }
-        }
-        
-        if (!freshToken) {
-          console.log('❌ AdminEmployees: No valid token found')
-          localStorage.removeItem("adminLoggedIn")
-          localStorage.removeItem("firebaseToken")
-          safeRedirect(router, "/admin/login")
-          return
-        }
-        
-        setToken(freshToken)
-        
-        const getApiBase = () => {
-          return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
-        }
-        
-        console.log('🔗 AdminEmployees: Fetching from:', `${getApiBase()}/api/admin/employees`)
-        let response = await fetch(`${getApiBase()}/api/admin/employees`, {
-          headers: {
-            'Authorization': `Bearer ${freshToken}`,
-            'Content-Type': 'application/json'
-          }
-        })
-        
-        console.log('📊 AdminEmployees: API response status:', response.status)
-        
-        // Retry with token refresh if unauthorized
-        if (response.status === 401 && auth && auth.currentUser) {
-          console.log('⚠️ Unauthorized, retrying with fresh token...')
-          const newToken = await auth.currentUser.getIdToken(true)
-          localStorage.setItem("firebaseToken", newToken)
-          setToken(newToken)
-          
-          response = await fetch(`${getApiBase()}/api/admin/employees`, {
-            headers: {
-              'Authorization': `Bearer ${newToken}`,
-              'Content-Type': 'application/json'
-            }
-          })
-          console.log('📊 Retry response status:', response.status)
-        }
-
-        if (response.ok) {
-          const data = await response.json()
-          console.log('📊 Total employees from backend:', data.length)
-          
-          // ✅ Log all employees with their organization IDs
-          console.log('📋 ALL EMPLOYEES FROM BACKEND:')
-          data.forEach((emp, index) => {
-            console.log(`   ${index + 1}. ${emp.name} (${emp.email})`)
-            console.log(`      - Role: ${emp.role}`)
-            console.log(`      - OrgID: ${emp.organizationId || "❌ MISSING"}`)
-          })
-          
-          // ✅ Filter employees by organization ID
-          const orgEmployees = data.filter(emp => 
-            emp.organizationId === admin.organizationId
-          )
-          
-          console.log('✅ Filtered employees for this organization:', orgEmployees.length)
-          console.log('📋 ORGANIZATION EMPLOYEES:')
-          orgEmployees.forEach((emp, index) => {
-            console.log(`   ${index + 1}. ${emp.name} (${emp.email}) - ${emp.role}`)
-          })
-          
-          // Check for employees from wrong organization
-          const wrongOrg = data.filter(emp => 
-            emp.organizationId && emp.organizationId !== admin.organizationId
-          )
-          if (wrongOrg.length > 0) {
-            console.warn('⚠️ Found employees from other organizations:', wrongOrg.length)
-          }
-          
-          console.log("=".repeat(50))
-          setEmployees(orgEmployees)
-          
-        } else {
-          console.error('❌ API error:', response.status, response.statusText)
-          const errorText = await response.text()
-          console.error('❌ Error details:', errorText)
-          
-          if (response.status === 401) {
-            localStorage.removeItem("adminLoggedIn")
-            localStorage.removeItem("firebaseToken")
-            localStorage.removeItem("currentEmployee")
-            safeRedirect(router, "/admin/login")
-          }
-        }
-      } catch (error) {
-        console.error('❌ Network error:', error)
-      } finally {
-        setEmployeesLoading(false)
-      }
-    }
-
-    loadEmployees()
+    setCurrentUser(user)
   }, [router])
 
   useEffect(() => {
-    console.log('🔍 Filtering employees, searchTerm:', searchTerm)
-    const filtered = employees.filter(employee =>
-      (employee.name && employee.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (employee.email && employee.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (employee.position && employee.position.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (employee.department && employee.department.toLowerCase().includes(searchTerm.toLowerCase()))
-    )
-    console.log('✅ Filtered results:', filtered.length)
-    setFilteredEmployees(filtered)
-  }, [searchTerm, employees])
+    if (currentUser) {
+      loadEmployees()
+    }
+  }, [currentUser])
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    console.log('📝 Form submitted')
+  useEffect(() => {
+    if (!Array.isArray(employees)) return
+    const filtered = employees.filter((emp) => {
+      const query = searchQuery.toLowerCase()
+      return (
+        emp.name?.toLowerCase().includes(query) ||
+        emp.email?.toLowerCase().includes(query) ||
+        emp.department?.toLowerCase().includes(query) ||
+        emp.position?.toLowerCase().includes(query)
+      )
+    })
+    setFilteredEmployees(filtered)
+  }, [searchQuery, employees])
+
+  const getApiBase = () => {
+    return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
+  }
+
+  const loadEmployees = async () => {
+    setLoading(true)
+    setError(null)
+
+    const token = await getValidIdToken()
+    const base = getApiBase()
 
     if (!token) {
-      alert('Authentication error. Please log in again.')
-      safeRedirect(router, "/admin/login")
-      return
-    }
-
-    if (!currentAdmin || !currentAdmin.organizationId) {
-      alert('❌ Organization ID not found. Please log in again.')
-      safeRedirect(router, "/admin/login")
+      setError("Authentication failed. Please login again.")
+      setLoading(false)
       return
     }
 
     try {
-      // ✅ Include organizationId in the request
-      const employeeData = {
-        ...formData,
-        organizationId: currentAdmin.organizationId // ✅ IMPORTANT
-      }
-      
-      console.log('📝 Creating/updating employee with data:', {
-        ...employeeData,
-        password: employeeData.password ? '***' : undefined
-      })
-      
-      const getApiBase = () => {
-        return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
-      }
-      
-      const url = editingId 
-        ? `${getApiBase()}/api/admin/employees/${editingId}`
-        : `${getApiBase()}/api/admin/employees`
-        
-      console.log('🔗 API endpoint:', url)
-      
-      const response = await fetch(url, {
-        method: editingId ? 'PUT' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(employeeData)
+      const response = await fetch(`${base}/api/admin/employees`, {
+        headers: { Authorization: `Bearer ${token}` },
       })
 
-      console.log('📊 Response status:', response.status)
-      
       if (response.ok) {
-        const result = await response.json()
-        const savedEmployee = result.employee || result
-        
-        console.log('✅ Employee saved:', savedEmployee)
-        
-        if (editingId) {
-          setEmployees(employees.map(emp => 
-            emp.id === editingId ? savedEmployee : emp
-          ))
-        } else {
-          setEmployees([...employees, savedEmployee])
-        }
-        
-        // Reset form and close dialog
-        setEditingId(null)
-        setDialogOpen(false)
-        setFormData({
+        const data = await response.json()
+        // Determine if data is array or object with employees array
+        const employeeArray = Array.isArray(data) ? data : (data.employees || [])
+
+        // Filter out Business Owners from Admin view if desired, or keep them view-only
+        // Generally Admins manage "Employees", seeing BOs/Admins is fine but editing might be restricted backend side
+        setEmployees(employeeArray)
+        setFilteredEmployees(employeeArray)
+      } else if (response.status === 401) {
+        setError("Session expired. Please login again.")
+        // setTimeout(() => router.push("/admin/login"), 2000)
+      } else {
+        setError(`Failed to load employees: ${response.status}`)
+      }
+    } catch (error) {
+      console.error("Network error loading employees:", error)
+      setError("Failed to connect to backend server")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCreateEmployee = async (e) => {
+    e.preventDefault()
+
+    if (!currentUser) return
+
+    setCreateLoading(true)
+    const token = await getValidIdToken()
+    const base = getApiBase()
+
+    try {
+      const response = await fetch(`${base}/api/admin/employees`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          ...newEmployee,
+          role: "employee", // Admins create Employees
+          organizationId: currentUser.organizationId,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        const createdEmployee = data.employee || data
+        setEmployees((prev) => [createdEmployee, ...prev])
+
+        setShowCreateEmployee(false)
+        setShowPassword(false)
+        // Reset form
+        setNewEmployee({
           name: "",
           email: "",
-          position: "",
-          department: "",
-          role: "employee",
           password: "",
-          workingType: "full-time",
-          salary: ""
+          department: "",
+          position: "",
+          workingType: "Full-time",
+          salary: "",
         })
 
-        alert(editingId ? 'Employee updated successfully!' : 'Employee created successfully!')
+        alert(`Employee created successfully!\n\nEmail: ${createdEmployee.email}\nPassword: ${newEmployee.password}`)
       } else {
-        const errorData = await response.json()
-        console.error('❌ Save error:', errorData)
-        alert(errorData.error || `Failed to ${editingId ? 'update' : 'create'} employee`)
+        alert(`${data.error || "Failed to create employee"}`)
       }
     } catch (error) {
-      console.error('❌ Network error:', error)
-      alert('Network error. Please try again.')
+      console.error("Create employee error:", error)
+      alert("Network error")
+    } finally {
+      setCreateLoading(false)
     }
   }
 
-  const handleEdit = (employee) => {
-    console.log('✏️ Editing employee:', employee.id)
-    setEditingId(employee.id)
-    setFormData({
-      name: employee.name,
-      email: employee.email,
-      position: employee.position,
-      department: employee.department,
-      role: employee.role,
-      password: "",
-      workingType: employee.workingType || "full-time",
-      salary: employee.salary || ""
-    })
-    setDialogOpen(true)
-  }
+  // Helper to count roles
+  const activeEmployees = filteredEmployees.filter(e => e.isActive !== false)
+  const fullTimeNodes = activeEmployees.filter(e => e.workingType === 'Full-time').length
 
-  const handleDelete = async (id) => {
-    console.log('🗑️ Deleting employee:', id)
-    
-    if (!window.confirm('Are you sure you want to delete this employee?')) {
-      return
-    }
-
-    try {
-      const getApiBase = () => {
-        return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
-      }
-      
-      const response = await fetch(`${getApiBase()}/api/admin/employees/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-
-      console.log('📊 Delete response:', response.status)
-      
-      if (response.ok) {
-        console.log('✅ Employee deleted')
-        setEmployees(employees.filter(emp => emp.id !== id))
-        alert('Employee deleted successfully!')
-      } else {
-        const errorData = await response.json()
-        alert(errorData.error || 'Failed to delete employee')
-      }
-    } catch (error) {
-      console.error('❌ Delete error:', error)
-      alert('Network error. Please try again.')
-    }
-  }
-
-  const handleViewDetails = (employee) => {
-    console.log('👁️ Viewing employee:', employee.id)
-    alert(
-      `Employee Details:\n\n` +
-      `Name: ${employee.name}\n` +
-      `Email: ${employee.email}\n` +
-      `Position: ${employee.position}\n` +
-      `Department: ${employee.department}\n` +
-      `Role: ${employee.role}\n` +
-      `Working Type: ${employee.workingType || 'N/A'}\n` +
-      `Organization ID: ${employee.organizationId || 'N/A'}`
-    )
-  }
-
-  if (!currentAdmin) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
-    )
-  }
+  if (!currentUser) return null
 
   return (
-    <div className="min-h-screen bg-background">
-      <AdminSidebar />
-      <AdminNavbar />
-
-      <div className="ml-64 pt-16">
-        <div className="p-8">
-          <div className="mb-8">
-            <h2 className="text-3xl font-bold text-foreground">Employee Management</h2>
-            <p className="text-muted-foreground mt-1">Add, edit, and manage employee accounts</p>
-            {currentAdmin.organizationId && (
-              <Badge variant="outline" className="mt-2">
-                <Building2 className="mr-1 h-3 w-3" />
-                Org ID: {currentAdmin.organizationId.substring(0, 12)}...
-              </Badge>
-            )}
-          </div>
-
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="flex justify-between items-center">
-                <span>Employee List ({filteredEmployees.length})</span>
-                <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button onClick={() => {
-                      setEditingId(null)
-                      setFormData({
-                        name: "",
-                        email: "",
-                        position: "",
-                        department: "",
-                        role: "employee",
-                        password: "",
-                        workingType: "full-time",
-                        salary: ""
-                      })
-                      setDialogOpen(true)
-                    }}>
-                      <UserPlus className="w-4 h-4 mr-2" />
-                      Add Employee
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>{editingId ? 'Edit Employee' : 'Add New Employee'}</DialogTitle>
-                    </DialogHeader>
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="name">Full Name *</Label>
-                        <Input
-                          id="name"
-                          value={formData.name}
-                          onChange={(e) => setFormData({...formData, name: e.target.value})}
-                          placeholder="John Doe"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="email">Email *</Label>
-                        <Input
-                          id="email"
-                          type="email"
-                          value={formData.email}
-                          onChange={(e) => setFormData({...formData, email: e.target.value})}
-                          placeholder="john@example.com"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="position">Position *</Label>
-                        <Input
-                          id="position"
-                          value={formData.position}
-                          onChange={(e) => setFormData({...formData, position: e.target.value})}
-                          placeholder="Software Engineer"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="department">Department *</Label>
-                        <Input
-                          id="department"
-                          value={formData.department}
-                          onChange={(e) => setFormData({...formData, department: e.target.value})}
-                          placeholder="IT"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="salary">Salary</Label>
-                        <Input
-                          id="salary"
-                          value={formData.salary}
-                          onChange={(e) => setFormData({...formData, salary: e.target.value})}
-                          placeholder="50000"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="role">Role *</Label>
-                        <select
-                          id="role"
-                          className="w-full p-2 border rounded"
-                          value={formData.role}
-                          onChange={(e) => setFormData({...formData, role: e.target.value})}
-                        >
-                          <option value="employee">Employee</option>
-                          <option value="admin">Admin</option>
-                        </select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="workingType">Working Type *</Label>
-                        <select
-                          id="workingType"
-                          className="w-full p-2 border rounded"
-                          value={formData.workingType}
-                          onChange={(e) => setFormData({...formData, workingType: e.target.value})}
-                        >
-                          <option value="full-time">Full-time</option>
-                          <option value="part-time">Part-time</option>
-                          <option value="contract">Contract</option>
-                          <option value="intern">Intern</option>
-                        </select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="password">
-                          {editingId ? 'New Password (leave blank to keep current)' : 'Password *'}
-                        </Label>
-                        <Input
-                          id="password"
-                          type="password"
-                          value={formData.password}
-                          onChange={(e) => setFormData({...formData, password: e.target.value})}
-                          placeholder="Minimum 6 characters"
-                          required={!editingId}
-                          minLength={6}
-                        />
-                      </div>
-                      <Button type="submit" className="w-full">
-                        {editingId ? 'Update Employee' : 'Create Employee'}
-                      </Button>
-                    </form>
-                  </DialogContent>
-                </Dialog>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-4">
-                <Input
-                  placeholder="Search employees..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="max-w-sm"
-                />
+    <div className="space-y-6 animate-in fade-in-50 duration-500">
+      {/* Header */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 p-6 text-white shadow-xl">
+        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNGM0LjQxOCAwIDgtMy41ODIgOC04cy0zLjU4Mi04LTgtOC04IDMuNTgyLTggOCAzLjU4MiA4IDggOHoiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4xIi8+PC9nPjwvc3ZnPg==')] opacity-30" />
+        <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-white/20 backdrop-blur-sm rounded-xl">
+                <Users className="h-6 w-6" />
               </div>
-              {employeesLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
-                  <p className="ml-3 text-sm text-muted-foreground">Loading employees...</p>
-                </div>
-              ) : filteredEmployees.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-muted-foreground">
-                    {searchTerm ? 'No employees found matching your search.' : 'No employees in your organization yet.'}
-                  </p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Position</TableHead>
-                      <TableHead>Department</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredEmployees.map((employee) => (
-                      <TableRow key={employee.id}>
-                        <TableCell className="font-medium">{employee.name}</TableCell>
-                        <TableCell>{employee.email}</TableCell>
-                        <TableCell>{employee.position}</TableCell>
-                        <TableCell>{employee.department}</TableCell>
-                        <TableCell>
-                          <Badge variant={employee.role === 'admin' ? 'default' : 'secondary'}>
-                            {employee.role}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline" onClick={() => handleViewDetails(employee)}>
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                            <Button size="sm" variant="secondary" onClick={() => handleEdit(employee)}>
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button size="sm" variant="destructive" onClick={() => handleDelete(employee.id)}>
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+              <h1 className="text-2xl font-bold tracking-tight">Manage Employees</h1>
+            </div>
+            <p className="text-blue-100">View and manage employee accounts</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={loadEmployees}
+              disabled={loading}
+              className="bg-white/20 hover:bg-white/30 text-white border-0"
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <Button
+              onClick={() => router.push("/admin/dashboard")}
+              className="bg-white text-blue-700 hover:bg-blue-50"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Dashboard
+            </Button>
+          </div>
         </div>
       </div>
+
+      {/* Error State */}
+      {error && (
+        <Card className="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30">
+          <CardContent className="flex items-start gap-3 pt-6">
+            <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="font-semibold text-red-900 dark:text-red-100">Error Loading Employees</p>
+              <p className="text-sm mt-1 text-red-700 dark:text-red-300">{error}</p>
+              <Button variant="outline" size="sm" onClick={loadEmployees} className="mt-3">Retry</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between space-y-0 pb-2">
+              <p className="text-sm font-medium text-muted-foreground">Total Staff</p>
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                <Users className="h-4 w-4 text-blue-600" />
+              </div>
+            </div>
+            <div className="text-3xl font-bold text-blue-700">{activeEmployees.length}</div>
+            <p className="text-xs text-muted-foreground mt-1">Active accounts</p>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between space-y-0 pb-2">
+              <p className="text-sm font-medium text-muted-foreground">Full-Time</p>
+              <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                <Briefcase className="h-4 w-4 text-indigo-600" />
+              </div>
+            </div>
+            <div className="text-3xl font-bold text-indigo-700">{fullTimeNodes}</div>
+            <p className="text-xs text-muted-foreground mt-1">Employees</p>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between space-y-0 pb-2">
+              <p className="text-sm font-medium text-muted-foreground">Part-Time / Other</p>
+              <div className="p-2 bg-cyan-100 dark:bg-cyan-900/30 rounded-lg">
+                <UserCheck className="h-4 w-4 text-cyan-600" />
+              </div>
+            </div>
+            <div className="text-3xl font-bold text-cyan-700">{activeEmployees.length - fullTimeNodes}</div>
+            <p className="text-xs text-muted-foreground mt-1">Employees</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Search & Create Actions */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search employees..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 h-10 bg-gray-50 border-gray-200"
+          />
+        </div>
+
+        <Dialog open={showCreateEmployee} onOpenChange={setShowCreateEmployee}>
+          <DialogTrigger asChild>
+            <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md">
+              <Plus className="mr-2 h-4 w-4" />
+              Add New Employee
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Add New Employee</DialogTitle>
+              <p className="text-sm text-muted-foreground">
+                Create a new employee account. They will receive an email (simulated) with login details.
+              </p>
+            </DialogHeader>
+            <form onSubmit={handleCreateEmployee} className="space-y-4 mt-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Full Name *</Label>
+                  <Input id="name" required value={newEmployee.name} onChange={e => setNewEmployee({ ...newEmployee, name: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email *</Label>
+                  <Input id="email" type="email" required value={newEmployee.email} onChange={e => setNewEmployee({ ...newEmployee, email: e.target.value })} />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">Password *</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    required
+                    minLength={6}
+                    value={newEmployee.password}
+                    onChange={e => setNewEmployee({ ...newEmployee, password: e.target.value })}
+                    className="pr-10"
+                  />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="department">Department</Label>
+                  <Input id="department" value={newEmployee.department} onChange={e => setNewEmployee({ ...newEmployee, department: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="position">Position</Label>
+                  <Input id="position" value={newEmployee.position} onChange={e => setNewEmployee({ ...newEmployee, position: e.target.value })} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="salary">Salary</Label>
+                  <Input id="salary" value={newEmployee.salary} onChange={e => setNewEmployee({ ...newEmployee, salary: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="workingType">Working Type</Label>
+                  <select
+                    id="workingType"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={newEmployee.workingType}
+                    onChange={e => setNewEmployee({ ...newEmployee, workingType: e.target.value })}
+                  >
+                    <option value="Full-time">Full-time</option>
+                    <option value="Part-time">Part-time</option>
+                    <option value="Contract">Contract</option>
+                    <option value="Intern">Intern</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <Button type="button" variant="outline" onClick={() => setShowCreateEmployee(false)}>Cancel</Button>
+                <Button type="submit" disabled={createLoading} className="bg-blue-600 text-white">
+                  {createLoading ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                  Create Employee
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Employees Table */}
+      <Card className="border-0 shadow-lg overflow-hidden">
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader className="bg-gray-50 dark:bg-gray-800">
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Department</TableHead>
+                <TableHead>Position</TableHead>
+                <TableHead className="text-right">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredEmployees.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                    No employees found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredEmployees.map((emp) => (
+                  <TableRow key={emp.id} className="hover:bg-blue-50/50 dark:hover:bg-blue-900/10">
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-bold">
+                          {(emp.name || "U").substring(0, 2).toUpperCase()}
+                        </div>
+                        {emp.name}
+                      </div>
+                    </TableCell>
+                    <TableCell>{emp.email}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={emp.role === 'admin' ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-slate-50 text-slate-700 border-slate-200"}>
+                        {emp.role}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{emp.department || "-"}</TableCell>
+                    <TableCell>{emp.position || "-"}</TableCell>
+                    <TableCell className="text-right">
+                      <Badge className={emp.isActive ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-red-100 text-red-700 hover:bg-red-200"}>
+                        {emp.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   )
 }

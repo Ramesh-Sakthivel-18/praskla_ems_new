@@ -52,7 +52,7 @@ router.post('/apply', authenticateToken, requireEmployee, async (req, res) => {
     });
   } catch (error) {
     console.error('Error applying for leave:', error);
-    
+
     if (error.message.includes('overlap')) {
       return res.status(409).json({
         error: 'Date conflict',
@@ -106,6 +106,207 @@ router.get('/my-leaves', authenticateToken, requireEmployee, async (req, res) =>
 });
 
 /**
+ * GET /api/leave/all
+ * Get all leave requests for the organization
+ * Admin or Business Owner only
+ */
+router.get('/all', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+  console.log('📋 GET /api/leave/all - Get all leave requests');
+  try {
+    const orgId = req.user.organizationId;
+    const { status } = req.query;
+
+    // Get all leaves for the organization
+    const leaves = await leaveService.getAllLeaves(orgId, { status });
+
+    // Remove sensitive data
+    const safeLeaves = leaves.map(leave => {
+      const { ...safeLeave } = leave;
+      return safeLeave;
+    });
+
+    res.json({
+      count: safeLeaves.length,
+      requests: safeLeaves
+    });
+  } catch (error) {
+    console.error('Error getting all leave requests:', error);
+    res.status(500).json({
+      error: 'Failed to get leave requests',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * PUT /api/leave/:leaveId/status
+ * Approve or Reject leave request
+ * Admin or Business Owner only
+ */
+router.put('/:leaveId/status', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+  try {
+    const { leaveId } = req.params;
+    const { status, comments } = req.body;
+    const orgId = req.user.organizationId;
+    const reviewerId = req.user.uid;
+
+    if (!status || !['Approved', 'Rejected'].includes(status)) {
+      return res.status(400).json({
+        error: 'Invalid status',
+        message: 'Status must be either "Approved" or "Rejected"'
+      });
+    }
+
+    let result;
+    if (status === 'Approved') {
+      result = await leaveService.approveLeave(orgId, leaveId, reviewerId, comments);
+    } else {
+      result = await leaveService.rejectLeave(orgId, leaveId, reviewerId, comments);
+    }
+
+    res.json({
+      success: true,
+      message: `Leave request ${status.toLowerCase()} successfully`,
+      data: result
+    });
+  } catch (error) {
+    console.error('Error updating leave status:', error);
+
+    if (error.message.includes('not found')) {
+      return res.status(404).json({
+        error: 'Leave request not found',
+        message: error.message
+      });
+    }
+
+    res.status(500).json({
+      error: 'Failed to update leave status',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/leave/balance
+ * Get leave balance for current user
+ * Employee only
+ */
+router.get('/balance', authenticateToken, requireEmployee, async (req, res) => {
+  try {
+    const orgId = req.user.organizationId;
+    const userId = req.user.uid;
+    const year = new Date().getFullYear();
+
+    // Get leave statistics
+    const stats = await leaveService.getUserLeaveStats(orgId, userId, year);
+
+    // Default leave balances (these could come from organization settings)
+    const defaultBalances = {
+      vacation: 15,
+      sick: 10,
+      casual: 5,
+      emergency: 3,
+      other: 2
+    };
+
+    const balance = {
+      year,
+      allocated: defaultBalances,
+      used: stats.daysUsed || { vacation: 0, sick: 0, casual: 0, emergency: 0, other: 0 },
+      remaining: {
+        vacation: defaultBalances.vacation - (stats.daysUsed?.vacation || 0),
+        sick: defaultBalances.sick - (stats.daysUsed?.sick || 0),
+        casual: defaultBalances.casual - (stats.daysUsed?.casual || 0),
+        emergency: defaultBalances.emergency - (stats.daysUsed?.emergency || 0),
+        other: defaultBalances.other - (stats.daysUsed?.other || 0)
+      },
+      totalAllocated: Object.values(defaultBalances).reduce((a, b) => a + b, 0),
+      totalUsed: Object.values(stats.daysUsed || {}).reduce((a, b) => a + b, 0)
+    };
+
+    balance.totalRemaining = balance.totalAllocated - balance.totalUsed;
+
+    res.json({
+      success: true,
+      data: balance
+    });
+  } catch (error) {
+    console.error('Error getting leave balance:', error);
+    res.status(500).json({
+      error: 'Failed to get leave balance',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/leave/upcoming
+ * Get upcoming approved leaves (next 30 days)
+ * Employee only
+ */
+router.get('/upcoming', authenticateToken, requireEmployee, async (req, res) => {
+  try {
+    const orgId = req.user.organizationId;
+    const userId = req.user.uid;
+
+    // Get user's upcoming leaves
+    const today = new Date();
+    const endDate = new Date();
+    endDate.setDate(today.getDate() + 30);
+
+    const leaves = await leaveService.getUserLeaves(orgId, userId, {
+      status: 'approved'
+    });
+
+    // Filter for upcoming leaves
+    const upcomingLeaves = leaves.filter(leave => {
+      const leaveStart = new Date(leave.startDate);
+      return leaveStart >= today && leaveStart <= endDate;
+    });
+
+    res.json({
+      success: true,
+      count: upcomingLeaves.length,
+      data: upcomingLeaves
+    });
+  } catch (error) {
+    console.error('Error getting upcoming leaves:', error);
+    res.status(500).json({
+      error: 'Failed to get upcoming leaves',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/leave/stats/my-stats
+ * Get my leave statistics for the year
+ * Employee only
+ * NOTE: This must be defined BEFORE /:leaveId to avoid being matched as leaveId
+ */
+router.get('/stats/my-stats', authenticateToken, requireEmployee, async (req, res) => {
+  try {
+    const { year } = req.query;
+    const orgId = req.user.organizationId;
+    const userId = req.user.uid;
+    const statsYear = year ? parseInt(year) : new Date().getFullYear();
+
+    const stats = await leaveService.getUserLeaveStats(orgId, userId, statsYear);
+
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    console.error('Error getting leave stats:', error);
+    res.status(500).json({
+      error: 'Failed to get leave statistics',
+      message: error.message
+    });
+  }
+});
+
+/**
  * GET /api/leave/:leaveId
  * Get specific leave request
  * Employee (own), Admin, or Business Owner
@@ -125,7 +326,7 @@ router.get('/:leaveId', authenticateToken, requireEmployee, async (req, res) => 
 
     // Check if user is authorized to view this leave
     const isOwner = leave.userId === req.user.uid;
-    const isAdminOrOwner = ['admin', 'business_owner', 'businessowner'].includes(req.user.role);
+    const isAdminOrOwner = ['admin', 'business_owner'].includes(req.user.role);
 
     if (!isOwner && !isAdminOrOwner) {
       return res.status(403).json({
@@ -162,7 +363,7 @@ router.put('/:leaveId', authenticateToken, requireEmployee, async (req, res) => 
     // Only allow updating certain fields
     const allowedFields = ['leaveType', 'startDate', 'endDate', 'reason'];
     const filteredData = {};
-    
+
     for (const field of allowedFields) {
       if (updateData[field] !== undefined) {
         filteredData[field] = updateData[field];
@@ -189,7 +390,7 @@ router.put('/:leaveId', authenticateToken, requireEmployee, async (req, res) => 
     });
   } catch (error) {
     console.error('Error updating leave:', error);
-    
+
     if (error.message.includes('not found')) {
       return res.status(404).json({
         error: 'Leave request not found'
@@ -243,7 +444,7 @@ router.delete('/:leaveId', authenticateToken, requireEmployee, async (req, res) 
     });
   } catch (error) {
     console.error('Error cancelling leave:', error);
-    
+
     if (error.message.includes('not found')) {
       return res.status(404).json({
         error: 'Leave request not found'
@@ -271,59 +472,8 @@ router.delete('/:leaveId', authenticateToken, requireEmployee, async (req, res) 
   }
 });
 
-/**
- * GET /api/leave/stats/my-stats
- * Get my leave statistics for the year
- * Employee only
- */
-router.get('/stats/my-stats', authenticateToken, requireEmployee, async (req, res) => {
-  try {
-    const { year } = req.query;
-    const orgId = req.user.organizationId;
-    const userId = req.user.uid;
-    const statsYear = year ? parseInt(year) : new Date().getFullYear();
-
-    const stats = await leaveService.getUserLeaveStats(orgId, userId, statsYear);
-
-    res.json({
-      success: true,
-      data: stats
-    });
-  } catch (error) {
-    console.error('Error getting leave stats:', error);
-    res.status(500).json({
-      error: 'Failed to get leave statistics',
-      message: error.message
-    });
-  }
-});
-
-/**
- * GET /api/leave/balance
- * Get leave balance (available vs used)
- * Employee only
- */
-router.get('/balance', authenticateToken, requireEmployee, async (req, res) => {
-  try {
-    const { year } = req.query;
-    const orgId = req.user.organizationId;
-    const userId = req.user.uid;
-    const balanceYear = year ? parseInt(year) : new Date().getFullYear();
-
-    const balance = await leaveService.getUserLeaveBalance(orgId, userId, balanceYear);
-
-    res.json({
-      success: true,
-      data: balance
-    });
-  } catch (error) {
-    console.error('Error getting leave balance:', error);
-    res.status(500).json({
-      error: 'Failed to get leave balance',
-      message: error.message
-    });
-  }
-});
+// NOTE: /stats/my-stats has been moved before /:leaveId route to fix route ordering
+// NOTE: Duplicate /balance route removed - the one at line ~194 is used
 
 /**
  * GET /api/leave/check/:date
@@ -360,43 +510,6 @@ router.get('/check/:date', authenticateToken, requireEmployee, async (req, res) 
   }
 });
 
-/**
- * GET /api/leave/upcoming
- * Get upcoming approved leaves (next 30 days)
- * Employee only
- */
-router.get('/upcoming', authenticateToken, requireEmployee, async (req, res) => {
-  try {
-    const orgId = req.user.organizationId;
-    const userId = req.user.uid;
-
-    // Get user's upcoming leaves
-    const today = new Date();
-    const endDate = new Date();
-    endDate.setDate(today.getDate() + 30);
-
-    const leaves = await leaveService.getUserLeaves(orgId, userId, {
-      status: 'approved'
-    });
-
-    // Filter for upcoming leaves
-    const upcomingLeaves = leaves.filter(leave => {
-      const leaveStart = new Date(leave.startDate);
-      return leaveStart >= today && leaveStart <= endDate;
-    });
-
-    res.json({
-      success: true,
-      count: upcomingLeaves.length,
-      data: upcomingLeaves
-    });
-  } catch (error) {
-    console.error('Error getting upcoming leaves:', error);
-    res.status(500).json({
-      error: 'Failed to get upcoming leaves',
-      message: error.message
-    });
-  }
-});
+// NOTE: Duplicate /upcoming route removed - the one at line ~247 is used
 
 module.exports = router;

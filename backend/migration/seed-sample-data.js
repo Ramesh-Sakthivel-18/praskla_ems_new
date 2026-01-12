@@ -78,7 +78,7 @@ async function seedOrganizations() {
   }
 
   console.log('✅ Organizations created\n');
-  return organizations.map((org, index) => 
+  return organizations.map((org, index) =>
     ({ id: index === 0 ? 'org_demo_001' : 'org_test_002', ...org })
   );
 }
@@ -89,13 +89,30 @@ async function seedOrganizations() {
 async function seedUsers(organizations) {
   console.log('👥 Creating sample users...');
 
-  // Password hash for 'password123'
+  // Password hash for 'password123' (for regular users)
   const passwordHash = await bcrypt.hash('password123', 10);
+
+  // Password hash for manager (logith18801880.)
+  const managerPasswordHash = await bcrypt.hash('logith18801880.', 10);
 
   const org1 = 'org_demo_001';
   const org2 = 'org_test_002';
 
   const users = [
+    // System Manager (no organization)
+    {
+      orgId: null,
+      id: 'ey9IbTtwO6NLAhVOGY1E7QMnup82',
+      name: 'Logithkumar',
+      email: 'logithkumar188@gmail.com',
+      passwordHash: managerPasswordHash,
+      role: 'manager',
+      department: 'System',
+      position: 'System Manager',
+      isActive: true,
+      createdBy: null,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    },
     // Organization 1 - Demo Company
     {
       orgId: org1,
@@ -302,13 +319,25 @@ async function seedUsers(organizations) {
     delete user.orgId;
     delete user.id;
 
-    await db.collection('organizations')
-      .doc(orgId)
-      .collection('users')
-      .doc(userId)
-      .set(user);
-
-    console.log(`  ✓ Created user: ${user.name} (${user.role}) in ${orgId}`);
+    if (orgId) {
+      // Organization-level user (admin, employee, business_owner)
+      await db.collection('organizations')
+        .doc(orgId)
+        .collection('users')
+        .doc(userId)
+        .set(user);
+      console.log(`  ✓ Created user: ${user.name} (${user.role}) in ${orgId}`);
+    } else {
+      // System-level user (manager) - store in root users collection
+      await db.collection('users')
+        .doc(userId)
+        .set({
+          ...user,
+          organizationId: null,
+          isSystemUser: true
+        });
+      console.log(`  ✓ Created system user: ${user.name} (${user.role})`);
+    }
   }
 
   console.log('✅ Users created\n');

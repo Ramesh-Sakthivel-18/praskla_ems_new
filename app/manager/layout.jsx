@@ -6,17 +6,16 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
-import { 
-  Shield, 
-  LayoutDashboard, 
-  Building2, 
-  LogOut, 
+import {
+  Shield,
+  LayoutDashboard,
+  Building2,
   User,
+  LogOut,
   Menu,
-  X,
-  ChevronRight
+  X
 } from "lucide-react"
-import { safeRedirect } from "@/lib/redirectUtils"
+import { getCurrentUser, isAuthenticated, logoutUser } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 
 export default function ManagerLayout({ children }) {
@@ -25,27 +24,38 @@ export default function ManagerLayout({ children }) {
   const [currentUser, setCurrentUser] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
+  // Check if current page is login
+  const isAuthPage = pathname === "/manager/login"
+
   useEffect(() => {
-    const current = localStorage.getItem("currentEmployee")
-    if (current) {
-      const emp = JSON.parse(current)
-      if (emp.role !== "manager") {
-        alert("Unauthorized. Manager access required.")
-        safeRedirect(router, "/admin/login")
-        return
-      }
-      setCurrentUser(emp)
-    } else {
-      safeRedirect(router, "/admin/login")
+    // Skip auth check for login page
+    if (isAuthPage) return
+
+    // Check authentication
+    if (!isAuthenticated()) {
+      router.push("/manager/login")
+      return
     }
-  }, [router])
+
+    const user = getCurrentUser()
+    if (!user || user.role !== "manager") {
+      alert("Unauthorized. Manager access required.")
+      router.push("/manager/login")
+      return
+    }
+
+    setCurrentUser(user)
+  }, [pathname, isAuthPage, router])
+
+  // If it's a login page, render without sidebar
+  if (isAuthPage) {
+    return <>{children}</>
+  }
 
   const handleLogout = () => {
     if (window.confirm("Are you sure you want to logout?")) {
-      localStorage.removeItem("firebaseToken")
-      localStorage.removeItem("currentEmployee")
-      localStorage.removeItem("employeeLoggedIn")
-      safeRedirect(router, "/admin/login")
+      logoutUser()
+      router.push("/manager/login")
     }
   }
 
@@ -59,6 +69,11 @@ export default function ManagerLayout({ children }) {
       href: "/manager/organizations",
       label: "Organizations",
       icon: Building2,
+    },
+    {
+      href: "/manager/profile",
+      label: "My Profile",
+      icon: User,
     },
   ]
 
@@ -75,11 +90,28 @@ export default function ManagerLayout({ children }) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      {/* Mobile Overlay */}
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+      {/* Mobile Header */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white dark:bg-slate-800 border-b px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="p-1 bg-orange-500 rounded-md">
+            <Shield className="h-5 w-5 text-white" />
+          </div>
+          <span className="font-semibold text-orange-950 dark:text-orange-50">System Manager</span>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+        >
+          {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </Button>
+      </div>
+
+      {/* Sidebar Overlay (Mobile) */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -87,112 +119,89 @@ export default function ManagerLayout({ children }) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-card transition-transform duration-300 lg:relative lg:translate-x-0",
+          "fixed top-0 left-0 z-40 h-screen w-64 bg-white dark:bg-slate-800 border-r transition-transform duration-300",
+          "lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        {/* Logo Section */}
-        <div className="flex h-16 items-center gap-2 border-b px-6">
-          <Shield className="h-6 w-6 text-primary" />
-          <span className="text-lg font-semibold">Manager Portal</span>
-        </div>
+        <div className="flex flex-col h-full">
+          {/* Logo */}
+          <div className="p-6 border-b">
+            <Link href="/manager/dashboard" className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-r from-orange-500 to-amber-500 rounded-lg shadow-md">
+                <Shield className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h2 className="font-bold text-lg text-slate-800 dark:text-slate-100">Manager</h2>
+                <p className="text-xs text-muted-foreground">System Administration</p>
+              </div>
+            </Link>
+          </div>
 
-        {/* Navigation Links */}
-        <nav className="flex-1 space-y-1 overflow-y-auto p-4">
-          {navLinks.map((link) => {
-            const Icon = link.icon
-            const active = isActive(link.href)
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={() => setSidebarOpen(false)}
-              >
-                <div
+          {/* Navigation */}
+          <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+            {navLinks.map((link) => {
+              const Icon = link.icon
+              const active = isActive(link.href)
+
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setSidebarOpen(false)}
                   className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                    "flex items-center gap-3 px-4 py-3 rounded-lg transition-all group",
+                    "hover:bg-orange-50 dark:hover:bg-orange-950/30",
                     active
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                      ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md hover:shadow-lg hover:from-orange-600 hover:to-amber-600"
+                      : "text-slate-600 dark:text-slate-300 hover:text-orange-700 dark:hover:text-orange-400"
                   )}
                 >
-                  <Icon className="h-5 w-5" />
-                  <span>{link.label}</span>
-                  {active && <ChevronRight className="ml-auto h-4 w-4" />}
-                </div>
-              </Link>
-            )
-          })}
-        </nav>
+                  <Icon className={cn("h-5 w-5", active ? "text-white" : "text-slate-500 group-hover:text-orange-600 dark:text-slate-400 dark:group-hover:text-orange-400")} />
+                  <span className="font-medium">{link.label}</span>
+                </Link>
+              )
+            })}
+          </nav>
 
-        {/* User Profile Section */}
-        {currentUser && (
-          <div className="border-t p-4">
-            <div className="flex items-center gap-3 rounded-lg bg-accent/50 p-3">
-              <Avatar className="h-10 w-10">
-                <AvatarFallback className="bg-primary text-primary-foreground">
-                  {getInitials(currentUser.name)}
+          <Separator />
+
+          {/* User Profile */}
+          <div className="p-4 space-y-3">
+            <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-100 dark:border-slate-700">
+              <Avatar className="h-10 w-10 border-2 border-orange-100">
+                <AvatarFallback className="bg-orange-100 text-orange-700 font-bold">
+                  {getInitials(currentUser?.name)}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex-1 overflow-hidden">
-                <p className="truncate text-sm font-medium">
-                  {currentUser.name || "Super Manager"}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate text-slate-900 dark:text-slate-100">
+                  {currentUser?.name || "Manager"}
                 </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  Manager
+                <p className="text-xs text-muted-foreground truncate">
+                  {currentUser?.email}
                 </p>
               </div>
             </div>
 
-            <div className="mt-3 space-y-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start gap-2"
-                onClick={() => {
-                  router.push("/manager/profile")
-                  setSidebarOpen(false)
-                }}
-              >
-                <User className="h-4 w-4" />
-                Profile
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={handleLogout}
-              >
-                <LogOut className="h-4 w-4" />
-                Logout
-              </Button>
-            </div>
+            <Button
+              variant="outline"
+              className="w-full justify-start hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-950/30 dark:hover:border-red-900"
+              onClick={handleLogout}
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </Button>
           </div>
-        )}
+        </div>
       </aside>
 
-      {/* Main Content Area */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Mobile Header */}
-        <header className="flex h-16 items-center gap-4 border-b bg-card px-4 lg:hidden">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setSidebarOpen(true)}
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
-          <div className="flex items-center gap-2">
-            <Shield className="h-5 w-5 text-primary" />
-            <span className="font-semibold">Manager Portal</span>
-          </div>
-        </header>
-
-        {/* Page Content */}
-        <main className="flex-1 overflow-y-auto bg-background">
+      {/* Main Content */}
+      <main className="lg:pl-64 pt-16 lg:pt-0 min-h-screen transition-all">
+        <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
           {children}
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   )
 }

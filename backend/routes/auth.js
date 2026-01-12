@@ -40,25 +40,44 @@ router.post('/login', async (req, res) => {
     let user = null;
     let userOrgId = null;
 
-    // If organizationId provided, search in that org
-    if (organizationId) {
-      console.log('🏢 Searching in organization:', organizationId);
-      user = await userRepo.findByEmail(organizationId, normalizedEmail);
-      if (user) {
-        userOrgId = organizationId;
-      }
-    } else {
-      // Search across all active organizations
-      console.log('🔍 Searching across all organizations...');
-      const allOrgs = await orgRepo.findAllActive();
-      
-      for (const org of allOrgs) {
-        const foundUser = await userRepo.findByEmail(org.id, normalizedEmail);
-        if (foundUser) {
-          user = foundUser;
-          userOrgId = org.id;
-          console.log('✅ User found in organization:', org.name);
-          break;
+    // First, check root users collection for system users (managers)
+    console.log('🔍 Checking for system user...');
+    const db = require('firebase-admin').firestore();
+    const systemUserQuery = await db.collection('users')
+      .where('email', '==', normalizedEmail)
+      .where('isSystemUser', '==', true)
+      .limit(1)
+      .get();
+
+    if (!systemUserQuery.empty) {
+      const doc = systemUserQuery.docs[0];
+      user = { id: doc.id, ...doc.data() };
+      userOrgId = null; // System users don't belong to an org
+      console.log('✅ Found system user:', user.name, '(', user.role, ')');
+    }
+
+    // If not a system user, search in organizations
+    if (!user) {
+      // If organizationId provided, search in that org
+      if (organizationId) {
+        console.log('🏢 Searching in organization:', organizationId);
+        user = await userRepo.findByEmail(organizationId, normalizedEmail);
+        if (user) {
+          userOrgId = organizationId;
+        }
+      } else {
+        // Search across all active organizations
+        console.log('🔍 Searching across all organizations...');
+        const allOrgs = await orgRepo.findAllActive();
+
+        for (const org of allOrgs) {
+          const foundUser = await userRepo.findByEmail(org.id, normalizedEmail);
+          if (foundUser) {
+            user = foundUser;
+            userOrgId = org.id;
+            console.log('✅ User found in organization:', org.name);
+            break;
+          }
         }
       }
     }
@@ -83,7 +102,7 @@ router.post('/login', async (req, res) => {
 
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-    
+
     if (!isPasswordValid) {
       console.log('❌ Invalid password for:', normalizedEmail);
       return res.status(401).json({
@@ -132,12 +151,12 @@ router.post('/login', async (req, res) => {
  */
 router.post('/register/organization', async (req, res) => {
   try {
-    const { 
-      organizationName, 
-      ownerName, 
-      ownerEmail, 
-      ownerPassword, 
-      phone 
+    const {
+      organizationName,
+      ownerName,
+      ownerEmail,
+      ownerPassword,
+      phone
     } = req.body;
 
     console.log('📝 Organization registration attempt:', organizationName);
@@ -279,28 +298,35 @@ router.post('/change-password', async (req, res) => {
     // Decode token to get user info
     const token = authHeader.split('Bearer ')[1];
     const firebaseAdmin = admin();
-    
+
     let userId, userOrgId;
-    
+
     try {
       const decodedToken = await firebaseAdmin.auth().verifyIdToken(token);
       userId = decodedToken.uid;
       userOrgId = decodedToken.organizationId;
+      console.log('✅ Token verified via Firebase Admin');
     } catch (error) {
+      console.log('⚠️ Token verification failed, trying decode:', error.message);
       // Try decoding as custom token
       const jwt = require('jsonwebtoken');
       const decoded = jwt.decode(token);
       if (!decoded) {
         throw new Error('Invalid token');
       }
-      userId = decoded.uid;
-      userOrgId = decoded.organizationId;
+      console.log('🔍 Decoded token payload:', JSON.stringify(decoded, null, 2));
+      userId = decoded.uid || decoded.user_id || decoded.sub;
+      // Check for organizationId in different places (custom token puts claims in 'claims')
+      userOrgId = decoded.organizationId || (decoded.claims && decoded.claims.organizationId);
     }
+
+    console.log('👤 Extracted User ID:', userId);
+    console.log('🏢 Extracted Org ID:', userOrgId);
 
     if (!userOrgId) {
       return res.status(400).json({
         error: 'Organization not found',
-        message: 'User is not associated with an organization'
+        message: 'User is not associated with an organization. decoded orgId is: ' + userOrgId
       });
     }
 
@@ -314,7 +340,7 @@ router.post('/change-password', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Change password error:', error);
-    
+
     if (error.message.includes('incorrect')) {
       return res.status(401).json({
         error: 'Invalid password',
@@ -330,10 +356,99 @@ router.post('/change-password', async (req, res) => {
 });
 
 /**
- * GET /api/auth/me
- * Get current user info
+ * PUT /api/auth/profile
+ * Update user profile details
  */
-router.get('/me', async (req, res) => {
+router.put('/profile', async (req, res) => {
+  try {
+    const { name, phone, department, position, address } = req.body;
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required'
+      });
+    }
+
+    const token = authHeader.split('Bearer ')[1];
+    const firebaseAdmin = admin();
+
+    let userId, userOrgId;
+
+    try {
+      const decodedToken = await firebaseAdmin.auth().verifyIdToken(token);
+      userId = decodedToken.uid;
+      userOrgId = decodedToken.organizationId;
+      userRole = decodedToken.role; // Extract role
+      console.log('✅ [Profile] Token verified via Firebase Admin');
+    } catch (error) {
+      console.log('⚠️ [Profile] Verification failed, decoding:', error.message);
+      const jwt = require('jsonwebtoken');
+      const decoded = jwt.decode(token);
+      if (!decoded) {
+        throw new Error('Invalid token');
+      }
+      console.log('🔍 [Profile] Decoded:', JSON.stringify(decoded, null, 2));
+      userId = decoded.uid || decoded.user_id || decoded.sub;
+      userOrgId = decoded.organizationId || (decoded.claims && decoded.claims.organizationId);
+      userRole = decoded.role || (decoded.claims && decoded.claims.role);
+    }
+
+    // Allow if orgId exists OR if it's a manager (system user)
+    if (!userOrgId && userRole !== 'manager') {
+      return res.status(400).json({
+        error: 'Organization not found'
+      });
+    }
+
+    // Prepare update data - only include fields that are defined
+    const updateData = {};
+    if (name) updateData.name = name;
+    if (phone !== undefined) updateData.phone = phone;
+    if (address !== undefined) updateData.address = address;
+    if (department) updateData.department = department;
+    if (position) updateData.position = position;
+
+    console.log('📝 Updating profile for user:', userId, updateData);
+
+    let updatedUser;
+
+    // Direct update for system users (managers)
+    if (!userOrgId || userRole === 'manager') {
+      const firestore = require('firebase-admin').firestore();
+      await firestore.collection('users').doc(userId).update(updateData);
+
+      const userDoc = await firestore.collection('users').doc(userId).get();
+      updatedUser = { id: userDoc.id, ...userDoc.data() };
+      console.log('✅ System user profile updated');
+    } else {
+      updatedUser = await userRepo.update(userOrgId, userId, updateData);
+    }
+
+    // Remove password
+    const { passwordHash, ...userWithoutPassword } = updatedUser;
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      employee: userWithoutPassword
+    });
+
+  } catch (error) {
+    console.error('❌ Update profile error:', error);
+    res.status(500).json({
+      error: 'Failed to update profile',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/auth/profile
+ * Get current user profile (Alias for /me)
+ */
+router.get('/profile', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
 
@@ -346,9 +461,9 @@ router.get('/me', async (req, res) => {
 
     const token = authHeader.split('Bearer ')[1];
     const firebaseAdmin = admin();
-    
+
     let userId, userOrgId;
-    
+
     try {
       const decodedToken = await firebaseAdmin.auth().verifyIdToken(token);
       userId = decodedToken.uid;
@@ -359,8 +474,8 @@ router.get('/me', async (req, res) => {
       if (!decoded) {
         throw new Error('Invalid token');
       }
-      userId = decoded.uid;
-      userOrgId = decoded.organizationId;
+      userId = decoded.uid || decoded.user_id || decoded.sub;
+      userOrgId = decoded.organizationId || (decoded.claims && decoded.claims.organizationId);
     }
 
     if (!userOrgId) {
@@ -371,7 +486,7 @@ router.get('/me', async (req, res) => {
 
     // Get user
     const user = await userRepo.findById(userOrgId, userId);
-    
+
     if (!user) {
       return res.status(404).json({
         error: 'User not found'
@@ -390,7 +505,89 @@ router.get('/me', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Get me error:', error);
+    console.error('❌ Get profile error:', error);
+    res.status(500).json({
+      error: 'Failed to get user info',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/auth/me
+ * Get current authenticated user (supports system users like managers)
+ */
+router.get('/me', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required'
+      });
+    }
+
+    const token = authHeader.split('Bearer ')[1];
+    const firebaseAdmin = admin();
+
+    let userId, userOrgId, userRole;
+
+    try {
+      const decodedToken = await firebaseAdmin.auth().verifyIdToken(token);
+      userId = decodedToken.uid;
+      userOrgId = decodedToken.organizationId;
+      userRole = decodedToken.role;
+    } catch (error) {
+      const jwt = require('jsonwebtoken');
+      const decoded = jwt.decode(token);
+      if (!decoded) {
+        throw new Error('Invalid token');
+      }
+      userId = decoded.uid || decoded.user_id || decoded.sub;
+      userOrgId = decoded.organizationId || (decoded.claims && decoded.claims.organizationId);
+      userRole = decoded.role || (decoded.claims && decoded.claims.role);
+    }
+
+    console.log('🔍 [/me] User ID:', userId, 'Org ID:', userOrgId, 'Role:', userRole);
+
+    let user = null;
+
+    // Check if this is a system user (manager) - no organizationId
+    if (!userOrgId || userRole === 'manager') {
+      // Look up in root users collection
+      const firestore = require('firebase-admin').firestore();
+      const userDoc = await firestore.collection('users').doc(userId).get();
+
+      if (userDoc.exists) {
+        user = { id: userDoc.id, ...userDoc.data() };
+        console.log('✅ [/me] Found system user:', user.name);
+      }
+    } else {
+      // Look up in organization's users collection
+      user = await userRepo.findById(userOrgId, userId);
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        error: 'User not found',
+        message: 'Could not find user data'
+      });
+    }
+
+    // Remove password
+    const { passwordHash, ...userWithoutPassword } = user;
+
+    res.json({
+      success: true,
+      user: {
+        ...userWithoutPassword,
+        organizationId: userOrgId || null
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Get /me error:', error);
     res.status(500).json({
       error: 'Failed to get user info',
       message: error.message
@@ -399,3 +596,4 @@ router.get('/me', async (req, res) => {
 });
 
 module.exports = router;
+

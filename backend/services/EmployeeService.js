@@ -110,7 +110,7 @@ class EmployeeService {
 
     try {
       const employee = await this.userRepo.findById(orgId, employeeId);
-      
+
       if (!employee) {
         console.log(`⚠️ Employee not found: ${employeeId}`);
         return null;
@@ -118,7 +118,7 @@ class EmployeeService {
 
       // Remove password hash
       const { passwordHash, ...employeeWithoutPassword } = employee;
-      
+
       console.log(`✅ Employee retrieved: ${employee.name}`);
       return employeeWithoutPassword;
     } catch (error) {
@@ -141,7 +141,7 @@ class EmployeeService {
 
       // Apply filters
       let filteredEmployees = employees;
-      
+
       if (filters.isActive !== undefined) {
         filteredEmployees = employees.filter(emp => emp.isActive === filters.isActive);
       }
@@ -364,8 +364,8 @@ class EmployeeService {
       const allEmployees = await this.getAllEmployees(orgId, { isActive: true });
 
       const lowercaseSearch = searchTerm.toLowerCase();
-      
-      const matches = allEmployees.filter(emp => 
+
+      const matches = allEmployees.filter(emp =>
         emp.name.toLowerCase().includes(lowercaseSearch) ||
         emp.email.toLowerCase().includes(lowercaseSearch) ||
         (emp.department && emp.department.toLowerCase().includes(lowercaseSearch))
@@ -390,8 +390,8 @@ class EmployeeService {
 
     try {
       const allEmployees = await this.getActiveEmployees(orgId);
-      
-      const deptEmployees = allEmployees.filter(emp => 
+
+      const deptEmployees = allEmployees.filter(emp =>
         emp.department && emp.department.toLowerCase() === department.toLowerCase()
       );
 
@@ -412,12 +412,20 @@ class EmployeeService {
     console.log(`📊 EmployeeService.getEmployeeCount() - Org: ${orgId}`);
 
     try {
-      const allEmployees = await this.userRepo.findByRole(orgId, 'employee');
-      
+      // Get all users to count admins and employees
+      const allUsers = await this.userRepo.findAll(orgId);
+
+      const businessOwners = allUsers.filter(u => u.role === 'business_owner');
+      const admins = allUsers.filter(u => u.role === 'admin');
+      const employees = allUsers.filter(u => u.role === 'employee');
+
       const counts = {
-        total: allEmployees.length,
-        active: allEmployees.filter(emp => emp.isActive).length,
-        inactive: allEmployees.filter(emp => !emp.isActive).length
+        total: allUsers.length,
+        businessOwners: businessOwners.length,
+        admins: admins.length,
+        employees: employees.length,
+        active: allUsers.filter(u => u.isActive).length,
+        inactive: allUsers.filter(u => !u.isActive).length
       };
 
       console.log(`✅ Employee counts:`, counts);
@@ -440,7 +448,7 @@ class EmployeeService {
 
     try {
       const employee = await this.userRepo.findByEmail(orgId, email);
-      
+
       if (!employee) {
         console.log(`⚠️ Employee not found: ${email}`);
         return null;
@@ -453,7 +461,7 @@ class EmployeeService {
 
       // Compare password
       const isValid = await bcrypt.compare(password, employee.passwordHash);
-      
+
       if (!isValid) {
         console.log(`⚠️ Invalid password for: ${email}`);
         return null;
@@ -483,7 +491,7 @@ class EmployeeService {
 
     try {
       const employee = await this.userRepo.findById(orgId, employeeId);
-      
+
       if (!employee) {
         throw new Error('Employee not found');
       }
@@ -521,7 +529,7 @@ class EmployeeService {
 
     try {
       const allEmployees = await this.getActiveEmployees(orgId);
-      
+
       const adminEmployees = allEmployees.filter(emp => emp.createdBy === adminId);
 
       console.log(`✅ Found ${adminEmployees.length} employees created by admin`);
@@ -542,7 +550,7 @@ class EmployeeService {
 
     try {
       const stats = await this.userRepo.getStats(orgId);
-      
+
       console.log(`✅ Employee statistics generated:`, stats);
       return stats;
     } catch (error) {

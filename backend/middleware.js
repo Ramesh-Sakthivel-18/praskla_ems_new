@@ -1,136 +1,226 @@
 const admin = require('./firebase-admin');
-const container = require('./container'); // ✅ Import Container
+const container = require('./container');
 const jwt = require('jsonwebtoken');
+
+/**
+ * Extract organizationId from decoded token
+ * Handles both ID tokens and custom tokens
+ */
+function extractOrganizationId(decoded) {
+  // Try direct property first (ID token)
+  if (decoded.organizationId) {
+    return decoded.organizationId;
+  }
+
+  // Try claims object (custom token)
+  if (decoded.claims?.organizationId) {
+    return decoded.claims.organizationId;
+  }
+
+  // Return null to trigger fallback search
+  return null;
+}
 
 /**
  * Authenticate token from Authorization header
  */
 async function authenticateToken(req, res, next) {
-  // console.log('🔐 Middleware: authenticateToken() - Checking authentication');
   try {
     const authHeader = req.headers.authorization;
+    if (authHeader) {
+      console.log('🛡️ Middleware: Auth Header Value:', authHeader.substring(0, 50) + '...');
+    } else {
+      console.log('🛡️ Middleware: Auth Header is MISSING');
+    }
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log('❌ Middleware: No token provided or invalid format');
       return res.status(401).json({ error: 'Unauthorized: No token provided' });
     }
 
-    // ✅ CRITICAL FIX: Get service HERE, not at the top
-    // This ensures we get the service AFTER database is connected
+    // Get services AFTER database is connected
     const employeeService = container.getEmployeeService();
+    const orgRepo = container.getOrganizationRepo();
+    const userRepo = container.getUserRepo();
 
     const token = authHeader.split('Bearer ')[1];
     const firebaseAdmin = admin();
-    
-    try {
-      // ===== STRATEGY 1: Try Firebase ID Token First =====
-      const decodedToken = await firebaseAdmin.auth().verifyIdToken(token);
-      
-      const employee = await employeeService.findById(decodedToken.uid);
-      
-      if (!employee) {
-        return res.status(404).json({ error: 'Employee record not found' });
-      }
 
-      if (employee.isActive === false) {
-        return res.status(403).json({ error: 'Account is deactivated' });
-      }
+    // Decode token to get uid
+    const decoded = jwt.decode(token);
+    console.log('🛡️ Decoded token keys:', decoded ? Object.keys(decoded) : 'NULL');
+    console.log('🛡️ Decoded token:', decoded ? JSON.stringify({ uid: decoded.uid, sub: decoded.sub, user_id: decoded.user_id, role: decoded.role, organizationId: decoded.organizationId }) : 'DECODE FAILED');
 
-      req.user = {
-        uid: decodedToken.uid,
-        email: decodedToken.email || employee.email,
-        role: employee.role,
-        name: employee.name,
-        department: employee.department,
-        organizationId: employee.organizationId || null
-      };
-      return next();
+    // Firebase ID tokens use 'sub' or 'user_id', not 'uid' for the user ID!
+    const uid = decoded?.uid || decoded?.sub || decoded?.user_id;
 
-    } catch (idTokenError) {
-      // ===== STRATEGY 2: Try Custom Token Approach =====
-      const decoded = jwt.decode(token);
-      
-      if (!decoded || !decoded.uid) {
-        throw new Error('Invalid token structure');
-      }
-
-      let employee = null;
-
-      // Strategy 1: Try by ID (uid)
-      try {
-        employee = await employeeService.findById(decoded.uid);
-      } catch (e) {}
-
-      // Strategy 2: Try by email from claims
-      if (!employee && decoded.claims && decoded.claims.email) {
-        try {
-          console.log('🚑 Middleware: Lookup by email (claims):', decoded.claims.email);
-          employee = await employeeService.findByEmail(decoded.claims.email);
-        } catch (e) {
-          console.log('⚠️ Middleware: Email lookup failed:', e.message);
-        }
-      }
-
-      // Strategy 3: Try by direct email
-      if (!employee && decoded.email) {
-        try {
-          console.log('🚑 Middleware: Lookup by direct email:', decoded.email);
-          employee = await employeeService.findByEmail(decoded.email);
-        } catch (e) {}
-      }
-
-      if (!employee) {
-        console.log(`❌ Middleware: Employee not found for uid: ${decoded.uid}`);
-        return res.status(404).json({ error: 'Employee record not found' });
-      }
-
-      if (employee.isActive === false) {
-        return res.status(403).json({ error: 'Account is deactivated' });
-      }
-
-      req.user = {
-        uid: decoded.uid,
-        email: employee.email,
-        role: employee.role,
-        name: employee.name,
-        department: employee.department,
-        organizationId: employee.organizationId || null
-      };
-
-      // console.log('✅ Middleware: Authentication successful for:', employee.email);
-      return next();
+    if (!decoded || !uid) {
+      console.log('❌ No uid found in token. Available fields:', decoded ? Object.keys(decoded) : 'none');
+      return res.status(401).json({ error: 'Unauthorized: Invalid token structure' });
     }
+
+    console.log('🛡️ Using UID:', uid);
+    let organizationId = extractOrganizationId(decoded);
+    console.log('🛡️ Extracted organizationId:', organizationId || 'NULL');
+    let employee = null;
+
+    // Try to verify as Firebase ID token first
+    try {
+      const verifiedToken = await firebaseAdmin.auth().verifyIdToken(token);
+      organizationId = extractOrganizationId(verifiedToken) || organizationId;
+    } catch (idTokenError) {
+      // Not a valid ID token, continue with decoded data
+      console.log('⚠️ Token is not a valid ID token, using decoded data');
+    }
+
+    // If we have an organizationId, try to find the employee directly
+    if (organizationId) {
+      try {
+        employee = await employeeService.getEmployeeById(organizationId, uid);
+      } catch (e) {
+        console.log(`⚠️ Middleware: Lookup failed in org ${organizationId}:`, e.message);
+      }
+    }
+
+    // Check for system user (manager) in root users collection
+    if (!employee) {
+      try {
+        const firestore = require('firebase-admin').firestore();
+        const userDoc = await firestore.collection('users').doc(uid).get();
+        if (userDoc.exists) {
+          employee = { id: userDoc.id, ...userDoc.data() };
+          console.log(`✅ Middleware: Found system user: ${employee.email}`);
+        }
+      } catch (e) {
+        console.log('⚠️ Middleware: System user lookup failed:', e.message);
+      }
+    }
+
+    // Fallback: Search across all organizations
+    if (!employee) {
+      console.log(`🔍 Middleware: Searching for user ${uid} across all organizations...`);
+      try {
+        const allOrgs = await orgRepo.findAllActive();
+        for (const org of allOrgs) {
+          const foundUser = await userRepo.findById(org.id, uid);
+          if (foundUser) {
+            employee = foundUser;
+            organizationId = org.id;
+            console.log(`✅ Middleware: Found user in org: ${org.name} (${org.id})`);
+            break;
+          }
+        }
+      } catch (e) {
+        console.log('⚠️ Middleware: Cross-org search failed:', e.message);
+      }
+    }
+
+    if (!employee) {
+      console.log(`❌ Middleware: Employee not found for uid: ${uid}`);
+      return res.status(404).json({ error: 'Employee record not found' });
+    }
+
+    if (employee.isActive === false) {
+      return res.status(403).json({ error: 'Account is deactivated' });
+    }
+
+    // Remove password from employee object
+    const { passwordHash, ...safeEmployee } = employee;
+
+    req.user = {
+      uid: employee.id,
+      email: employee.email,
+      role: employee.role,
+      name: employee.name,
+      department: employee.department,
+      organizationId: organizationId || employee.organizationId
+    };
+
+    return next();
+
   } catch (error) {
     console.error('❌ Middleware: Authentication failed:', error.message);
     return res.status(401).json({ error: 'Unauthorized: Invalid token' });
   }
 }
 
+/**
+ * Require ADMIN role only
+ */
 function requireAdmin(req, res, next) {
-  if (!req.user || !['admin', 'businessowner', 'business_owner'].includes(req.user.role)) {
-    return res.status(403).json({ error: 'Forbidden' });
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({
+      error: 'Forbidden: Admin access only',
+      requiredRole: 'admin',
+      yourRole: req.user?.role || 'none'
+    });
   }
   next();
 }
 
-function requireAdminOrBusinessOwner(req, res, next) {
-  return requireAdmin(req, res, next);
+/**
+ * Require BUSINESS OWNER role only
+ */
+function requireBusinessOwner(req, res, next) {
+  if (!req.user || req.user.role !== 'business_owner') {
+    return res.status(403).json({
+      error: 'Forbidden: Business Owner access only',
+      requiredRole: 'business_owner',
+      yourRole: req.user?.role || 'none'
+    });
+  }
+  next();
 }
 
+/**
+ * Require ADMIN or BUSINESS OWNER (for read-only operations)
+ */
+function requireAdminOrBusinessOwner(req, res, next) {
+  if (!req.user || !['admin', 'business_owner'].includes(req.user.role)) {
+    return res.status(403).json({
+      error: 'Forbidden: Admin or Business Owner access required',
+      requiredRoles: ['admin', 'business_owner'],
+      yourRole: req.user?.role || 'none'
+    });
+  }
+  next();
+}
+
+/**
+ * Require MANAGER role only
+ */
 function requireManager(req, res, next) {
   if (!req.user || req.user.role !== 'manager') {
-    return res.status(403).json({ error: 'Forbidden' });
+    return res.status(403).json({
+      error: 'Forbidden: Manager access only',
+      requiredRole: 'manager',
+      yourRole: req.user?.role || 'none'
+    });
   }
   next();
 }
 
+/**
+ * Require EMPLOYEE role (any authenticated user)
+ */
 function requireEmployee(req, res, next) {
-  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+  if (!req.user) {
+    return res.status(401).json({ error: 'Unauthorized: Authentication required' });
+  }
   next();
 }
 
+/**
+ * Require user to belong to specific organization
+ */
 function requireOrganization(organizationId) {
   return (req, res, next) => {
     if (!req.user || req.user.organizationId !== organizationId) {
-      return res.status(403).json({ error: 'Forbidden' });
+      return res.status(403).json({
+        error: 'Forbidden: Organization access denied',
+        requiredOrg: organizationId,
+        yourOrg: req.user?.organizationId || 'none'
+      });
     }
     next();
   };
@@ -139,6 +229,7 @@ function requireOrganization(organizationId) {
 module.exports = {
   authenticateToken,
   requireAdmin,
+  requireBusinessOwner,
   requireAdminOrBusinessOwner,
   requireManager,
   requireEmployee,

@@ -12,7 +12,7 @@ router.post('/record', authenticateToken, requireEmployee, async (req, res) => {
   try {
     const { action, employeeId } = req.body;
     // Don't declare attendanceService again here!
-    
+
     let userId = req.user.uid;
     let userName = req.user.name;
     const orgId = req.user.organizationId;
@@ -43,7 +43,6 @@ router.post('/record', authenticateToken, requireEmployee, async (req, res) => {
 // Get my records
 router.get('/my-records', authenticateToken, requireEmployee, async (req, res) => {
   try {
-    const attendanceService = container.getAttendanceService();
     const records = await attendanceService.getEmployeeRecords(
       req.user.organizationId,
       req.user.uid,
@@ -58,7 +57,6 @@ router.get('/my-records', authenticateToken, requireEmployee, async (req, res) =
 // Get today's status
 router.get('/today', authenticateToken, requireEmployee, async (req, res) => {
   try {
-    const attendanceService = container.getAttendanceService();
     const status = await attendanceService.getTodayStatus(
       req.user.organizationId,
       req.user.uid
@@ -73,7 +71,6 @@ router.get('/today', authenticateToken, requireEmployee, async (req, res) => {
 router.get('/weekly-hours', authenticateToken, requireEmployee, async (req, res) => {
   try {
     const { weekStart, weekEnd } = req.query;
-    const attendanceService = container.getAttendanceService();
     const stats = await attendanceService.getWeeklyHours(
       req.user.organizationId,
       req.user.uid,

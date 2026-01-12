@@ -9,31 +9,36 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { 
-  Users, 
-  Search, 
-  Shield, 
-  UserCheck, 
-  Trash2, 
-  Plus, 
-  RefreshCw, 
+import { Progress } from "@/components/ui/progress"
+import {
+  Users,
+  Search,
+  Shield,
+  UserCheck,
+  Trash2,
+  Plus,
+  RefreshCw,
   AlertCircle,
   Building2,
   Eye,
-  EyeOff
+  EyeOff,
+  ArrowLeft,
+  Mail,
+  User,
+  Briefcase
 } from "lucide-react"
 import { safeRedirect } from "@/lib/redirectUtils"
 
 export default function BusinessOwnerEmployeesPage() {
   const router = useRouter()
-  
+
   const [currentUser, setCurrentUser] = useState(null)
   const [employees, setEmployees] = useState([])
   const [filteredEmployees, setFilteredEmployees] = useState([])
   const [searchQuery, setSearchQuery] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  
+
   const [showCreateAdmin, setShowCreateAdmin] = useState(false)
   const [createLoading, setCreateLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -46,7 +51,7 @@ export default function BusinessOwnerEmployeesPage() {
   })
 
   useEffect(() => {
-    const current = localStorage.getItem("currentEmployee")
+    const current = localStorage.getItem("currentUser")
     if (!current) {
       safeRedirect(router, "/business-owner/login")
       return
@@ -59,8 +64,6 @@ export default function BusinessOwnerEmployeesPage() {
       return
     }
 
-    console.log("✅ Business Owner logged in:", emp.email)
-    console.log("🏢 Organization ID:", emp.organizationId)
     setCurrentUser(emp)
   }, [router])
 
@@ -71,7 +74,7 @@ export default function BusinessOwnerEmployeesPage() {
   }, [currentUser])
 
   useEffect(() => {
-    // Real-time filter (event-driven)
+    if (!Array.isArray(employees)) return
     const filtered = employees.filter((emp) => {
       const query = searchQuery.toLowerCase()
       return (
@@ -89,89 +92,53 @@ export default function BusinessOwnerEmployeesPage() {
   }
 
   const loadEmployees = async () => {
-    console.log("=".repeat(50))
-    console.log("🔄 LOADING EMPLOYEES PAGE")
-    console.log("=".repeat(50))
-    console.log("👤 Current User:", currentUser.email)
-    console.log("🏢 Organization ID:", currentUser.organizationId)
-    
+    console.log("🔄 loadEmployees called, currentUser:", currentUser)
     setLoading(true)
     setError(null)
-    
+
     const token = localStorage.getItem("firebaseToken")
     const base = getApiBase()
 
+    console.log("🔑 Token:", token ? "Present" : "Missing")
+    console.log("🌐 API Base:", base)
+
     if (!token) {
-      console.error("❌ No authentication token found")
       setError("Authentication token not found. Please login again.")
       setLoading(false)
       return
     }
 
     try {
-      // ===== FETCH ALL EMPLOYEES (SAME AS DASHBOARD) =====
-      console.log("🔄 Fetching employees from backend...")
+      console.log("📡 Fetching employees...")
       const employeesRes = await fetch(`${base}/api/admin/employees`, {
         headers: { Authorization: `Bearer ${token}` },
       })
 
-      console.log("✅ Response status:", employeesRes.status)
+      console.log("📊 Response status:", employeesRes.status)
 
-      let orgEmployees = []
       if (employeesRes.ok) {
-        orgEmployees = await employeesRes.json()
-        console.log("✅ Fetched employees from backend:", orgEmployees.length)
-        
-        // Log ALL employees
-        console.log("📋 ALL EMPLOYEES FROM BACKEND:")
-        orgEmployees.forEach((emp, index) => {
-          console.log(`   ${index + 1}. ${emp.name} (${emp.email})`)
-          console.log(`      - Role: ${emp.role}`)
-          console.log(`      - OrgID: ${emp.organizationId || "❌ MISSING"}`)
-        })
-        
-        // Verify all employees belong to this organization
-        const wrongOrg = orgEmployees.filter(
-          (e) => e.organizationId !== currentUser.organizationId
-        )
-        
-        if (wrongOrg.length > 0) {
-          console.warn("⚠️ Backend returned employees from wrong organization:", wrongOrg)
-        } else {
-          console.log("✅ Backend filtering verified - all employees belong to this organization")
-        }
-        
-        // No filtering by active status
-        console.log(`✅ Total employees: ${orgEmployees.length}`)
-        
-        const adminList = orgEmployees.filter((e) => e.role === "admin")
-        const employeeList = orgEmployees.filter((e) => e.role === "employee")
-        
-        console.log("👑 Admins:", adminList.length)
-        adminList.forEach(admin => {
-          console.log(`   - ${admin.name} (${admin.email})`)
-        })
-        
-        console.log("👤 Regular employees:", employeeList.length)
-        console.log("=".repeat(50))
-        
-        setEmployees(orgEmployees)
-        setFilteredEmployees(orgEmployees)
-        
+        const orgEmployees = await employeesRes.json()
+        console.log("✅ Employees received:", orgEmployees)
+        console.log("📋 Type:", typeof orgEmployees, "Is Array:", Array.isArray(orgEmployees))
+        console.log("📋 Length:", Array.isArray(orgEmployees) ? orgEmployees.length : "N/A")
+
+        // Ensure we always set an array
+        const employeeArray = Array.isArray(orgEmployees) ? orgEmployees : (orgEmployees.employees || [])
+        console.log("📋 Setting employees array with length:", employeeArray.length)
+
+        setEmployees(employeeArray)
+        setFilteredEmployees(employeeArray)
       } else if (employeesRes.status === 401) {
-        console.error("❌ Authentication failed")
         setError("Session expired. Please login again.")
         setTimeout(() => {
           localStorage.clear()
           safeRedirect(router, "/business-owner/login")
         }, 2000)
       } else {
-        const errorText = await employeesRes.text()
-        console.error("❌ Failed to load employees:", employeesRes.status, errorText)
         setError(`Failed to load employees: ${employeesRes.status}`)
       }
     } catch (error) {
-      console.error("❌ Network error loading employees:", error)
+      console.error("Network error loading employees:", error)
       setError("Network error. Please check your connection and try again.")
     } finally {
       setLoading(false)
@@ -180,19 +147,17 @@ export default function BusinessOwnerEmployeesPage() {
 
   const handleCreateAdmin = async (e) => {
     e.preventDefault()
-    
+
     if (!currentUser) {
-      alert("❌ User session not found. Please refresh the page.")
+      alert("User session not found. Please refresh the page.")
       return
     }
 
     if (!newAdmin.password || newAdmin.password.length < 6) {
-      alert("❌ Password must be at least 6 characters long")
+      alert("Password must be at least 6 characters long")
       return
     }
 
-    console.log("📝 Creating new admin for organization:", currentUser.organizationId)
-    
     setCreateLoading(true)
     const token = localStorage.getItem("firebaseToken")
     const base = getApiBase()
@@ -220,15 +185,12 @@ export default function BusinessOwnerEmployeesPage() {
       const data = await response.json()
 
       if (response.ok) {
-        console.log("✅ Admin created successfully:", data)
         const createdAdmin = data.employee || data
-
         const adminEmail = newAdmin.email
         const adminPassword = newAdmin.password
 
-        // Optimistic update
         setEmployees((prev) => [createdAdmin, ...prev])
-        
+
         setShowCreateAdmin(false)
         setShowPassword(false)
         setNewAdmin({
@@ -238,20 +200,19 @@ export default function BusinessOwnerEmployeesPage() {
           department: "",
           position: "",
         })
-        
+
         alert(
-          `✅ Admin created successfully!\n\n` +
-          `📧 Email: ${adminEmail}\n` +
-          `🔑 Password: ${adminPassword}\n\n` +
-          `⚠️ Share these credentials securely with the admin.`
+          `Admin created successfully!\n\n` +
+          `Email: ${adminEmail}\n` +
+          `Password: ${adminPassword}\n\n` +
+          `Share these credentials securely with the admin.`
         )
       } else {
-        console.error("❌ Failed to create admin:", data)
-        alert(`❌ ${data.error || "Failed to create admin"}`)
+        alert(`${data.error || "Failed to create admin"}`)
       }
     } catch (error) {
-      console.error("❌ Create admin error:", error)
-      alert("❌ Network error")
+      console.error("Create admin error:", error)
+      alert("Network error")
     } finally {
       setCreateLoading(false)
     }
@@ -262,13 +223,11 @@ export default function BusinessOwnerEmployeesPage() {
       return
     }
 
-    console.log("🗑️ Deleting admin:", adminId)
     const token = localStorage.getItem("firebaseToken")
     const base = getApiBase()
 
     try {
       const prevEmployees = [...employees]
-
       setEmployees((prev) => prev.filter((e) => e.id !== adminId))
 
       const response = await fetch(`${base}/api/admin/employees/${adminId}`, {
@@ -279,118 +238,139 @@ export default function BusinessOwnerEmployeesPage() {
       })
 
       if (response.ok) {
-        console.log("✅ Admin deleted successfully")
-        alert("✅ Admin deleted successfully!")
+        alert("Admin deleted successfully!")
       } else {
-        console.error("❌ Failed to delete admin:", response.status)
         setEmployees(prevEmployees)
-        alert("❌ Failed to delete admin")
+        alert("Failed to delete admin")
       }
     } catch (error) {
-      console.error("❌ Delete admin error:", error)
-      alert("❌ Network error")
+      console.error("Delete admin error:", error)
+      alert("Network error")
       loadEmployees()
     }
   }
 
-  const admins = filteredEmployees.filter((e) => e.role === "admin")
-  const regularEmployees = filteredEmployees.filter((e) => e.role === "employee")
+  const admins = Array.isArray(filteredEmployees) ? filteredEmployees.filter((e) => e.role === "admin") : []
+  const regularEmployees = Array.isArray(filteredEmployees) ? filteredEmployees.filter((e) => e.role === "employee") : []
+
+  // Debug: Log roles
+  console.log("🔍 All employees roles:", filteredEmployees?.map?.(e => ({ name: e.name, role: e.role })))
+  console.log("👑 Admins found:", admins.length)
+  console.log("👤 Employees found:", regularEmployees.length)
 
   if (!currentUser) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
+        <RefreshCw className="h-8 w-8 animate-spin text-purple-600" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
       <div className="mx-auto max-w-7xl px-4 py-8 space-y-6">
         {/* Header */}
-        <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Organization Employees
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              View all employees and manage admins in your organization
-            </p>
-            {currentUser.organizationId && (
-              <Badge variant="outline" className="mt-2">
-                <Building2 className="mr-1 h-3 w-3" />
-                Org ID: {currentUser.organizationId.substring(0, 12)}...
-              </Badge>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={loadEmployees}
-              disabled={loading}
-            >
-              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
-            <Button onClick={() => router.push("/business-owner/dashboard")}>
-              Back to Dashboard
-            </Button>
+        <header className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-600 via-purple-700 to-indigo-700 p-6 text-white shadow-xl">
+          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNGM0LjQxOCAwIDgtMy41ODIgOC04cy0zLjU4Mi04LTgtOC04IDMuNTgyLTggOCAzLjU4MiA4IDggOHoiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4xIi8+PC9nPjwvc3ZnPg==')] opacity-30" />
+          <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-white/20 backdrop-blur-sm rounded-xl">
+                  <Users className="h-6 w-6" />
+                </div>
+                <h1 className="text-2xl font-bold tracking-tight">Organization Employees</h1>
+              </div>
+              <p className="text-purple-100">View all employees and manage admins in your organization</p>
+              {currentUser.organizationId && (
+                <Badge variant="secondary" className="mt-2 bg-white/20 text-white border-0">
+                  <Building2 className="mr-1 h-3 w-3" />
+                  Org: {currentUser.organizationId.substring(0, 12)}...
+                </Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={loadEmployees}
+                disabled={loading}
+                className="bg-white/20 hover:bg-white/30 text-white border-0"
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+              <Button
+                onClick={() => router.push("/business-owner/dashboard")}
+                className="bg-white text-purple-700 hover:bg-purple-50"
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Dashboard
+              </Button>
+            </div>
           </div>
         </header>
 
         {/* Error State */}
         {error && (
-          <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="font-semibold">Error Loading Employees</p>
-              <p className="text-sm mt-1">{error}</p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={loadEmployees}
-                className="mt-3"
-              >
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Retry
-              </Button>
-            </div>
-          </div>
+          <Card className="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30">
+            <CardContent className="flex items-start gap-3 pt-6">
+              <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="font-semibold text-red-900 dark:text-red-100">Error Loading Employees</p>
+                <p className="text-sm mt-1 text-red-700 dark:text-red-300">{error}</p>
+                <Button variant="outline" size="sm" onClick={loadEmployees} className="mt-3">
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Retry
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-3">
-          <Card>
+          <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total Employees</CardTitle>
-              <Users className="h-4 w-4 text-primary" />
+              <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Employees</CardTitle>
+              <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                <Users className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{regularEmployees.length}</div>
-              <p className="text-xs text-muted-foreground">Active employees</p>
+              <div className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+                {regularEmployees.length}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Active employees</p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Admins</CardTitle>
-              <Shield className="h-4 w-4 text-accent" />
+              <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Admins</CardTitle>
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{admins.length}</div>
-              <p className="text-xs text-muted-foreground">Managing employees</p>
+              <div className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
+                {admins.length}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Managing employees</p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total Members</CardTitle>
-              <UserCheck className="h-4 w-4 text-green-600" />
+              <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Members</CardTitle>
+              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <UserCheck className="h-5 w-5 text-green-600 dark:text-green-400" />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{filteredEmployees.length}</div>
-              <p className="text-xs text-muted-foreground">All members</p>
+              <div className="text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+                {filteredEmployees.length}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">All members</p>
             </CardContent>
           </Card>
         </div>
@@ -403,62 +383,70 @@ export default function BusinessOwnerEmployeesPage() {
               placeholder="Search by name, email, department..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
+              className="pl-10 h-11 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
             />
           </div>
 
           <Dialog open={showCreateAdmin} onOpenChange={setShowCreateAdmin}>
             <DialogTrigger asChild>
-              <Button disabled={createLoading}>
+              <Button
+                disabled={createLoading}
+                className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-lg shadow-purple-500/25"
+              >
                 <Plus className="mr-2 h-4 w-4" />
                 Create Admin
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-[450px]">
               <DialogHeader>
-                <DialogTitle>Create New Admin</DialogTitle>
+                <DialogTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-purple-600" />
+                  Create New Admin
+                </DialogTitle>
                 <p className="text-sm text-muted-foreground mt-2">
                   Create a new admin account for your organization.
                 </p>
               </DialogHeader>
-              <form onSubmit={handleCreateAdmin} className="space-y-4">
-                <div>
-                  <Label htmlFor="name">Name *</Label>
-                  <Input
-                    id="name"
-                    value={newAdmin.name}
-                    onChange={(e) =>
-                      setNewAdmin((s) => ({ ...s, name: e.target.value }))
-                    }
-                    placeholder="John Doe"
-                    required
-                    disabled={createLoading}
-                  />
+              <form onSubmit={handleCreateAdmin} className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Full Name <span className="text-red-500">*</span></Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      id="name"
+                      value={newAdmin.name}
+                      onChange={(e) => setNewAdmin((s) => ({ ...s, name: e.target.value }))}
+                      placeholder="John Doe"
+                      required
+                      disabled={createLoading}
+                      className="pl-10"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="email">Email *</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={newAdmin.email}
-                    onChange={(e) =>
-                      setNewAdmin((s) => ({ ...s, email: e.target.value }))
-                    }
-                    placeholder="john@example.com"
-                    required
-                    disabled={createLoading}
-                  />
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email <span className="text-red-500">*</span></Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      id="email"
+                      type="email"
+                      value={newAdmin.email}
+                      onChange={(e) => setNewAdmin((s) => ({ ...s, email: e.target.value }))}
+                      placeholder="john@example.com"
+                      required
+                      disabled={createLoading}
+                      className="pl-10"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="password">Password *</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password <span className="text-red-500">*</span></Label>
                   <div className="relative">
                     <Input
                       id="password"
                       type={showPassword ? "text" : "password"}
                       value={newAdmin.password}
-                      onChange={(e) =>
-                        setNewAdmin((s) => ({ ...s, password: e.target.value }))
-                      }
+                      onChange={(e) => setNewAdmin((s) => ({ ...s, password: e.target.value }))}
                       placeholder="Minimum 6 characters"
                       minLength={6}
                       required
@@ -471,68 +459,66 @@ export default function BusinessOwnerEmployeesPage() {
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                       disabled={createLoading}
                     >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    You'll need to share this password with the admin
-                  </p>
+                  <p className="text-xs text-muted-foreground">Share this password securely with the admin</p>
                 </div>
-                <div>
-                  <Label htmlFor="department">Department</Label>
-                  <Input
-                    id="department"
-                    value={newAdmin.department}
-                    onChange={(e) =>
-                      setNewAdmin((s) => ({ ...s, department: e.target.value }))
-                    }
-                    placeholder="HR, IT, Sales, etc."
-                    disabled={createLoading}
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="department">Department</Label>
+                    <div className="relative">
+                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        id="department"
+                        value={newAdmin.department}
+                        onChange={(e) => setNewAdmin((s) => ({ ...s, department: e.target.value }))}
+                        placeholder="HR, IT..."
+                        disabled={createLoading}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="position">Position</Label>
+                    <div className="relative">
+                      <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        id="position"
+                        value={newAdmin.position}
+                        onChange={(e) => setNewAdmin((s) => ({ ...s, position: e.target.value }))}
+                        placeholder="Admin"
+                        disabled={createLoading}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="position">Position</Label>
-                  <Input
-                    id="position"
-                    value={newAdmin.position}
-                    onChange={(e) =>
-                      setNewAdmin((s) => ({ ...s, position: e.target.value }))
-                    }
-                    placeholder="Admin"
-                    disabled={createLoading}
-                  />
-                </div>
-                <div className="flex justify-end gap-2 pt-2">
+                <div className="flex justify-end gap-2 pt-4">
                   <Button
                     type="button"
                     variant="outline"
                     onClick={() => {
                       setShowCreateAdmin(false)
                       setShowPassword(false)
-                      setNewAdmin({
-                        name: "",
-                        email: "",
-                        password: "",
-                        department: "",
-                        position: "",
-                      })
+                      setNewAdmin({ name: "", email: "", password: "", department: "", position: "" })
                     }}
                     disabled={createLoading}
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={createLoading}>
+                  <Button
+                    type="submit"
+                    disabled={createLoading}
+                    className="bg-gradient-to-r from-purple-600 to-indigo-600"
+                  >
                     {createLoading ? (
                       <>
                         <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                         Creating...
                       </>
                     ) : (
-                      <>Create Admin</>
+                      "Create Admin"
                     )}
                   </Button>
                 </div>
@@ -542,125 +528,127 @@ export default function BusinessOwnerEmployeesPage() {
         </div>
 
         {/* Admins Table */}
-        <Card>
-          <CardHeader>
+        <Card className="border-0 shadow-lg overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-b">
             <CardTitle className="flex items-center gap-2 text-base">
-              <Shield className="h-4 w-4" />
+              <div className="p-1.5 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+                <Shield className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              </div>
               Admins ({admins.length})
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+              <div className="flex items-center justify-center py-12">
+                <RefreshCw className="h-6 w-6 animate-spin text-purple-600" />
                 <p className="ml-3 text-sm text-muted-foreground">Loading admins...</p>
               </div>
             ) : admins.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <Shield className="h-12 w-12 text-muted-foreground/50 mb-3" />
-                <p className="text-sm text-muted-foreground">
-                  No admins found. Create one to start managing employees.
-                </p>
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-full mb-4">
+                  <Shield className="h-8 w-8 text-gray-400" />
+                </div>
+                <p className="text-sm text-muted-foreground">No admins found. Create one to start managing employees.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Department</TableHead>
-                      <TableHead>Position</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-gray-50 dark:bg-gray-800/50">
+                    <TableHead className="font-semibold">Name</TableHead>
+                    <TableHead className="font-semibold">Email</TableHead>
+                    <TableHead className="font-semibold">Department</TableHead>
+                    <TableHead className="font-semibold">Position</TableHead>
+                    <TableHead className="font-semibold">Role</TableHead>
+                    <TableHead className="text-right font-semibold">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {admins.map((admin) => (
+                    <TableRow key={admin.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                      <TableCell className="font-medium">{admin.name}</TableCell>
+                      <TableCell className="text-gray-600 dark:text-gray-400">{admin.email}</TableCell>
+                      <TableCell>{admin.department || "-"}</TableCell>
+                      <TableCell>{admin.position || "Admin"}</TableCell>
+                      <TableCell>
+                        <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 border-0">
+                          <Shield className="mr-1 h-3 w-3" />
+                          Admin
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                          onClick={() => handleDeleteAdmin(admin.id, admin.name)}
+                        >
+                          <Trash2 className="mr-1 h-4 w-4" />
+                          Delete
+                        </Button>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {admins.map((admin) => (
-                      <TableRow key={admin.id}>
-                        <TableCell className="font-medium">{admin.name}</TableCell>
-                        <TableCell>{admin.email}</TableCell>
-                        <TableCell>{admin.department || "-"}</TableCell>
-                        <TableCell>{admin.position || "Admin"}</TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">
-                            <Shield className="mr-1 h-3 w-3" />
-                            Admin
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => handleDeleteAdmin(admin.id, admin.name)}
-                          >
-                            <Trash2 className="mr-1 h-3 w-3" />
-                            Delete
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                  ))}
+                </TableBody>
+              </Table>
             )}
           </CardContent>
         </Card>
 
-        {/* Employees Table (View-Only) */}
-        <Card>
-          <CardHeader>
+        {/* Employees Table */}
+        <Card className="border-0 shadow-lg overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 border-b">
             <CardTitle className="flex items-center gap-2 text-base">
-              <Users className="h-4 w-4" />
+              <div className="p-1.5 bg-purple-100 dark:bg-purple-900/50 rounded-lg">
+                <Users className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+              </div>
               Employees ({regularEmployees.length})
             </CardTitle>
             <p className="text-xs text-muted-foreground mt-1">
               View-only. Admins manage employee details through their dashboard.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+              <div className="flex items-center justify-center py-12">
+                <RefreshCw className="h-6 w-6 animate-spin text-purple-600" />
                 <p className="ml-3 text-sm text-muted-foreground">Loading employees...</p>
               </div>
             ) : regularEmployees.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <Users className="h-12 w-12 text-muted-foreground/50 mb-3" />
-                <p className="text-sm text-muted-foreground">
-                  No employees found. Admins can add employees through their dashboard.
-                </p>
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-full mb-4">
+                  <Users className="h-8 w-8 text-gray-400" />
+                </div>
+                <p className="text-sm text-muted-foreground">No employees found. Admins can add employees through their dashboard.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Department</TableHead>
-                      <TableHead>Position</TableHead>
-                      <TableHead>Working Type</TableHead>
-                      <TableHead>Role</TableHead>
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-gray-50 dark:bg-gray-800/50">
+                    <TableHead className="font-semibold">Name</TableHead>
+                    <TableHead className="font-semibold">Email</TableHead>
+                    <TableHead className="font-semibold">Department</TableHead>
+                    <TableHead className="font-semibold">Position</TableHead>
+                    <TableHead className="font-semibold">Working Type</TableHead>
+                    <TableHead className="font-semibold">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {regularEmployees.map((emp) => (
+                    <TableRow key={emp.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                      <TableCell className="font-medium">{emp.name}</TableCell>
+                      <TableCell className="text-gray-600 dark:text-gray-400">{emp.email}</TableCell>
+                      <TableCell>{emp.department || "-"}</TableCell>
+                      <TableCell>{emp.position || "-"}</TableCell>
+                      <TableCell>{emp.workingType || "-"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800">
+                          Active
+                        </Badge>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {regularEmployees.map((emp) => (
-                      <TableRow key={emp.id}>
-                        <TableCell className="font-medium">{emp.name}</TableCell>
-                        <TableCell>{emp.email}</TableCell>
-                        <TableCell>{emp.department || "-"}</TableCell>
-                        <TableCell>{emp.position || "-"}</TableCell>
-                        <TableCell>{emp.workingType || "-"}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">Employee</Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                  ))}
+                </TableBody>
+              </Table>
             )}
           </CardContent>
         </Card>

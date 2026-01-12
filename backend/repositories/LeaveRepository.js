@@ -112,20 +112,27 @@ class LeaveRepository extends BaseRepository {
         query = query.where('status', '==', options.status);
       }
 
-      // Order by creation date (most recent first)
-      query = query.orderBy('createdAt', 'desc');
-
-      // Apply limit
-      if (options.limit) {
-        query = query.limit(options.limit);
-      }
+      // Note: Removed orderBy to avoid composite index requirement
+      // We'll sort client-side instead
 
       const snapshot = await query.get();
 
-      const leaves = snapshot.docs.map(doc => ({
+      let leaves = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
+
+      // Sort by createdAt client-side (most recent first)
+      leaves.sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0);
+        const dateB = new Date(b.createdAt || 0);
+        return dateB - dateA;
+      });
+
+      // Apply limit after sorting
+      if (options.limit) {
+        leaves = leaves.slice(0, options.limit);
+      }
 
       console.log(`✅ [LeaveRepository] Found ${leaves.length} leave requests for user ${userId}`);
       return leaves;
@@ -302,7 +309,7 @@ class LeaveRepository extends BaseRepository {
       }
 
       const leave = doc.data();
-      
+
       // Only allow deletion of pending leaves
       if (leave.status !== 'pending') {
         throw new Error(`Cannot delete ${leave.status} leave request`);

@@ -6,20 +6,19 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
-import { 
-  Building2, 
-  LayoutDashboard, 
-  Users, 
-  Calendar, 
-  FileText, 
-  LogOut, 
+import {
+  Building2,
+  LayoutDashboard,
+  Users,
+  Calendar,
+  FileText,
+  LogOut,
   User,
   Menu,
   X,
-  Settings,
-  ChevronRight
+  Shield
 } from "lucide-react"
-import { safeRedirect } from "@/lib/redirectUtils"
+import { getCurrentUser, isAuthenticated, logoutUser } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 
 export default function BusinessOwnerLayout({ children }) {
@@ -35,12 +34,20 @@ export default function BusinessOwnerLayout({ children }) {
     // Skip auth check for login/register pages
     if (isAuthPage) return
 
-    const current = localStorage.getItem("currentEmployee")
-    if (current) {
-      const emp = JSON.parse(current)
-      setCurrentUser(emp)
+    // Check authentication
+    if (!isAuthenticated()) {
+      router.push("/business-owner/login")
+      return
     }
-  }, [pathname, isAuthPage])
+
+    const user = getCurrentUser()
+    if (!user || user.role !== "business_owner") {
+      router.push("/business-owner/login")
+      return
+    }
+
+    setCurrentUser(user)
+  }, [pathname, isAuthPage, router])
 
   // If it's a login/register page, render without sidebar
   if (isAuthPage) {
@@ -49,10 +56,8 @@ export default function BusinessOwnerLayout({ children }) {
 
   const handleLogout = () => {
     if (window.confirm("Are you sure you want to logout?")) {
-      localStorage.removeItem("firebaseToken")
-      localStorage.removeItem("currentEmployee")
-      localStorage.removeItem("employeeLoggedIn")
-      safeRedirect(router, "role-selection")
+      logoutUser()
+      router.push("/business-owner/login")
     }
   }
 
@@ -77,6 +82,11 @@ export default function BusinessOwnerLayout({ children }) {
       label: "Leave Requests",
       icon: FileText,
     },
+    {
+      href: "/business-owner/profile",
+      label: "Profile",
+      icon: User,
+    },
   ]
 
   const isActive = (href) => pathname === href
@@ -92,11 +102,26 @@ export default function BusinessOwnerLayout({ children }) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      {/* Mobile Overlay */}
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+      {/* Mobile Header */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white dark:bg-slate-800 border-b px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Building2 className="h-6 w-6 text-[var(--purple-mid)]" />
+          <span className="font-semibold">Business Owner</span>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+        >
+          {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </Button>
+      </div>
+
+      {/* Sidebar Overlay (Mobile) */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -104,122 +129,87 @@ export default function BusinessOwnerLayout({ children }) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-card transition-transform duration-300 lg:relative lg:translate-x-0",
+          "fixed top-0 left-0 z-40 h-screen w-64 bg-white dark:bg-slate-800 border-r transition-transform duration-300",
+          "lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        {/* Logo Section */}
-        <div className="flex h-16 items-center gap-2 border-b px-6">
-          <Building2 className="h-6 w-6 text-primary" />
-          <span className="text-lg font-semibold">Business Portal</span>
-        </div>
+        <div className="flex flex-col h-full">
+          {/* Logo */}
+          <div className="p-6 border-b">
+            <Link href="/business-owner/dashboard" className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-r from-[var(--purple-start)] to-[var(--purple-end)] rounded-lg">
+                <Building2 className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h2 className="font-bold text-lg">Business Owner</h2>
+                <p className="text-xs text-muted-foreground">Management Portal</p>
+              </div>
+            </Link>
+          </div>
 
-        {/* Navigation Links */}
-        <nav className="flex-1 space-y-1 overflow-y-auto p-4">
-          {navLinks.map((link) => {
-            const Icon = link.icon
-            const active = isActive(link.href)
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={() => setSidebarOpen(false)}
-              >
-                <div
+          {/* Navigation */}
+          <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+            {navLinks.map((link) => {
+              const Icon = link.icon
+              const active = isActive(link.href)
+
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setSidebarOpen(false)}
                   className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                    active
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    "flex items-center gap-3 px-4 py-3 rounded-lg transition-all",
+                    "hover:bg-slate-100 dark:hover:bg-slate-700",
+                    active && "bg-primary-gradient text-white hover:opacity-90"
                   )}
                 >
                   <Icon className="h-5 w-5" />
-                  <span>{link.label}</span>
-                  {active && <ChevronRight className="ml-auto h-4 w-4" />}
-                </div>
-              </Link>
-            )
-          })}
+                  <span className="font-medium">{link.label}</span>
+                </Link>
+              )
+            })}
+          </nav>
 
-          <Separator className="my-4" />
+          <Separator />
 
-          {/* Admin Panel Link */}
-          <Link href="/admin/dashboard" onClick={() => setSidebarOpen(false)}>
-            <div className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
-              <Settings className="h-5 w-5" />
-              <span>Admin Panel</span>
-            </div>
-          </Link>
-        </nav>
-
-        {/* User Profile Section */}
-        {currentUser && (
-          <div className="border-t p-4">
-            <div className="flex items-center gap-3 rounded-lg bg-accent/50 p-3">
-              <Avatar className="h-10 w-10">
-                <AvatarFallback className="bg-primary text-primary-foreground">
-                  {getInitials(currentUser.name)}
+          {/* User Profile */}
+          <div className="p-4 space-y-3">
+            <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
+              <Avatar className="h-10 w-10 bg-primary-gradient">
+                <AvatarFallback className="text-white">
+                  {getInitials(currentUser?.name)}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex-1 overflow-hidden">
-                <p className="truncate text-sm font-medium">
-                  {currentUser.name}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">
+                  {currentUser?.name || "Business Owner"}
                 </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  Business Owner
+                <p className="text-xs text-muted-foreground truncate">
+                  {currentUser?.email}
                 </p>
               </div>
             </div>
 
-            <div className="mt-3 space-y-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start gap-2"
-                onClick={() => {
-                  router.push("/business-owner/profile")
-                  setSidebarOpen(false)
-                }}
-              >
-                <User className="h-4 w-4" />
-                Profile
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={handleLogout}
-              >
-                <LogOut className="h-4 w-4" />
-                Logout
-              </Button>
-            </div>
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={handleLogout}
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </Button>
           </div>
-        )}
+        </div>
       </aside>
 
-      {/* Main Content Area */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Mobile Header */}
-        <header className="flex h-16 items-center gap-4 border-b bg-card px-4 lg:hidden">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setSidebarOpen(true)}
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
-          <div className="flex items-center gap-2">
-            <Building2 className="h-5 w-5 text-primary" />
-            <span className="font-semibold">Business Portal</span>
-          </div>
-        </header>
-
-        {/* Page Content */}
-        <main className="flex-1 overflow-y-auto bg-background">
+      {/* Main Content */}
+      <main className="lg:pl-64 pt-16 lg:pt-0">
+        <div className="p-4 md:p-6 lg:p-8">
           {children}
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   )
 }
