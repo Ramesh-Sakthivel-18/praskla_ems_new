@@ -37,7 +37,7 @@ export default function AdminAttendancePage() {
     }
 
     const user = getCurrentUser()
-    if (!user || (user.role !== "admin" && user.role !== "manager")) {
+    if (!user || (user.role !== "admin" && user.role !== "system_admin")) {
       router.push("/admin/login")
       return
     }
@@ -68,8 +68,8 @@ export default function AdminAttendancePage() {
     }
 
     try {
-      // 1. Fetch Employees to calculate filtering and stats
-      const empRes = await fetch(`${base}/api/admin/employees`, {
+      // 1. Fetch Employees only (exclude Admin/BO) to calculate stats
+      const empRes = await fetch(`${base}/api/admin/employees?role=employee`, {
         headers: { Authorization: `Bearer ${token}` },
       })
 

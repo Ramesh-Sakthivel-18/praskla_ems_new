@@ -38,18 +38,21 @@ class EmployeeService {
     console.log(`👤 EmployeeService.createEmployee() - Org: ${orgId}, Creator: ${creatorRole}`);
 
     try {
+      // 0. Determine target role (default to employee)
+      const targetRole = employeeData.role || 'employee';
+
       // 1. Validate organization exists and is active
       if (this.orgRepo) {
         const isActive = await this.orgRepo.isActive(orgId);
         if (!isActive) {
-          throw new Error('Organization is inactive. Cannot create employees.');
+          throw new Error('Organization is inactive. Cannot create users.');
         }
       }
 
       // 2. Validate quota (organization limit + admin quota if applicable)
       const validation = await this.quotaService.validateUserCreation(
         orgId,
-        'employee',
+        targetRole,
         creatorId,
         creatorRole
       );
@@ -62,20 +65,20 @@ class EmployeeService {
       // 3. Check if email already exists in organization
       const existingEmployee = await this.userRepo.findByEmail(orgId, employeeData.email);
       if (existingEmployee) {
-        throw new Error(`Employee with email ${employeeData.email} already exists in this organization.`);
+        throw new Error(`User with email ${employeeData.email} already exists in this organization.`);
       }
 
       // 4. Hash password
       const passwordHash = await bcrypt.hash(employeeData.password, 10);
 
-      // 5. Create employee
+      // 5. Create user
       const employee = await this.userRepo.create(orgId, {
         name: employeeData.name,
         email: employeeData.email.toLowerCase(),
         passwordHash,
-        role: 'employee',
+        role: targetRole,
         department: employeeData.department || '',
-        position: employeeData.position || 'Employee',
+        position: employeeData.position || (targetRole === 'admin' ? 'Admin' : 'Employee'),
         salary: employeeData.salary || '0',
         workingType: employeeData.workingType || 'full-time',
         skills: employeeData.skills || '',
@@ -86,7 +89,7 @@ class EmployeeService {
       });
 
       // 6. Record creation in quota system
-      await this.quotaService.recordUserCreation(orgId, 'employee', creatorId, creatorRole);
+      await this.quotaService.recordUserCreation(orgId, targetRole, creatorId, creatorRole);
 
       // 7. Remove password hash from response
       const { passwordHash: _, ...employeeWithoutPassword } = employee;
@@ -415,6 +418,8 @@ class EmployeeService {
       // Get all users to count admins and employees
       const allUsers = await this.userRepo.findAll(orgId);
 
+      console.log('🔍 DEBUG getEmployeeCount users:', allUsers.map(u => ({ id: u.id, name: u.name, role: u.role, isActive: u.isActive })));
+
       const businessOwners = allUsers.filter(u => u.role === 'business_owner');
       const admins = allUsers.filter(u => u.role === 'admin');
       const employees = allUsers.filter(u => u.role === 'employee');
@@ -424,8 +429,9 @@ class EmployeeService {
         businessOwners: businessOwners.length,
         admins: admins.length,
         employees: employees.length,
-        active: allUsers.filter(u => u.isActive).length,
-        inactive: allUsers.filter(u => !u.isActive).length
+        // Only count 'employee' role for active/inactive stats to avoid including BO/Admins
+        active: employees.filter(u => u.isActive).length,
+        inactive: employees.filter(u => !u.isActive).length
       };
 
       console.log(`✅ Employee counts:`, counts);

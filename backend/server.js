@@ -17,7 +17,7 @@ const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
 const attendanceRoutes = require('./routes/attendance');
 const leaveRoutes = require('./routes/leave');
-const managerRoutes = require('./routes/manager');
+const systemAdminRoutes = require('./routes/system_admin');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -65,7 +65,7 @@ app.get('/', (req, res) => {
       admin: '/api/admin',
       attendance: '/api/attendance',
       leave: '/api/leave',
-      manager: '/api/manager'
+      'system-admin': '/api/system-admin'
     }
   });
 });
@@ -77,7 +77,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/leave', leaveRoutes);
-app.use('/api/manager', managerRoutes);
+app.use('/api/system-admin', systemAdminRoutes);
 
 // ========================================
 // ERROR HANDLING
@@ -94,7 +94,7 @@ app.use('*', (req, res) => {
       '/api/admin',
       '/api/attendance',
       '/api/leave',
-      '/api/manager'
+      '/api/system-admin'
     ]
   });
 });
@@ -102,12 +102,12 @@ app.use('*', (req, res) => {
 // Global error handler
 app.use((err, req, res, next) => {
   console.error('❌ Global error handler:', err);
-  
+
   res.status(err.status || 500).json({
     error: err.message || 'Something went wrong!',
-    ...(process.env.NODE_ENV === 'development' && { 
+    ...(process.env.NODE_ENV === 'development' && {
       stack: err.stack,
-      details: err 
+      details: err
     })
   });
 });
@@ -133,20 +133,20 @@ const server = app.listen(PORT, () => {
 // ========================================
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...');
-  
+
   try {
     // Close server
     server.close(() => {
       console.log('✅ HTTP server closed');
     });
-    
+
     // Disconnect Redis
     await container.getRedisClient().disconnect();
     console.log('✅ Redis disconnected');
   } catch (error) {
     console.error('⚠️  Error during shutdown:', error);
   }
-  
+
   console.log('👋 Server stopped');
   process.exit(0);
 });

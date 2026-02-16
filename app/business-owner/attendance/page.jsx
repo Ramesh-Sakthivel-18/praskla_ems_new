@@ -61,7 +61,8 @@ export default function BusinessOwnerAttendancePage() {
     const base = getApiBase()
 
     try {
-      const empRes = await fetch(`${base}/api/admin/employees`, {
+      // Fetch only employees (exclude Admin/BO) for attendance stats
+      const empRes = await fetch(`${base}/api/admin/employees?role=employee`, {
         headers: { Authorization: `Bearer ${token}` },
       })
 
@@ -70,8 +71,8 @@ export default function BusinessOwnerAttendancePage() {
         const empData = await empRes.json()
         console.log("📊 Employees response:", empData)
         const allEmployees = Array.isArray(empData) ? empData : empData.employees || []
-        // Only filter by role=employee (backend already filters by org)
-        orgEmployees = allEmployees.filter((e) => e.role === "employee" && e.isActive !== false)
+        // Filter only active employees (backend already filters by role)
+        orgEmployees = allEmployees.filter((e) => e.isActive !== false)
         console.log("👥 Filtered employees for attendance:", orgEmployees.length)
       }
 

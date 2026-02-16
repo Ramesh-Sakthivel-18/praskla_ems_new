@@ -68,6 +68,7 @@ export default function BusinessOwnerDashboardPage() {
 
       if (dashboardRes.ok) {
         const data = await dashboardRes.json()
+        console.log("📊 Dashboard Data:", data)
         setDashboardData(data)
       } else if (dashboardRes.status === 401) {
         setError("Session expired. Please login again.")

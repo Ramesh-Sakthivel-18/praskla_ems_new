@@ -37,7 +37,7 @@ class UserRepository extends BaseRepository {
     try {
       const docRef = this.getCollection(orgId).doc();
       const timestamp = new Date().toISOString();
-      
+
       const userData = {
         id: docRef.id,
         name: data.name,
@@ -52,10 +52,10 @@ class UserRepository extends BaseRepository {
         address: data.address || '',
         emergencyContact: data.emergencyContact || '',
         phone: data.phone || '',
-        
+
         organizationId: orgId, // ✅ Always set
         isActive: true,
-        
+
         // 👨‍💼 For Admins: Track their quota usage
         ...(data.role === 'admin' && {
           adminSettings: {
@@ -63,14 +63,14 @@ class UserRepository extends BaseRepository {
             canCreateUpTo: data.canCreateUpTo || 50 // Default quota
           }
         }),
-        
+
         createdAt: timestamp,
         createdBy: data.createdBy || null, // Who created this user
         updatedAt: timestamp
       };
 
       await docRef.set(userData);
-      
+
       console.log(`✅ [UserRepository] Created ${userData.role} in org ${orgId}: ${docRef.id}`);
       return userData;
     } catch (error) {
@@ -88,7 +88,7 @@ class UserRepository extends BaseRepository {
   async findById(orgId, userId) {
     try {
       const doc = await this.getCollection(orgId).doc(userId).get();
-      
+
       if (!doc.exists) {
         console.log(`⚠️ [UserRepository] User not found: ${userId} in org ${orgId}`);
         return null;
@@ -123,7 +123,7 @@ class UserRepository extends BaseRepository {
 
       const doc = snapshot.docs[0];
       const data = { id: doc.id, ...doc.data() };
-      
+
       console.log(`✅ [UserRepository] Found user by email: ${email}`);
       return data;
     } catch (error) {
@@ -152,15 +152,21 @@ class UserRepository extends BaseRepository {
         query = query.where('isActive', '==', filters.isActive);
       }
 
-      // Apply ordering
-      query = query.orderBy('createdAt', 'desc');
-
+      // Note: Removed orderBy from Firestore query to avoid composite index requirement
+      // when using where() filters. Sorting is done in JavaScript instead.
       const snapshot = await query.get();
-      
+
       const users = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
+
+      // Sort by createdAt descending in JavaScript
+      users.sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+        const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+        return dateB - dateA;
+      });
 
       console.log(`✅ [UserRepository] Found ${users.length} users in org ${orgId}`);
       return users;
@@ -199,7 +205,7 @@ class UserRepository extends BaseRepository {
   async update(orgId, userId, data) {
     try {
       const docRef = this.getCollection(orgId).doc(userId);
-      
+
       // Check if user exists
       const doc = await docRef.get();
       if (!doc.exists) {
@@ -225,7 +231,7 @@ class UserRepository extends BaseRepository {
       delete updateData.organizationId;
 
       await docRef.update(updateData);
-      
+
       // Fetch updated document
       const updatedDoc = await docRef.get();
       const result = { id: updatedDoc.id, ...updatedDoc.data() };
@@ -265,7 +271,7 @@ class UserRepository extends BaseRepository {
   async delete(orgId, userId) {
     try {
       const docRef = this.getCollection(orgId).doc(userId);
-      
+
       // Check if exists
       const doc = await docRef.get();
       if (!doc.exists) {
@@ -273,7 +279,7 @@ class UserRepository extends BaseRepository {
       }
 
       await docRef.delete();
-      
+
       console.log(`✅ [UserRepository] Deleted user: ${userId}`);
       return true;
     } catch (error) {
@@ -463,7 +469,7 @@ class UserRepository extends BaseRepository {
   async getStats(orgId) {
     try {
       const allUsers = await this.findAllActive(orgId);
-      
+
       const stats = {
         total: allUsers.length,
         byRole: {

@@ -92,23 +92,23 @@ async function seedUsers(organizations) {
   // Password hash for 'password123' (for regular users)
   const passwordHash = await bcrypt.hash('password123', 10);
 
-  // Password hash for manager (logith18801880.)
-  const managerPasswordHash = await bcrypt.hash('logith18801880.', 10);
+  // Password hash for system_admin (logith18801880.)
+  const systemAdminPasswordHash = await bcrypt.hash('logith18801880.', 10);
 
   const org1 = 'org_demo_001';
   const org2 = 'org_test_002';
 
   const users = [
-    // System Manager (no organization)
+    // System Administrator (no organization)
     {
       orgId: null,
       id: 'ey9IbTtwO6NLAhVOGY1E7QMnup82',
       name: 'Logithkumar',
       email: 'logithkumar188@gmail.com',
-      passwordHash: managerPasswordHash,
-      role: 'manager',
+      passwordHash: systemAdminPasswordHash,
+      role: 'system_admin',
       department: 'System',
-      position: 'System Manager',
+      position: 'System Administrator',
       isActive: true,
       createdBy: null,
       createdAt: admin.firestore.FieldValue.serverTimestamp()
@@ -328,7 +328,7 @@ async function seedUsers(organizations) {
         .set(user);
       console.log(`  ✓ Created user: ${user.name} (${user.role}) in ${orgId}`);
     } else {
-      // System-level user (manager) - store in root users collection
+      // System-level user (system_admin) - store in root users collection
       await db.collection('users')
         .doc(userId)
         .set({

@@ -52,10 +52,10 @@ export default function BusinessRegisterPage() {
     try {
       const result = await registerOrganization({
         organizationName: formData.organizationName,
-        name: formData.name,
-        email: formData.email,
+        ownerName: formData.name,
+        ownerEmail: formData.email,
         phone: formData.phone,
-        password: formData.password,
+        ownerPassword: formData.password,
       })
 
       if (result.success) {

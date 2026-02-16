@@ -82,7 +82,7 @@ async function authenticateToken(req, res, next) {
       }
     }
 
-    // Check for system user (manager) in root users collection
+    // Check for system user (system_admin) in root users collection
     if (!employee) {
       try {
         const firestore = require('firebase-admin').firestore();
@@ -187,18 +187,20 @@ function requireAdminOrBusinessOwner(req, res, next) {
 }
 
 /**
- * Require MANAGER role only
+ * Require SYSTEM ADMIN role only
  */
-function requireManager(req, res, next) {
-  if (!req.user || req.user.role !== 'manager') {
+function requireSystemAdmin(req, res, next) {
+  if (!req.user || req.user.role !== 'system_admin') {
     return res.status(403).json({
-      error: 'Forbidden: Manager access only',
-      requiredRole: 'manager',
+      error: 'Forbidden: System Admin access only',
+      requiredRole: 'system_admin',
       yourRole: req.user?.role || 'none'
     });
   }
   next();
 }
+
+
 
 /**
  * Require EMPLOYEE role (any authenticated user)
@@ -231,7 +233,8 @@ module.exports = {
   requireAdmin,
   requireBusinessOwner,
   requireAdminOrBusinessOwner,
-  requireManager,
+  requireSystemAdmin,
+
   requireEmployee,
   requireOrganization
 };

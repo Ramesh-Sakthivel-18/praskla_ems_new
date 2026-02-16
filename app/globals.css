@@ -94,7 +94,8 @@ html {
 /* Fix 100vh issue on mobile Safari (includes URL bar) */
 .min-h-screen {
   min-height: 100vh;
-  min-height: 100dvh; /* Dynamic viewport height - excludes UI */
+  min-height: 100dvh;
+  /* Dynamic viewport height - excludes UI */
 }
 
 /* Webkit prefix for backdrop-blur (Safari < 15) */
@@ -115,12 +116,13 @@ html {
 
 /* Respect reduced motion preferences */
 @media (prefers-reduced-motion: reduce) {
+
   .animate-pulse,
   .animate-spin,
   .animate-bounce {
     animation: none !important;
   }
-  
+
   * {
     transition-duration: 0.01ms !important;
   }
@@ -128,6 +130,7 @@ html {
 
 /* Touch target minimum size for mobile */
 @media (pointer: coarse) {
+
   button,
   a,
   [role="button"],
@@ -136,13 +139,8 @@ html {
     min-height: 44px;
     min-width: 44px;
   }
-  
-  /* Ensure clickable text links are still usable */
-  a:not(.btn):not([class*="button"]) {
-    display: inline-block;
-    padding: 8px 4px;
-    margin: -8px -4px;
-  }
+
+
 }
 
 /* Prevent text selection on interactive elements (app-like feel) */
@@ -166,7 +164,7 @@ button,
   ::-webkit-scrollbar {
     display: none;
   }
-  
+
   * {
     scrollbar-width: none;
   }
@@ -217,6 +215,7 @@ button,
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
@@ -248,7 +247,7 @@ button,
   }
 
   .sidebar-primary {
-    background-image: linear-gradient(180deg, rgba(107,46,166,0.95), rgba(156,39,176,0.95));
+    background-image: linear-gradient(180deg, rgba(107, 46, 166, 0.95), rgba(156, 39, 176, 0.95));
     color: var(--on-primary);
   }
 }

@@ -55,7 +55,7 @@ class StatisticsService {
       if (!stats) {
         console.log(`🔧 Calculating daily stats from raw data...`);
         stats = await this.calculateDailyStats(orgId, date);
-        
+
         // Save to database
         await this.statsRepo.saveDailyStats(orgId, date, stats);
       }
@@ -86,7 +86,7 @@ class StatisticsService {
     try {
       // Get all attendance records for the date
       const attendanceRecords = await this.attendanceRepo.getByDate(orgId, date);
-      
+
       // Get total employee count
       const totalEmployees = await this.userRepo.countByRole(orgId, 'employee');
 
@@ -94,7 +94,7 @@ class StatisticsService {
       const presentCount = attendanceRecords.filter(r => r.checkIn).length;
       const absentCount = totalEmployees - presentCount;
       const checkedOutCount = attendanceRecords.filter(r => r.checkOut).length;
-      const lateArrivals = attendanceRecords.filter(r => 
+      const lateArrivals = attendanceRecords.filter(r =>
         r.checkIn && this.isLateArrival(r.checkIn)
       ).length;
 
@@ -103,7 +103,7 @@ class StatisticsService {
         return sum + (record.hoursWorked || 0);
       }, 0);
 
-      const avgHoursPerEmployee = presentCount > 0 
+      const avgHoursPerEmployee = presentCount > 0
         ? (totalHoursWorked / presentCount).toFixed(2)
         : 0;
 
@@ -116,7 +116,7 @@ class StatisticsService {
         totalHoursWorked: parseFloat(totalHoursWorked.toFixed(2)),
         avgHoursPerEmployee: parseFloat(avgHoursPerEmployee),
         checkedOutCount,
-        attendanceRate: totalEmployees > 0 
+        attendanceRate: totalEmployees > 0
           ? ((presentCount / totalEmployees) * 100).toFixed(2)
           : '0.00'
       };
@@ -155,7 +155,7 @@ class StatisticsService {
       if (!stats) {
         console.log(`🔧 Calculating weekly stats...`);
         stats = await this.calculateWeeklyStats(orgId, year, weekNumber);
-        
+
         // Save to database
         await this.statsRepo.saveWeeklyStats(orgId, year, weekNumber, stats);
       }
@@ -194,7 +194,7 @@ class StatisticsService {
       while (currentDate <= endDateObj) {
         const dateStr = currentDate.toISOString().split('T')[0];
         const dayRecords = records.filter(r => r.date === dateStr);
-        
+
         dailyStats.push({
           date: dateStr,
           presentCount: dayRecords.filter(r => r.checkIn).length,
@@ -216,7 +216,7 @@ class StatisticsService {
         totalEmployees,
         avgAttendanceRate: parseFloat(avgAttendanceRate),
         totalHoursWorked: parseFloat(totalHoursWorked.toFixed(2)),
-        avgHoursPerEmployee: totalEmployees > 0 
+        avgHoursPerEmployee: totalEmployees > 0
           ? (totalHoursWorked / totalEmployees / 7).toFixed(2)
           : '0.00',
         overtimeHours: 0, // TODO: Calculate based on standard hours
@@ -258,7 +258,7 @@ class StatisticsService {
       if (!stats) {
         console.log(`🔧 Calculating monthly stats...`);
         stats = await this.calculateMonthlyStats(orgId, year, month);
-        
+
         // Save to database
         await this.statsRepo.saveMonthlyStats(orgId, year, month, stats);
       }
@@ -401,10 +401,10 @@ class StatisticsService {
     try {
       const checkIn = checkInTime.split(':').map(Number);
       const expected = expectedTime.split(':').map(Number);
-      
+
       const checkInMinutes = checkIn[0] * 60 + checkIn[1];
       const expectedMinutes = expected[0] * 60 + expected[1];
-      
+
       return checkInMinutes > expectedMinutes;
     } catch (error) {
       return false;
@@ -420,7 +420,7 @@ class StatisticsService {
     const dayOfWeek = simple.getDay();
     const monday = new Date(simple);
     monday.setDate(simple.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1));
-    
+
     const sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
 
@@ -449,66 +449,66 @@ class StatisticsService {
     return workingDays;
   }
 
-/**
- * Get organization info for Manager (NO ATTENDANCE DATA)
- * @param {string} orgId - Organization ID
- * @returns {Promise} Organization info only
- */
-async getOrganizationInfoForManager(orgId) {
-  console.log(`📊 StatisticsService.getOrganizationInfoForManager() - Org: ${orgId}`);
-  try {
-    const org = await this.orgRepo.findById(orgId);
-    
-    if (!org) {
-      throw new Error('Organization not found');
-    }
+  /**
+   * Get organization info for System Admin (NO ATTENDANCE DATA)
+   * @param {string} orgId - Organization ID
+   * @returns {Promise} Organization info only
+   */
+  async getOrganizationInfoForSystemAdmin(orgId) {
+    console.log(`📊 StatisticsService.getOrganizationInfoForSystemAdmin() - Org: ${orgId}`);
+    try {
+      const org = await this.orgRepo.findById(orgId);
 
-    return {
-      organizationId: orgId,
-      name: org.name,
-      isActive: org.isActive,
-      
-      // User counts (NO ATTENDANCE)
-      counts: {
-        businessOwners: org.counts?.businessOwners || 0,
-        admins: org.counts?.admins || 0,
-        employees: org.counts?.employees || 0,
-        totalUsers: (org.counts?.businessOwners || 0) + 
-                   (org.counts?.admins || 0) + 
-                   (org.counts?.employees || 0)
-      },
-      
-      // Limits
-      limits: {
-        maxBusinessOwners: org.limits?.maxBusinessOwners || 0,
-        maxAdmins: org.limits?.maxAdmins || 0,
-        maxEmployees: org.limits?.maxEmployees || 0
-      },
-      
-      // Utilization percentages (NO ATTENDANCE)
-      utilization: {
-        businessOwnersPercent: org.limits?.maxBusinessOwners 
-          ? Math.round((org.counts?.businessOwners || 0) / org.limits.maxBusinessOwners * 100)
-          : 0,
-        adminsPercent: org.limits?.maxAdmins
-          ? Math.round((org.counts?.admins || 0) / org.limits.maxAdmins * 100)
-          : 0,
-        employeesPercent: org.limits?.maxEmployees
-          ? Math.round((org.counts?.employees || 0) / org.limits.maxEmployees * 100)
-          : 0
-      },
-      
-      timestamps: {
-        createdAt: org.createdAt,
-        updatedAt: org.updatedAt
+      if (!org) {
+        throw new Error('Organization not found');
       }
-    };
-    
-  } catch (error) {
-    console.error('❌ StatisticsService: Error getting org info for manager:', error);
-    throw new Error(`Failed to get organization info: ${error.message}`);
+
+      return {
+        organizationId: orgId,
+        name: org.name,
+        isActive: org.isActive,
+
+        // User counts (NO ATTENDANCE)
+        counts: {
+          businessOwners: org.counts?.businessOwners || 0,
+          admins: org.counts?.admins || 0,
+          employees: org.counts?.employees || 0,
+          totalUsers: (org.counts?.businessOwners || 0) +
+            (org.counts?.admins || 0) +
+            (org.counts?.employees || 0)
+        },
+
+        // Limits
+        limits: {
+          maxBusinessOwners: org.limits?.maxBusinessOwners || 0,
+          maxAdmins: org.limits?.maxAdmins || 0,
+          maxEmployees: org.limits?.maxEmployees || 0
+        },
+
+        // Utilization percentages (NO ATTENDANCE)
+        utilization: {
+          businessOwnersPercent: org.limits?.maxBusinessOwners
+            ? Math.round((org.counts?.businessOwners || 0) / org.limits.maxBusinessOwners * 100)
+            : 0,
+          adminsPercent: org.limits?.maxAdmins
+            ? Math.round((org.counts?.admins || 0) / org.limits.maxAdmins * 100)
+            : 0,
+          employeesPercent: org.limits?.maxEmployees
+            ? Math.round((org.counts?.employees || 0) / org.limits.maxEmployees * 100)
+            : 0
+        },
+
+        timestamps: {
+          createdAt: org.createdAt,
+          updatedAt: org.updatedAt
+        }
+      };
+
+    } catch (error) {
+      console.error('❌ StatisticsService: Error getting org info for system admin:', error);
+      throw new Error(`Failed to get organization info: ${error.message}`);
+    }
   }
-}
 }
 
 module.exports = StatisticsService;

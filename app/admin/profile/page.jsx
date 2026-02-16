@@ -63,7 +63,7 @@ export default function AdminProfilePage() {
     }
 
     const emp = getCurrentUser()
-    if (!emp || (emp.role !== "admin" && emp.role !== "manager")) {
+    if (!emp || (emp.role !== "admin" && emp.role !== "system_admin")) {
       router.push("/admin/login")
       return
     }
@@ -243,7 +243,7 @@ export default function AdminProfilePage() {
                 <div className="flex gap-2 mt-2">
                   <Badge className="bg-white/20 text-white border-0">
                     <Shield className="mr-1 h-3 w-3" />
-                    {currentUser.role === 'admin' ? 'Administrator' : 'Manager'}
+                    {currentUser.role === 'admin' ? 'Administrator' : 'System Admin'}
                   </Badge>
                 </div>
               </div>

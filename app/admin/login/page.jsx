@@ -36,7 +36,7 @@ export default function AdminLoginPage() {
       const result = await loginUser(email, password)
 
       if (result.success) {
-        if (result.user.role === "admin" || result.user.role === "manager") {
+        if (result.user.role === "admin" || result.user.role === "system_admin") {
           const redirectPath = getRoleRedirectPath(result.user.role)
           router.push(redirectPath)
         } else {
@@ -196,7 +196,7 @@ export default function AdminLoginPage() {
             <div className="flex items-center justify-center gap-2 text-sm">
               <span className="text-2xl">👤</span>
               <div>
-                <p className="font-semibold text-blue-900 dark:text-blue-100">Admin & Manager Access</p>
+                <p className="font-semibold text-blue-900 dark:text-blue-100">Admin & System Admin Access</p>
                 <p className="text-blue-700/80 dark:text-blue-300/80 text-xs">Manage employees and organization</p>
               </div>
             </div>

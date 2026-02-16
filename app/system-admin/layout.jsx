@@ -7,48 +7,47 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import {
-    Building2,
+    Shield,
     LayoutDashboard,
-    Users,
-    Calendar,
-    FileText,
-    LogOut,
+    Building2,
     User,
+    LogOut,
     Menu,
     X
 } from "lucide-react"
 import { getCurrentUser, isAuthenticated, logoutUser } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 
-export default function AdminLayout({ children }) {
+export default function SystemAdminLayout({ children }) {
     const router = useRouter()
     const pathname = usePathname()
     const [currentUser, setCurrentUser] = useState(null)
     const [sidebarOpen, setSidebarOpen] = useState(false)
 
-    // Check if current page is login or register
-    const isAuthPage = pathname === "/admin/login" || pathname === "/admin/register"
+    // Check if current page is login
+    const isAuthPage = pathname === "/system-admin/login"
 
     useEffect(() => {
-        // Skip auth check for login/register pages
+        // Skip auth check for login page
         if (isAuthPage) return
 
         // Check authentication
         if (!isAuthenticated()) {
-            router.push("/admin/login")
+            router.push("/system-admin/login")
             return
         }
 
         const user = getCurrentUser()
-        if (!user || (user.role !== "admin" && user.role !== "system_admin")) {
-            router.push("/admin/login")
+        if (!user || user.role !== "system_admin") {
+            alert("Unauthorized. System Admin access required.")
+            router.push("/system-admin/login")
             return
         }
 
         setCurrentUser(user)
     }, [pathname, isAuthPage, router])
 
-    // If it's a login/register page, render without sidebar
+    // If it's a login page, render without sidebar
     if (isAuthPage) {
         return <>{children}</>
     }
@@ -56,34 +55,24 @@ export default function AdminLayout({ children }) {
     const handleLogout = () => {
         if (window.confirm("Are you sure you want to logout?")) {
             logoutUser()
-            router.push("/admin/login")
+            router.push("/system-admin/login")
         }
     }
 
     const navLinks = [
         {
-            href: "/admin/dashboard",
+            href: "/system-admin/dashboard",
             label: "Dashboard",
             icon: LayoutDashboard,
         },
         {
-            href: "/admin/employees",
-            label: "Employees",
-            icon: Users,
+            href: "/system-admin/organizations",
+            label: "Organizations",
+            icon: Building2,
         },
         {
-            href: "/admin/attendance",
-            label: "Attendance",
-            icon: Calendar,
-        },
-        {
-            href: "/admin/leave-requests",
-            label: "Leave Requests",
-            icon: FileText,
-        },
-        {
-            href: "/admin/profile",
-            label: "Profile",
+            href: "/system-admin/profile",
+            label: "My Profile",
             icon: User,
         },
     ]
@@ -91,7 +80,7 @@ export default function AdminLayout({ children }) {
     const isActive = (href) => pathname === href
 
     const getInitials = (name) => {
-        if (!name) return "AD"
+        if (!name) return "SA"
         return name
             .split(" ")
             .map((n) => n[0])
@@ -105,8 +94,10 @@ export default function AdminLayout({ children }) {
             {/* Mobile Header */}
             <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white dark:bg-slate-800 border-b px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <Building2 className="h-6 w-6 text-blue-600" />
-                    <span className="font-semibold">Admin Portal</span>
+                    <div className="p-1 bg-orange-500 rounded-md">
+                        <Shield className="h-5 w-5 text-white" />
+                    </div>
+                    <span className="font-semibold text-orange-950 dark:text-orange-50">System Admin</span>
                 </div>
                 <Button
                     variant="ghost"
@@ -136,13 +127,13 @@ export default function AdminLayout({ children }) {
                 <div className="flex flex-col h-full">
                     {/* Logo */}
                     <div className="p-6 border-b">
-                        <Link href="/admin/dashboard" className="flex items-center gap-3">
-                            <div className="p-2 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg">
-                                <Building2 className="h-6 w-6 text-white" />
+                        <Link href="/system-admin/dashboard" className="flex items-center gap-3">
+                            <div className="p-2 bg-gradient-to-r from-orange-500 to-amber-500 rounded-lg shadow-md">
+                                <Shield className="h-6 w-6 text-white" />
                             </div>
                             <div>
-                                <h2 className="font-bold text-lg">EMS Admin</h2>
-                                <p className="text-xs text-muted-foreground">Management Portal</p>
+                                <h2 className="font-bold text-lg text-slate-800 dark:text-slate-100">System Admin</h2>
+                                <p className="text-xs text-muted-foreground">Administration Panel</p>
                             </div>
                         </Link>
                     </div>
@@ -159,12 +150,14 @@ export default function AdminLayout({ children }) {
                                     href={link.href}
                                     onClick={() => setSidebarOpen(false)}
                                     className={cn(
-                                        "flex items-center gap-3 px-4 py-3 rounded-lg transition-all",
-                                        "hover:bg-slate-100 dark:hover:bg-slate-700",
-                                        active && "bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:opacity-90"
+                                        "flex items-center gap-3 px-4 py-3 rounded-lg transition-all group",
+                                        "hover:bg-orange-50 dark:hover:bg-orange-950/30",
+                                        active
+                                            ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md hover:shadow-lg hover:from-orange-600 hover:to-amber-600"
+                                            : "text-slate-600 dark:text-slate-300 hover:text-orange-700 dark:hover:text-orange-400"
                                     )}
                                 >
-                                    <Icon className="h-5 w-5" />
+                                    <Icon className={cn("h-5 w-5", active ? "text-white" : "text-slate-500 group-hover:text-orange-600 dark:text-slate-400 dark:group-hover:text-orange-400")} />
                                     <span className="font-medium">{link.label}</span>
                                 </Link>
                             )
@@ -175,15 +168,15 @@ export default function AdminLayout({ children }) {
 
                     {/* User Profile */}
                     <div className="p-4 space-y-3">
-                        <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
-                            <Avatar className="h-10 w-10 bg-gradient-to-r from-blue-600 to-indigo-600">
-                                <AvatarFallback className="text-white">
+                        <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-100 dark:border-slate-700">
+                            <Avatar className="h-10 w-10 border-2 border-orange-100">
+                                <AvatarFallback className="bg-orange-100 text-orange-700 font-bold">
                                     {getInitials(currentUser?.name)}
                                 </AvatarFallback>
                             </Avatar>
                             <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate">
-                                    {currentUser?.name || "Administrator"}
+                                <p className="text-sm font-medium truncate text-slate-900 dark:text-slate-100">
+                                    {currentUser?.name || "System Admin"}
                                 </p>
                                 <p className="text-xs text-muted-foreground truncate">
                                     {currentUser?.email}
@@ -193,7 +186,7 @@ export default function AdminLayout({ children }) {
 
                         <Button
                             variant="outline"
-                            className="w-full justify-start"
+                            className="w-full justify-start hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-950/30 dark:hover:border-red-900"
                             onClick={handleLogout}
                         >
                             <LogOut className="mr-2 h-4 w-4" />
@@ -204,8 +197,8 @@ export default function AdminLayout({ children }) {
             </aside>
 
             {/* Main Content */}
-            <main className="lg:pl-64 pt-16 lg:pt-0">
-                <div className="p-4 md:p-6 lg:p-8">
+            <main className="lg:pl-64 pt-16 lg:pt-0 min-h-screen transition-all">
+                <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
                     {children}
                 </div>
             </main>

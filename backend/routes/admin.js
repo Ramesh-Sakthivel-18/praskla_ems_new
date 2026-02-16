@@ -31,10 +31,10 @@ const quotaService = container.getQuotaService();
  * CREATE Employee (ADMIN ONLY)
  * POST /api/admin/employees
  */
-router.post('/employees', authenticateToken, requireAdmin, async (req, res) => {
-  console.log('📝 POST /api/admin/employees - Create employee');
+router.post('/employees', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+  console.log('📝 POST /api/admin/employees - Create user (Admin/Employee)');
   try {
-    const { name, email, password, department, position, salary, workingType, skills, address, emergencyContact, phone } = req.body;
+    const { name, email, password, department, position, salary, workingType, skills, address, emergencyContact, phone, role } = req.body;
     const { organizationId, uid: creatorId, role: creatorRole } = req.user;
 
     // Validate required fields
@@ -42,10 +42,13 @@ router.post('/employees', authenticateToken, requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Name, email, and password are required' });
     }
 
-    // Create employee (quota validation happens in service)
+    // Default to 'employee' if role not provided
+    const targetRole = role || 'employee';
+
+    // Create user (quota validation and permission check happens in service)
     const employee = await employeeService.createEmployee(
       organizationId,
-      { name, email, password, department, position, salary, workingType, skills, address, emergencyContact, phone },
+      { name, email, password, department, position, salary, workingType, skills, address, emergencyContact, phone, role: targetRole },
       creatorId,
       creatorRole
     );
@@ -72,6 +75,17 @@ router.get('/employees', authenticateToken, requireAdminOrBusinessOwner, async (
     const { organizationId } = req.user;
     const { isActive, role } = req.query;
 
+    console.log('🔍 DEBUG: Admin Employees - User:', {
+      uid: req.user.uid,
+      role: req.user.role,
+      organizationId
+    });
+
+    if (!organizationId) {
+      console.error('❌ Error: organizationId is missing from req.user');
+      return res.status(500).json({ error: 'Organization ID is missing from user session' });
+    }
+
     // Use userRepo.findAll() to get all org members (admins + employees)
     const filters = {};
     if (isActive !== undefined) {
@@ -82,7 +96,7 @@ router.get('/employees', authenticateToken, requireAdminOrBusinessOwner, async (
     }
 
     // Access userRepo from the container
-    const { userRepo } = require('../container');
+    const userRepo = container.getUserRepo();
     const allUsers = await userRepo.findAll(organizationId, filters);
 
     // Remove password hashes from response
@@ -615,11 +629,9 @@ router.get('/organization', authenticateToken, requireAdminOrBusinessOwner, asyn
     const { organizationId } = req.user;
 
     // Get organization repo from container
-    const { organizationRepo, employeeService } = require('../container'); // Re-requiring to ensure access if not in scope
-    // Note: Assuming container is available as it was required at top
-    // Better to use the variables defined at top if possible, but let's be safe or just use container.
-    const orgRepo = require('../container').getOrganizationRepo();
-    const empService = require('../container').getEmployeeService();
+    // Get repositories/services from container instance
+    const orgRepo = container.getOrganizationRepo();
+    const empService = container.getEmployeeService();
 
     const organization = await orgRepo.findById(organizationId);
 

@@ -40,7 +40,7 @@ router.post('/login', async (req, res) => {
     let user = null;
     let userOrgId = null;
 
-    // First, check root users collection for system users (managers)
+    // First, check root users collection for system users (system_admin)
     console.log('🔍 Checking for system user...');
     const db = require('firebase-admin').firestore();
     const systemUserQuery = await db.collection('users')
@@ -395,8 +395,8 @@ router.put('/profile', async (req, res) => {
       userRole = decoded.role || (decoded.claims && decoded.claims.role);
     }
 
-    // Allow if orgId exists OR if it's a manager (system user)
-    if (!userOrgId && userRole !== 'manager') {
+    // Allow if orgId exists OR if it's a system_admin (system user)
+    if (!userOrgId && userRole !== 'system_admin') {
       return res.status(400).json({
         error: 'Organization not found'
       });
@@ -414,8 +414,8 @@ router.put('/profile', async (req, res) => {
 
     let updatedUser;
 
-    // Direct update for system users (managers)
-    if (!userOrgId || userRole === 'manager') {
+    // Direct update for system users (system_admin)
+    if (!userOrgId || userRole === 'system_admin') {
       const firestore = require('firebase-admin').firestore();
       await firestore.collection('users').doc(userId).update(updateData);
 
@@ -515,7 +515,8 @@ router.get('/profile', async (req, res) => {
 
 /**
  * GET /api/auth/me
- * Get current authenticated user (supports system users like managers)
+ * Get current authenticated user (supports system users like system_admins
+ * )
  */
 router.get('/me', async (req, res) => {
   try {
@@ -553,8 +554,8 @@ router.get('/me', async (req, res) => {
 
     let user = null;
 
-    // Check if this is a system user (manager) - no organizationId
-    if (!userOrgId || userRole === 'manager') {
+    // Check if this is a system user (system_admin) - no organizationId
+    if (!userOrgId || userRole === 'system_admin') {
       // Look up in root users collection
       const firestore = require('firebase-admin').firestore();
       const userDoc = await firestore.collection('users').doc(userId).get();

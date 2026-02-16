@@ -28,7 +28,7 @@ export default function AdminDashboardPage() {
     }
 
     const user = getCurrentUser()
-    if (!user || (user.role !== "admin" && user.role !== "manager")) {
+    if (!user || (user.role !== "admin" && user.role !== "system_admin")) {
       router.push("/admin/login")
       return
     }

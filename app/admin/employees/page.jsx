@@ -59,7 +59,7 @@ export default function AdminEmployeesPage() {
     }
 
     const user = getCurrentUser()
-    if (!user || (user.role !== "admin" && user.role !== "manager")) {
+    if (!user || (user.role !== "admin" && user.role !== "system_admin")) {
       router.push("/admin/login")
       return
     }
@@ -105,7 +105,8 @@ export default function AdminEmployeesPage() {
     }
 
     try {
-      const response = await fetch(`${base}/api/admin/employees`, {
+      // Fetch only 'employee' role for Admin view to exclude Business Owners and Admins
+      const response = await fetch(`${base}/api/admin/employees?role=employee`, {
         headers: { Authorization: `Bearer ${token}` },
       })
 

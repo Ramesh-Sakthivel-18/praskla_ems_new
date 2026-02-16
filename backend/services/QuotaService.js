@@ -3,7 +3,7 @@
  * 
  * Business logic for quota management and enforcement.
  * Implements the hierarchical control system:
- * - Manager controls organization limits (maxEmployees, maxAdmins)
+ * - System Admin controls organization limits (maxEmployees, maxAdmins)
  * - Business Owner controls admin quotas (employeesPerAdmin)
  * - Admins can create employees within their quota
  * 
@@ -53,7 +53,7 @@ class QuotaService {
         console.log(`⛔ Organization limit reached for ${role}: ${limitCheck.current}/${limitCheck.max}`);
         return {
           allowed: false,
-          reason: `Organization limit reached. Maximum ${role}s allowed: ${limitCheck.max}. Contact your manager to increase the limit.`,
+          reason: `Organization limit reached. Maximum ${role}s allowed: ${limitCheck.max}. Contact your system admin to increase the limit.`,
           current: limitCheck.current,
           max: limitCheck.max,
           remaining: 0
@@ -194,7 +194,7 @@ class QuotaService {
     console.log(`🔍 QuotaService.validateCreatorPermissions() - ${creatorRole} creating ${targetRole}`);
 
     const permissions = {
-      manager: ['business_owner'], // Manager can create business owners
+      system_admin: ['business_owner'], // System Admin can create business owners
       business_owner: ['admin', 'business_owner'], // Business owner can create admins and other business owners
       admin: ['employee'] // Admin can only create employees
     };
@@ -267,7 +267,7 @@ class QuotaService {
   }
 
   /**
-   * Get quota summary for organization (Manager view)
+   * Get quota summary for organization (System Admin view)
    * @param {string} orgId - Organization ID
    * @returns {Promise<Object>} Quota summary
    */
@@ -371,7 +371,7 @@ class QuotaService {
   }
 
   /**
-   * Update organization limits (Manager only)
+   * Update organization limits (System Admin only)
    * @param {string} orgId - Organization ID
    * @param {Object} newLimits - { maxBusinessOwners, maxAdmins, maxEmployees }
    * @returns {Promise<Object>} Updated organization

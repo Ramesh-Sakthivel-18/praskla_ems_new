@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Shield, Mail, Lock, Loader2, AlertCircle, ArrowLeft } from "lucide-react"
 import { loginUser } from "@/lib/auth"
 
-export default function ManagerLoginPage() {
+export default function SystemAdminLoginPage() {
     const router = useRouter()
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
@@ -32,15 +32,15 @@ export default function ManagerLoginPage() {
                 return
             }
 
-            // Check if user has manager role
-            if (result.user.role !== "manager") {
-                setError("Access denied. Manager privileges required.")
+            // Check if user has system_admin role
+            if (result.user.role !== "system_admin") {
+                setError("Access denied. System Admin privileges required.")
                 setLoading(false)
                 return
             }
 
             // Redirect to dashboard
-            router.push("/manager/dashboard")
+            router.push("/system-admin/dashboard")
         } catch (error) {
             console.error("Login error:", error)
             setError(error.message || "Login failed. Please try again.")
@@ -65,7 +65,7 @@ export default function ManagerLoginPage() {
                         </div>
                     </div>
                     <div className="text-center">
-                        <CardTitle className="text-2xl font-bold">System Manager</CardTitle>
+                        <CardTitle className="text-2xl font-bold">System Admin</CardTitle>
                         <CardDescription className="text-muted-foreground mt-2">
                             Sign in to access the management console
                         </CardDescription>
@@ -88,7 +88,7 @@ export default function ManagerLoginPage() {
                                 <Input
                                     id="email"
                                     type="email"
-                                    placeholder="manager@example.com"
+                                    placeholder="admin@example.com"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     className="pl-10"
