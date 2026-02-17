@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   User, Mail, Phone, MapPin, Building, Calendar,
-  Lock, Save, Loader2, AlertCircle
+  Lock, Save, Loader2, AlertCircle, UserCog
 } from "lucide-react"
 import { format } from "date-fns"
 import { safeRedirect } from "@/lib/redirectUtils"
@@ -33,7 +33,8 @@ export default function EmployeeProfilePage() {
     position: "",
     department: "",
     hireDate: "",
-    salary: "" // Usually hidden or read-only
+    salary: "",
+    managerName: ""
   })
 
   // Password Change
@@ -77,8 +78,9 @@ export default function EmployeeProfilePage() {
           address: user.address || "",
           position: user.position || "Employee",
           department: user.department || "General",
-          hireDate: user.createdAt || "", // usage of createdAt as hireDate fallback
-          salary: user.salary ? `₹${user.salary.toLocaleString()}` : "Not specified"
+          hireDate: user.createdAt || "",
+          salary: user.salary ? `₹${user.salary.toLocaleString()}` : "Not specified",
+          managerName: user.managerName || ""
         })
       }
     } catch (error) {
@@ -214,6 +216,12 @@ export default function EmployeeProfilePage() {
                 <Calendar className="h-4 w-4 text-emerald-600" />
                 <span>Joined {profileData.hireDate && !isNaN(new Date(profileData.hireDate).getTime()) ? format(new Date(profileData.hireDate), "MMM yyyy") : "N/A"}</span>
               </div>
+              {profileData.managerName && (
+                <div className="flex items-center gap-3 text-sm">
+                  <UserCog className="h-4 w-4 text-emerald-600" />
+                  <span>Manager: <strong>{profileData.managerName}</strong></span>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -285,6 +293,15 @@ export default function EmployeeProfilePage() {
                           {profileData.position}
                         </div>
                       </div>
+                      {profileData.managerName && (
+                        <div className="space-y-2">
+                          <Label>Reporting Manager</Label>
+                          <div className="flex items-center px-3 py-2 border rounded-md bg-slate-50 text-slate-500">
+                            <UserCog className="h-4 w-4 mr-2" />
+                            {profileData.managerName}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex justify-end pt-4">

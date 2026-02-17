@@ -26,6 +26,9 @@ import EmployeeAttendancePage from '@/app/employee/attendance/page'
 import EmployeeLeaveRequestsPage from '@/app/employee/leave-requests/page'
 import EmployeeWeeklyHoursPage from '@/app/employee/weekly-hours/page'
 import EmployeeProfilePage from '@/app/employee/profile/page'
+import EmployeeTeamPage from '@/app/employee/team/page'
+import EmployeeTeamAttendancePage from '@/app/employee/team/attendance/page'
+import EmployeeTeamLeavesPage from '@/app/employee/team/leaves/page'
 
 // Business Owner Pages
 import BOLoginPage from '@/app/business-owner/login/page'
@@ -69,6 +72,9 @@ export default function App() {
                     <Route path="leave-requests" element={<EmployeeLeaveRequestsPage />} />
                     <Route path="weekly-hours" element={<EmployeeWeeklyHoursPage />} />
                     <Route path="profile" element={<EmployeeProfilePage />} />
+                    <Route path="team" element={<EmployeeTeamPage />} />
+                    <Route path="team/attendance" element={<EmployeeTeamAttendancePage />} />
+                    <Route path="team/leaves" element={<EmployeeTeamLeavesPage />} />
                     <Route index element={<Navigate to="dashboard" replace />} />
                 </Route>
 

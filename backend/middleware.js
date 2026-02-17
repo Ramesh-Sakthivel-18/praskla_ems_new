@@ -133,7 +133,11 @@ async function authenticateToken(req, res, next) {
       role: employee.role,
       name: employee.name,
       department: employee.department,
-      organizationId: organizationId || employee.organizationId
+      organizationId: organizationId || employee.organizationId,
+      isTeamLead: employee.isTeamLead || false,
+      managerId: employee.managerId || null,
+      managerName: employee.managerName || null,
+      directReports: employee.directReports || []
     };
 
     return next();
@@ -228,13 +232,36 @@ function requireOrganization(organizationId) {
   };
 }
 
+/**
+ * Require TEAM LEAD access
+ * (Also allows Admin and Business Owner)
+ */
+function requireTeamLead(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Unauthorized: Authentication required' });
+  }
+
+  const isAuthorized = req.user.isTeamLead ||
+    ['admin', 'business_owner'].includes(req.user.role);
+
+  if (!isAuthorized) {
+    return res.status(403).json({
+      error: 'Forbidden: Team Lead access required',
+      requiredRole: 'Team Lead',
+      yourRole: req.user.role,
+      isTeamLead: !!req.user.isTeamLead
+    });
+  }
+  next();
+}
+
 module.exports = {
   authenticateToken,
   requireAdmin,
   requireBusinessOwner,
   requireAdminOrBusinessOwner,
   requireSystemAdmin,
-
+  requireTeamLead, // Export new middleware
   requireEmployee,
   requireOrganization
 };

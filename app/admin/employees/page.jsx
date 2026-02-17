@@ -22,7 +22,8 @@ import {
   Mail,
   User,
   Briefcase,
-  Trash2
+  Trash2,
+  UserCog // Added icon
 } from "lucide-react"
 import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 import { getValidIdToken } from "@/lib/firebaseClient"
@@ -48,6 +49,15 @@ export default function AdminEmployeesPage() {
     workingType: "Full-time",
     salary: "",
   })
+
+  // Manager Assignment State
+  const [assignManagerOpen, setAssignManagerOpen] = useState(false)
+  const [selectedEmployee, setSelectedEmployee] = useState(null)
+  const [selectedManagerId, setSelectedManagerId] = useState(null)
+  const [managerSearchQuery, setManagerSearchQuery] = useState("")
+  const [assignLoading, setAssignLoading] = useState(false)
+  const [allOrgMembers, setAllOrgMembers] = useState([])
+  const [membersLoading, setMembersLoading] = useState(false)
 
   // Auth Check
   useEffect(() => {
@@ -93,6 +103,40 @@ export default function AdminEmployeesPage() {
       emp.position?.toLowerCase().includes(query)
     )
   }, [searchQuery, employees])
+
+  // Fetch all org members (admins + employees, excluding BOs) for manager assignment
+  const fetchAllOrgMembers = async () => {
+    setMembersLoading(true)
+    try {
+      const token = await getValidIdToken()
+      const base = getApiBase()
+      // Fetch ALL active users (no role filter)
+      const response = await fetch(`${base}/api/admin/employees?isActive=true`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (response.ok) {
+        const data = await response.json()
+        const members = Array.isArray(data) ? data : (data.employees || [])
+        // Exclude business owners
+        setAllOrgMembers(members.filter(m => m.role !== 'business_owner'))
+      }
+    } catch (error) {
+      console.error('Failed to fetch org members:', error)
+    } finally {
+      setMembersLoading(false)
+    }
+  }
+
+  // Filter potential managers from ALL org members (exclude current employee & BOs)
+  const potentialManagers = useMemo(() => {
+    if (!allOrgMembers.length) return []
+    return allOrgMembers.filter(member =>
+      member.isActive &&
+      member.id !== selectedEmployee?.id &&
+      (member.name?.toLowerCase().includes(managerSearchQuery.toLowerCase()) ||
+        member.email?.toLowerCase().includes(managerSearchQuery.toLowerCase()))
+    )
+  }, [allOrgMembers, selectedEmployee, managerSearchQuery])
 
   const loadEmployees = () => queryClient.invalidateQueries({ queryKey: ['admin-employees'] })
 
@@ -187,6 +231,48 @@ export default function AdminEmployeesPage() {
     }
   }
 
+  const handleOpenAssignManager = (employee) => {
+    setSelectedEmployee(employee)
+    setSelectedManagerId(employee.managerId || null)
+    setManagerSearchQuery("")
+    setAssignManagerOpen(true)
+    fetchAllOrgMembers() // Fetch all members when dialog opens
+  }
+
+  const handleAssignManagerSubmit = async () => {
+    if (!selectedEmployee) return
+
+    setAssignLoading(true)
+    const token = await getValidIdToken()
+    const base = getApiBase()
+
+    try {
+      const response = await fetch(`${base}/api/admin/employees/${selectedEmployee.id}/assign-manager`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ managerId: selectedManagerId }),
+      })
+
+      if (response.ok) {
+        alert(`Manager assigned successfully!`)
+        setAssignManagerOpen(false)
+        loadEmployees()
+        queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] })
+      } else {
+        const data = await response.json()
+        alert(data.error || "Failed to assign manager")
+      }
+    } catch (error) {
+      console.error("Assign manager error:", error)
+      alert("Network error")
+    } finally {
+      setAssignLoading(false)
+    }
+  }
+
   // Helper to count roles
   const activeEmployees = filteredEmployees.filter(e => e.isActive !== false)
   const fullTimeNodes = activeEmployees.filter(e => e.workingType === 'Full-time').length
@@ -197,7 +283,7 @@ export default function AdminEmployeesPage() {
     <div className="space-y-6 animate-in fade-in-50 duration-500">
       {/* Header */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 p-6 text-white shadow-xl">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNGM0LjQxOCAwIDgtMy41ODIgOC04cy0zLjU4Mi04LTgtOC04IDMuNTgyLTggOCAzLjU4MiA4IDggOHoiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4xIi8+PC9nPjwvc3ZnPg==')] opacity-30" />
+        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNGM0LjQxOCAwIDgtMy41ODIgOC04cy0zLjU4Mi04LTgtOC04IDMuNTgyLTggOCAzLjU4MiA4IDggOHoiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHkloy4xIi8+PC9nPjwvc3ZnPg==')] opacity-30" />
         <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="flex items-center gap-3 mb-2">
@@ -384,53 +470,66 @@ export default function AdminEmployeesPage() {
         </Dialog>
       </div>
 
-      {/* Employees Table */}
-      <Card className="border-0 shadow-lg overflow-hidden">
+      {/* Employee Table */}
+      <Card className="shadow-lg">
         <CardContent className="p-0">
           <Table>
-            <TableHeader className="bg-gray-50 dark:bg-gray-800">
+            <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>Role</TableHead>
                 <TableHead>Department</TableHead>
                 <TableHead>Position</TableHead>
+                <TableHead>Manager</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredEmployees.length === 0 ? (
+              {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
-                    No employees found
+                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                    Loading employees...
+                  </TableCell>
+                </TableRow>
+              ) : filteredEmployees.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                    No employees found.
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredEmployees.map((emp) => (
-                  <TableRow key={emp.id} className="hover:bg-blue-50/50 dark:hover:bg-blue-900/10">
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-bold">
-                          {(emp.name || "U").substring(0, 2).toUpperCase()}
-                        </div>
-                        {emp.name}
-                      </div>
-                    </TableCell>
+                  <TableRow key={emp.id}>
+                    <TableCell className="font-medium">{emp.name}</TableCell>
                     <TableCell>{emp.email}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={emp.role === 'admin' ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-slate-50 text-slate-700 border-slate-200"}>
-                        {emp.role}
-                      </Badge>
-                    </TableCell>
                     <TableCell>{emp.department || "-"}</TableCell>
                     <TableCell>{emp.position || "-"}</TableCell>
+                    <TableCell>
+                      {emp.managerName ? (
+                        <div className="flex items-center gap-1 text-sm text-slate-600 dark:text-slate-400">
+                          <UserCog className="h-3 w-3" />
+                          {emp.managerName}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-xs italic">None</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge className={emp.isActive ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-red-100 text-red-700 hover:bg-red-200"}>
                         {emp.isActive ? "Active" : "Inactive"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 mr-1"
+                        title="Assign Manager"
+                        onClick={() => handleOpenAssignManager(emp)}
+                      >
+                        <UserCog className="h-4 w-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -447,6 +546,70 @@ export default function AdminEmployeesPage() {
           </Table>
         </CardContent>
       </Card>
-    </div>
+
+      {/* Assign Manager Dialog */}
+      <Dialog open={assignManagerOpen} onOpenChange={setAssignManagerOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Assign Manager</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Select a manager for <strong>{selectedEmployee?.name}</strong>.
+            </p>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label>Search Manager</Label>
+              <Input
+                placeholder="Type to search..."
+                value={managerSearchQuery}
+                onChange={(e) => setManagerSearchQuery(e.target.value)}
+              />
+            </div>
+
+            <div className="border rounded-md max-h-[250px] overflow-y-auto">
+              {membersLoading ? (
+                <div className="p-4 text-center">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="text-xs text-muted-foreground mt-2">Loading members...</p>
+                </div>
+              ) : potentialManagers.length === 0 ? (
+                <div className="p-4 text-center text-sm text-muted-foreground">No matching members found</div>
+              ) : (
+                <div className="divide-y">
+                  <div
+                    className={`p-2 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 ${selectedManagerId === null ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
+                    onClick={() => setSelectedManagerId(null)}
+                  >
+                    <div className="font-medium text-red-600">No Manager (Unassign)</div>
+                  </div>
+                  {potentialManagers.map(manager => (
+                    <div
+                      key={manager.id}
+                      className={`p-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 ${selectedManagerId === manager.id ? 'bg-blue-50 dark:bg-blue-900/20 border-l-2 border-l-blue-500' : ''}`}
+                      onClick={() => setSelectedManagerId(manager.id)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="font-medium">{manager.name}</div>
+                        <Badge variant="outline" className={manager.role === 'admin' ? "bg-purple-50 text-purple-700 border-purple-200 text-xs" : "bg-slate-50 text-slate-600 border-slate-200 text-xs"}>
+                          {manager.role}
+                        </Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground">{manager.email}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setAssignManagerOpen(false)}>Cancel</Button>
+            <Button onClick={handleAssignManagerSubmit} disabled={assignLoading}>
+              {assignLoading && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
+              Save Assignment
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog >
+    </div >
   )
 }

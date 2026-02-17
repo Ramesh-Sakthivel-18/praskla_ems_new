@@ -341,6 +341,89 @@ class AttendanceService {
       return false;
     }
   }
+  /**
+   * Get attendance for a team lead's direct reports
+   * @param {string} orgId - Organization ID
+   * @param {string} leaderId - Team lead user ID
+   * @param {string} date - Date (YYYY-MM-DD)
+   * @returns {Promise<Array>} List of team members with attendance status
+   */
+  async getTeamAttendance(orgId, leaderId, date) {
+    try {
+      // 1. Get all direct reports
+      if (!this.userRepo) throw new Error('UserRepository not injected');
+      const teamMembers = await this.userRepo.getDirectReports(orgId, leaderId);
+
+      // 2. Get attendance for each member
+      const teamAttendance = await Promise.all(teamMembers.map(async (member) => {
+        // Try to find record for this date
+        const records = await this.attendanceRepo.findByUser(orgId, member.id, {
+          startDate: date,
+          endDate: date
+        });
+
+        const record = records.length > 0 ? records[0] : null;
+
+        return {
+          user: {
+            id: member.id,
+            name: member.name,
+            email: member.email,
+            department: member.department,
+            position: member.position,
+            avatar: member.avatar || null
+          },
+          attendance: record ? {
+            id: record.id,
+            checkIn: record.checkIn,
+            checkOut: record.checkOut,
+            status: record.status,
+            totalHours: record.totalHours,
+            isPresent: !!record.checkIn,
+            isOnline: !record.checkOut && !!record.checkIn
+          } : null
+        };
+      }));
+
+      return teamAttendance;
+    } catch (error) {
+      console.error(`❌ [AttendanceService] GetTeamAttendance error:`, error);
+      throw new Error(`Failed to get team attendance: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get weekly hours for a team lead's direct reports
+   * @param {string} orgId - Organization ID
+   * @param {string} leaderId - Team lead user ID
+   * @param {string} weekStart - Week start date
+   * @param {string} weekEnd - Week end date
+   * @returns {Promise<Array>} List of team members with weekly hours
+   */
+  async getTeamWeeklyHours(orgId, leaderId, weekStart, weekEnd) {
+    try {
+      // 1. Get all direct reports
+      if (!this.userRepo) throw new Error('UserRepository not injected');
+      const teamMembers = await this.userRepo.getDirectReports(orgId, leaderId);
+
+      // 2. Get weekly hours for each member
+      const teamHours = await Promise.all(teamMembers.map(async (member) => {
+        const stats = await this.getWeeklyHours(orgId, member.id, weekStart, weekEnd);
+        return {
+          user: {
+            id: member.id,
+            name: member.name
+          },
+          stats
+        };
+      }));
+
+      return teamHours;
+    } catch (error) {
+      console.error(`❌ [AttendanceService] GetTeamWeeklyHours error:`, error);
+      throw new Error(`Failed to get team weekly hours: ${error.message}`);
+    }
+  }
 }
 
 module.exports = AttendanceService;

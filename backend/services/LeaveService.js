@@ -68,16 +68,21 @@ class LeaveService {
       }
 
       // 5. Create leave request
-      const leave = await this.leaveRepo.create(orgId, {
+      const leaveDataToCreate = {
         userId: user.id,
         userName: user.name,
         leaveType: leaveData.leaveType,
         startDate: leaveData.startDate,
         endDate: leaveData.endDate,
-        reason: leaveData.reason || ''
-      });
+        reason: leaveData.reason || '',
+        // 👥 Route to manager if exists
+        approverId: user.managerId || null,
+        approverName: user.managerName || null
+      };
 
-      console.log(`✅ Leave request created: ${leave.id} (${leave.days} days)`);
+      const leave = await this.leaveRepo.create(orgId, leaveDataToCreate);
+
+      console.log(`✅ Leave request created: ${leave.id} (${leave.days} days) for approver: ${leave.approverId || 'Admin'}`);
 
       // Audit Log
       if (this.auditService) {
@@ -87,17 +92,30 @@ class LeaveService {
           action: 'LEAVE_CREATE',
           targetId: leave.id,
           targetType: 'leave_request',
-          details: { type: leaveData.leaveType, dates: `${leaveData.startDate} to ${leaveData.endDate}` }
+          details: {
+            type: leaveData.leaveType,
+            dates: `${leaveData.startDate} to ${leaveData.endDate}`,
+            approverId: leave.approverId
+          }
         });
       }
 
       // Notification
       if (this.notificationService) {
-        this.notificationService.sendToOrgAdmins(orgId, 'leave:created', {
-          leaveId: leave.id,
-          userName: user.name,
-          type: leaveData.leaveType
-        });
+        // If manager exists, notify them. Otherwise notify admins.
+        if (leave.approverId) {
+          this.notificationService.sendToUser(leave.approverId, 'leave:created', {
+            leaveId: leave.id,
+            userName: user.name,
+            type: leaveData.leaveType
+          });
+        } else {
+          this.notificationService.sendToOrgAdmins(orgId, 'leave:created', {
+            leaveId: leave.id,
+            userName: user.name,
+            type: leaveData.leaveType
+          });
+        }
       }
 
       return leave;
@@ -678,6 +696,16 @@ class LeaveService {
       console.error(`❌ LeaveService: Error getting leave balance:`, error);
       throw new Error(`Failed to get leave balance: ${error.message}`);
     }
+  }
+
+  /**
+   * Get pending leaves for a team lead
+   * @param {string} orgId - Organization ID
+   * @param {string} leaderId - Team lead user ID
+   * @returns {Promise<Array>} Pending leaves
+   */
+  async getTeamPendingLeaves(orgId, leaderId) {
+    return await this.leaveRepo.findByApprover(orgId, leaderId, { status: 'pending' });
   }
 }
 

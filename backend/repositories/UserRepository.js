@@ -56,6 +56,12 @@ class UserRepository extends BaseRepository {
         organizationId: orgId, // ✅ Always set
         isActive: true,
 
+        // 👥 Team/Manager mapping
+        managerId: data.managerId || null,
+        managerName: data.managerName || null,
+        isTeamLead: false,
+        directReports: [],
+
         // 👨‍💼 For Admins: Track their quota usage
         ...(data.role === 'admin' && {
           adminSettings: {
@@ -491,6 +497,120 @@ class UserRepository extends BaseRepository {
     } catch (error) {
       console.error(`❌ [UserRepository] GetStats error:`, error);
       throw new Error(`Failed to get user stats: ${error.message}`);
+    }
+  }
+
+  /**
+   * Assign a manager to an employee (updates both employee and leader documents)
+   * @param {string} orgId - Organization ID
+   * @param {string} userId - Employee user ID
+   * @param {string} managerId - New manager's user ID (null to unassign)
+   * @returns {Promise<Object>} Updated employee
+   */
+  async assignManager(orgId, userId, managerId) {
+    try {
+      const employee = await this.findById(orgId, userId);
+      if (!employee) throw new Error(`Employee not found: ${userId}`);
+
+      const oldManagerId = employee.managerId;
+      const batch = this.db.batch();
+      const timestamp = new Date().toISOString();
+
+      // 1. Remove employee from old manager's directReports
+      if (oldManagerId && oldManagerId !== managerId) {
+        const oldManagerRef = this.getCollection(orgId).doc(oldManagerId);
+        const oldManagerDoc = await oldManagerRef.get();
+        if (oldManagerDoc.exists) {
+          const oldReports = (oldManagerDoc.data().directReports || []).filter(id => id !== userId);
+          batch.update(oldManagerRef, {
+            directReports: oldReports,
+            isTeamLead: oldReports.length > 0,
+            updatedAt: timestamp
+          });
+        }
+      }
+
+      // 2. Set new manager on employee
+      let managerName = null;
+      if (managerId) {
+        const newManager = await this.findById(orgId, managerId);
+        if (!newManager) throw new Error(`Manager not found: ${managerId}`);
+        managerName = newManager.name;
+
+        // 3. Add employee to new manager's directReports
+        const newManagerRef = this.getCollection(orgId).doc(managerId);
+        const currentReports = newManager.directReports || [];
+        if (!currentReports.includes(userId)) {
+          currentReports.push(userId);
+        }
+        batch.update(newManagerRef, {
+          directReports: currentReports,
+          isTeamLead: true,
+          updatedAt: timestamp
+        });
+      }
+
+      // 4. Update employee's managerId/managerName
+      const employeeRef = this.getCollection(orgId).doc(userId);
+      batch.update(employeeRef, {
+        managerId: managerId || null,
+        managerName: managerName,
+        updatedAt: timestamp
+      });
+
+      await batch.commit();
+
+      // Fetch and return updated employee
+      const updatedDoc = await employeeRef.get();
+      const result = { id: updatedDoc.id, ...updatedDoc.data() };
+      console.log(`✅ [UserRepository] Assigned manager ${managerId} to employee ${userId}`);
+      return result;
+    } catch (error) {
+      console.error(`❌ [UserRepository] AssignManager error:`, error);
+      throw new Error(`Failed to assign manager: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get all direct reports for a team lead
+   * @param {string} orgId - Organization ID
+   * @param {string} leaderId - Team lead's user ID
+   * @returns {Promise<Array>} List of direct report users
+   */
+  async getDirectReports(orgId, leaderId) {
+    try {
+      const snapshot = await this.getCollection(orgId)
+        .where('managerId', '==', leaderId)
+        .where('isActive', '==', true)
+        .get();
+
+      const reports = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      console.log(`✅ [UserRepository] Found ${reports.length} direct reports for ${leaderId}`);
+      return reports;
+    } catch (error) {
+      console.error(`❌ [UserRepository] GetDirectReports error:`, error);
+      throw new Error(`Failed to get direct reports: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get all team leads in an organization
+   * @param {string} orgId - Organization ID
+   * @returns {Promise<Array>} List of team lead users
+   */
+  async getTeamLeads(orgId) {
+    try {
+      const snapshot = await this.getCollection(orgId)
+        .where('isTeamLead', '==', true)
+        .where('isActive', '==', true)
+        .get();
+
+      const leads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      console.log(`✅ [UserRepository] Found ${leads.length} team leads in org ${orgId}`);
+      return leads;
+    } catch (error) {
+      console.error(`❌ [UserRepository] GetTeamLeads error:`, error);
+      throw new Error(`Failed to get team leads: ${error.message}`);
     }
   }
 }

@@ -620,6 +620,64 @@ class EmployeeService {
       throw new Error(`Failed to get employee stats: ${error.message}`);
     }
   }
+  /**
+   * Assign a manager to an employee
+   * @param {string} orgId - Organization ID
+   * @param {string} employeeId - Employee ID
+   * @param {string} managerId - Manager ID (or null to unassign)
+   * @param {string} assignedBy - Admin user ID performing the assignment
+   * @returns {Promise<Object>} Updated employee
+   */
+  async assignManager(orgId, employeeId, managerId, assignedBy) {
+    console.log(`👥 EmployeeService.assignManager() - Employee: ${employeeId}, Manager: ${managerId}`);
+
+    try {
+      // Validate employee exists
+      const employee = await this.userRepo.findById(orgId, employeeId);
+      if (!employee) {
+        throw new Error('Employee not found');
+      }
+
+      // If assigning a manager, validate manager exists
+      let managerName = null;
+      if (managerId) {
+        if (managerId === employeeId) {
+          throw new Error('Cannot assign user as their own manager');
+        }
+        const manager = await this.userRepo.findById(orgId, managerId);
+        if (!manager) {
+          throw new Error('Manager not found');
+        }
+        managerName = manager.name;
+      }
+
+      // Perform assignment
+      const updatedEmployee = await this.userRepo.assignManager(orgId, employeeId, managerId);
+
+      // Audit Log
+      if (this.auditService) {
+        await this.auditService.log({
+          organizationId: orgId,
+          actor: { uid: assignedBy, name: 'Admin', role: 'admin' }, // TODO: Better actor info
+          action: 'EMPLOYEE_ASSIGN_MANAGER',
+          targetId: employeeId,
+          targetType: 'employee',
+          details: {
+            managerId,
+            managerName,
+            previousManager: employee.managerId
+          }
+        });
+      }
+
+      // Remove password hash
+      const { passwordHash, ...safeEmployee } = updatedEmployee;
+      return safeEmployee;
+    } catch (error) {
+      console.error(`❌ EmployeeService: Error assigning manager:`, error);
+      throw new Error(`Failed to assign manager: ${error.message}`);
+    }
+  }
 }
 
 module.exports = EmployeeService;

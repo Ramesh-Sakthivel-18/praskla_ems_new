@@ -201,9 +201,32 @@ router.delete('/employees/:id', authenticateToken, requireAdminOrBusinessOwner, 
       message: 'Employee deleted successfully',
       employee: result
     });
-
   } catch (error) {
     console.error('❌ Error deleting employee:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * ASSIGN MANAGER (ADMIN ONLY)
+ * PUT /api/admin/employees/:id/assign-manager
+ */
+router.put('/employees/:id/assign-manager', authenticateToken, requireAdmin, async (req, res) => {
+  console.log(`👥 PUT /api/admin/employees/${req.params.id}/assign-manager`);
+  try {
+    const { organizationId, uid: adminId } = req.user;
+    const { id } = req.params;
+    const { managerId } = req.body; // Can be null to unassign
+
+    const updatedEmployee = await employeeService.assignManager(organizationId, id, managerId, adminId);
+
+    res.json({
+      message: 'Manager assigned successfully',
+      employee: updatedEmployee
+    });
+
+  } catch (error) {
+    console.error('❌ Error assigning manager:', error);
     res.status(500).json({ error: error.message });
   }
 });

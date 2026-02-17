@@ -13,7 +13,8 @@ import {
     User,
     Menu,
     X,
-    Clock
+    Clock,
+    Users // Added icon
 } from "lucide-react"
 import { getCurrentUser, isAuthenticated, logoutUser } from "@/lib/auth"
 import { cn } from "@/lib/utils"
@@ -64,6 +65,12 @@ export default function EmployeeLayout({ children }) {
             label: "Dashboard",
             icon: LayoutDashboard,
         },
+        // 👥 Conditionally render Team Management for Team Leads
+        ...(currentUser?.isTeamLead ? [{
+            href: "/employee/team",
+            label: "My Team",
+            icon: Users,
+        }] : []),
         {
             href: "/employee/attendance",
             label: "My Attendance",

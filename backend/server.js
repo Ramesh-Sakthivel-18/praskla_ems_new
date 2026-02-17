@@ -19,6 +19,7 @@ const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
 const attendanceRoutes = require('./routes/attendance');
 const leaveRoutes = require('./routes/leave');
+const teamRoutes = require('./routes/team');
 const systemAdminRoutes = require('./routes/system_admin');
 const hikvisionRoutes = require('./routes/hikvision');
 
@@ -80,6 +81,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/leave', leaveRoutes);
+app.use('/api/team', teamRoutes);
 app.use('/api/system-admin', systemAdminRoutes);
 app.use('/api/event', hikvisionRoutes);
 

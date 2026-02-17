@@ -54,6 +54,9 @@ class LeaveRepository extends BaseRepository {
         days,
         reason: data.reason || '',
         status: 'pending', // pending, approved, rejected
+        // 👥 Team-lead approval routing
+        approverId: data.approverId || null,
+        approverName: data.approverName || null,
         reviewedBy: null,
         reviewedByName: null,
         reviewedAt: null,
@@ -526,6 +529,41 @@ class LeaveRepository extends BaseRepository {
       return false;
     }
   }
+
+  /**
+   * Find leave requests assigned to a specific approver (team lead)
+   * @param {string} orgId - Organization ID
+   * @param {string} approverId - Approver (team lead) user ID
+   * @param {Object} options - Options { status }
+   * @returns {Promise<Array>} Leave requests for the approver
+   */
+  async findByApprover(orgId, approverId, options = {}) {
+    try {
+      let query = this.getCollection(orgId)
+        .where('approverId', '==', approverId);
+
+      if (options.status) {
+        query = query.where('status', '==', options.status);
+      }
+
+      const snapshot = await query.get();
+
+      let leaves = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+
+      // Sort by createdAt (most recent first)
+      leaves.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+      console.log(`✅ [LeaveRepository] Found ${leaves.length} leaves for approver ${approverId}`);
+      return leaves;
+    } catch (error) {
+      console.error(`❌ [LeaveRepository] FindByApprover error:`, error);
+      throw new Error(`Failed to find leaves by approver: ${error.message}`);
+    }
+  }
 }
 
 module.exports = LeaveRepository;
+
