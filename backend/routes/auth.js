@@ -43,17 +43,32 @@ router.post('/login', async (req, res) => {
     // First, check root users collection for system users (system_admin)
     console.log('🔍 Checking for system user...');
     const db = require('firebase-admin').firestore();
-    const systemUserQuery = await db.collection('users')
-      .where('email', '==', normalizedEmail)
-      .where('isSystemUser', '==', true)
-      .limit(1)
-      .get();
 
-    if (!systemUserQuery.empty) {
-      const doc = systemUserQuery.docs[0];
-      user = { id: doc.id, ...doc.data() };
-      userOrgId = null; // System users don't belong to an org
-      console.log('✅ Found system user:', user.name, '(', user.role, ')');
+    // MODIFICATION: If organizationId is provided, check for organization user first (for dual-role users)
+    if (organizationId) {
+      console.log('🏢 Organization ID provided. Checking organization user first...');
+      const orgUser = await userRepo.findByEmail(organizationId, normalizedEmail);
+      if (orgUser) {
+        user = orgUser;
+        userOrgId = organizationId;
+        console.log('✅ Found user in target organization:', user.name, '(', user.role, ')');
+      }
+    }
+
+    // If no org user found (or no orgId provided), check system users
+    if (!user) {
+      const systemUserQuery = await db.collection('users')
+        .where('email', '==', normalizedEmail)
+        .where('isSystemUser', '==', true)
+        .limit(1)
+        .get();
+
+      if (!systemUserQuery.empty) {
+        const doc = systemUserQuery.docs[0];
+        user = { id: doc.id, ...doc.data() };
+        userOrgId = null; // System users don't belong to an org
+        console.log('✅ Found system user:', user.name, '(', user.role, ')');
+      }
     }
 
     // If not a system user, search in organizations

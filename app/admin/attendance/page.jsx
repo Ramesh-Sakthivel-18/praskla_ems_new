@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, Clock, UserCheck, UserX, Coffee, LogOut, ArrowLeft, RefreshCw, Users, AlertCircle } from "lucide-react"
+import { Calendar, Clock, UserCheck, UserX, Coffee, LogOut, ArrowLeft, RefreshCw, Users, AlertCircle, MapPin } from "lucide-react"
 import { format } from "date-fns"
 import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 import { getValidIdToken } from "@/lib/firebaseClient"
@@ -237,6 +237,7 @@ export default function AdminAttendancePage() {
                   <TableHead className="font-semibold">Break In</TableHead>
                   <TableHead className="font-semibold">Break Out</TableHead>
                   <TableHead className="font-semibold">Total Hours</TableHead>
+                  <TableHead className="font-semibold">Location</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -280,6 +281,27 @@ export default function AdminAttendancePage() {
                       ) : (
                         <span className="text-xs text-muted-foreground">-</span>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
+                        const checkInEvent = record.events?.find(e => e.type === 'checkIn' && e.location);
+                        if (checkInEvent?.location) {
+                          const { lat, lng } = checkInEvent.location;
+                          return (
+                            <a
+                              href={`https://www.google.com/maps?q=${lat},${lng}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                              title={`Lat: ${lat}, Lng: ${lng}`}
+                            >
+                              <MapPin className="h-3 w-3" />
+                              View Map
+                            </a>
+                          );
+                        }
+                        return <span className="text-muted-foreground text-xs">-</span>;
+                      })()}
                     </TableCell>
                   </TableRow>
                 ))}

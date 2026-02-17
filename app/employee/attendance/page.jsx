@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,10 +13,16 @@ import { format } from "date-fns"
 import { safeRedirect } from "@/lib/redirectUtils"
 import { getValidIdToken } from "@/lib/firebaseClient"
 
+const getApiBase = () => {
+  const url = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+  // Ensure we always have /api suffix
+  return url.endsWith('/api') ? url : `${url}/api`
+}
+
 const fetchAttendanceData = async () => {
   const token = await getValidIdToken()
   if (!token) throw new Error("Not authenticated")
-  const base = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+  const base = getApiBase()
 
   const [historyRes, todayRes] = await Promise.all([
     fetch(`${base}/attendance/my-records`, { headers: { 'Authorization': `Bearer ${token}` } }),
@@ -50,10 +56,46 @@ const processRecords = (data) => {
   })
 }
 
+/**
+ * Get accurate geolocation with high accuracy enabled.
+ * Returns a Promise that resolves with { lat, lng, accuracy } or null on error.
+ */
+const getAccurateLocation = () => {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      console.warn('Geolocation not supported')
+      resolve(null)
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          timestamp: position.timestamp
+        })
+      },
+      (err) => {
+        console.warn('Geolocation error:', err.message)
+        resolve(null)
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0
+      }
+    )
+  })
+}
+
 export default function EmployeeAttendancePage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [actionLoading, setActionLoading] = useState(false)
+  const [locationStatus, setLocationStatus] = useState('') // '', 'fetching', 'success', 'error'
+  const [locationError, setLocationError] = useState(null)
 
   useEffect(() => {
     if (!localStorage.getItem("currentUser")) {
@@ -61,7 +103,7 @@ export default function EmployeeAttendancePage() {
     }
   }, [])
 
-  const { data, isLoading: loading, error } = useQuery({
+  const { data, isLoading: loading } = useQuery({
     queryKey: ['emp-attendance'],
     queryFn: fetchAttendanceData,
   })
@@ -69,25 +111,46 @@ export default function EmployeeAttendancePage() {
   const attendanceRecords = data?.records || []
   const todayRecord = data?.today || null
 
-  const handleAction = async (action) => {
+  const handleAction = useCallback(async (action) => {
     setActionLoading(true)
-    const token = await getValidIdToken()
-    if (!token) return
+    setLocationStatus('fetching')
+    setLocationError(null)
 
     try {
-      const base = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+      // Always get a fresh, accurate location right before the action
+      const freshLocation = await getAccurateLocation()
+
+      if (!freshLocation) {
+        setLocationStatus('error')
+        setLocationError('Could not get location. The action will proceed without location data.')
+      } else {
+        setLocationStatus('success')
+      }
+
+      const token = await getValidIdToken()
+      if (!token) {
+        setActionLoading(false)
+        return
+      }
+
+      const base = getApiBase()
       const response = await fetch(`${base}/attendance/record`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ action })
+        body: JSON.stringify({
+          action,
+          location: freshLocation
+        })
       })
 
       if (response.ok) {
         queryClient.invalidateQueries({ queryKey: ['emp-attendance'] })
         queryClient.invalidateQueries({ queryKey: ['emp-dashboard'] })
+        setLocationStatus('')
+        setLocationError(null)
       } else {
         const err = await response.json()
         alert(`Failed to ${action}: ${err.error}`)
@@ -98,7 +161,7 @@ export default function EmployeeAttendancePage() {
     } finally {
       setActionLoading(false)
     }
-  }
+  }, [queryClient])
 
   const isWorking = todayRecord?.checkIn && !todayRecord?.checkOut
   const isOnBreak = todayRecord?.breakIn && !todayRecord?.breakOut
@@ -176,39 +239,57 @@ export default function EmployeeAttendancePage() {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex flex-wrap gap-4 mt-4 pt-4 border-t">
-            {!todayRecord?.checkIn ? (
-              <Button onClick={() => handleAction('checkIn')} disabled={actionLoading} className="bg-emerald-600 hover:bg-emerald-700 min-w-[150px]">
-                {actionLoading ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
-                Check In
-              </Button>
-            ) : !todayRecord?.checkOut ? (
-              <>
-                <Button
-                  onClick={() => handleAction(isOnBreak ? 'breakOut' : 'breakIn')}
-                  disabled={actionLoading}
-                  variant="outline"
-                  className={`min-w-[150px] ${isOnBreak ? 'border-amber-500 text-amber-700' : 'border-blue-500 text-blue-700'}`}
-                >
-                  <Coffee className="mr-2 h-4 w-4" />
-                  {isOnBreak ? "End Break" : "Start Break"}
-                </Button>
-                <Button
-                  onClick={() => handleAction('checkOut')}
-                  disabled={actionLoading}
-                  variant="destructive"
-                  className="min-w-[150px]"
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Check Out
-                </Button>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-emerald-500" />
-                Shift completed for today
+          <div className="flex flex-col gap-2 mt-4 pt-4 border-t">
+            {locationStatus === 'fetching' && (
+              <p className="text-sm text-yellow-600 flex items-center gap-2">
+                <RefreshCw className="h-3 w-3 animate-spin" /> Getting precise GPS location...
               </p>
             )}
+            {locationStatus === 'success' && (
+              <p className="text-sm text-emerald-600 flex items-center gap-2">
+                <MapPin className="h-3 w-3" /> Location captured successfully
+              </p>
+            )}
+            {locationError && (
+              <p className="text-sm text-amber-600 flex items-center gap-2">
+                <AlertCircle className="h-3 w-3" /> {locationError}
+              </p>
+            )}
+
+            <div className="flex flex-wrap gap-4">
+              {!todayRecord?.checkIn ? (
+                <Button onClick={() => handleAction('checkIn')} disabled={actionLoading} className="bg-emerald-600 hover:bg-emerald-700 min-w-[150px]">
+                  {actionLoading ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                  Check In
+                </Button>
+              ) : !todayRecord?.checkOut ? (
+                <>
+                  <Button
+                    onClick={() => handleAction(isOnBreak ? 'breakOut' : 'breakIn')}
+                    disabled={actionLoading}
+                    variant="outline"
+                    className={`min-w-[150px] ${isOnBreak ? 'border-amber-500 text-amber-700' : 'border-blue-500 text-blue-700'}`}
+                  >
+                    <Coffee className="mr-2 h-4 w-4" />
+                    {isOnBreak ? "End Break" : "Start Break"}
+                  </Button>
+                  <Button
+                    onClick={() => handleAction('checkOut')}
+                    disabled={actionLoading}
+                    variant="destructive"
+                    className="min-w-[150px]"
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Check Out
+                  </Button>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-emerald-500" />
+                  Shift completed for today
+                </p>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -228,13 +309,14 @@ export default function EmployeeAttendancePage() {
                   <TableHead>Break</TableHead>
                   <TableHead>Check Out</TableHead>
                   <TableHead>Total Hours</TableHead>
+                  <TableHead>Location</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {attendanceRecords.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                       No attendance records found
                     </TableCell>
                   </TableRow>
@@ -244,7 +326,11 @@ export default function EmployeeAttendancePage() {
                       <TableCell className="font-medium">
                         {format(new Date(record.date), "MMM d, yyyy")}
                       </TableCell>
-                      <TableCell>{record.checkIn || '-'}</TableCell>
+                      <TableCell>
+                        {record.checkIn ? (
+                          <span className="text-sm font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{record.checkIn}</span>
+                        ) : "-"}
+                      </TableCell>
                       <TableCell>
                         {record.breakIn ? (
                           <div className="text-xs">
@@ -252,11 +338,37 @@ export default function EmployeeAttendancePage() {
                           </div>
                         ) : '-'}
                       </TableCell>
-                      <TableCell>{record.checkOut || '-'}</TableCell>
+                      <TableCell>
+                        {record.checkOut ? (
+                          <span className="text-sm font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{record.checkOut}</span>
+                        ) : "-"}
+                      </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="font-mono">
                           {record.totalHours || '0h'}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {/* Location Cell - check events array for location data */}
+                        {(() => {
+                          const checkInEvent = record.events?.find(e => e.type === 'checkIn' && e.location);
+                          if (checkInEvent?.location) {
+                            const { lat, lng } = checkInEvent.location;
+                            return (
+                              <a
+                                href={`https://www.google.com/maps?q=${lat},${lng}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                                title={`Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}, Accuracy: ${checkInEvent.location.accuracy ? Math.round(checkInEvent.location.accuracy) + 'm' : 'N/A'}`}
+                              >
+                                <MapPin className="h-3 w-3" />
+                                View Map
+                              </a>
+                            );
+                          }
+                          return <span className="text-muted-foreground text-xs">-</span>;
+                        })()}
                       </TableCell>
                       <TableCell>
                         <Badge variant={record.checkOut ? "default" : "secondary"} className={record.checkOut ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : "bg-blue-100 text-blue-800 hover:bg-blue-100"}>

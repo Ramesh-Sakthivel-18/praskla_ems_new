@@ -34,8 +34,8 @@ class AttendanceRepository extends BaseRepository {
    */
   async createOrUpdate(orgId, data) {
     try {
-      const { userId, userName, date, action, time, verifyMethod = 'manual' } = data;
-      
+      const { userId, userName, date, action, time, verifyMethod = 'manual', location } = data;
+
       // Generate attendance ID: userId_YYYY-MM-DD
       const attendanceId = `${userId}_${date}`;
       const docRef = this.getCollection(orgId).doc(attendanceId);
@@ -45,7 +45,8 @@ class AttendanceRepository extends BaseRepository {
       const event = {
         type: action, // checkIn, checkOut, breakIn, breakOut
         time: timestamp,
-        method: verifyMethod
+        method: verifyMethod,
+        location: data.location || null // Store location if provided
       };
 
       if (doc.exists) {
@@ -62,7 +63,7 @@ class AttendanceRepository extends BaseRepository {
         };
 
         await docRef.update(updateData);
-        
+
         // Fetch updated document
         const updatedDoc = await docRef.get();
         const result = { id: updatedDoc.id, ...updatedDoc.data() };
@@ -85,7 +86,7 @@ class AttendanceRepository extends BaseRepository {
         };
 
         await docRef.set(newData);
-        
+
         console.log(`✅ [AttendanceRepository] Created attendance: ${attendanceId}`);
         return newData;
       }
@@ -146,7 +147,7 @@ class AttendanceRepository extends BaseRepository {
       }
 
       const snapshot = await query.get();
-      
+
       const records = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
@@ -317,7 +318,7 @@ class AttendanceRepository extends BaseRepository {
       }
 
       await docRef.delete();
-      
+
       console.log(`✅ [AttendanceRepository] Deleted attendance: ${attendanceId}`);
       return true;
     } catch (error) {
@@ -428,7 +429,7 @@ class AttendanceRepository extends BaseRepository {
       }
 
       const snapshot = await query.get();
-      
+
       const records = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
@@ -461,7 +462,7 @@ class AttendanceRepository extends BaseRepository {
       }
 
       await batch.commit();
-      
+
       console.log(`✅ [AttendanceRepository] Batch updated ${updates.length} records`);
       return true;
     } catch (error) {

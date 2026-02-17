@@ -10,7 +10,7 @@ const statisticsService = container.getStatisticsService();
 // Now use them in routes without re-declaring
 router.post('/record', authenticateToken, requireEmployee, async (req, res) => {
   try {
-    const { action, employeeId } = req.body;
+    const { action, employeeId, location } = req.body;
     // Don't declare attendanceService again here!
 
     let userId = req.user.uid;
@@ -30,7 +30,8 @@ router.post('/record', authenticateToken, requireEmployee, async (req, res) => {
       orgId,
       userId,
       userName,
-      action
+      action,
+      { location } // Pass location in options
     );
 
     res.json({ success: true, data: result });

@@ -1,7 +1,7 @@
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -18,7 +18,6 @@ export default function EmployeeDashboardPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [currentUser, setCurrentUser] = useState(null)
-  const [actionLoading, setActionLoading] = useState(false)
 
   // Auth Check
   useEffect(() => {
@@ -86,105 +85,6 @@ export default function EmployeeDashboardPage() {
   const error = queryError?.message || null
   const loadDashboardData = () => queryClient.invalidateQueries({ queryKey: ['emp-dashboard'] })
 
-  const handleAttendanceAction = async (action) => {
-    // Avoid double clicks
-    if (actionLoading) return
-
-    // Store previous data for rollback
-    const previousData = queryClient.getQueryData(['emp-dashboard'])
-
-    // Optimistic Update
-    setActionLoading(true)
-
-    // Create optimistic attendance record
-    const now = new Date()
-    const optimisticTime = format(now, "HH:mm:ss")
-    const optimisticDate = format(now, "yyyy-MM-dd")
-
-    queryClient.setQueryData(['emp-dashboard'], (old) => {
-      if (!old) return old
-
-      const newAttendance = { ...old.attendance } || { date: optimisticDate }
-      const newStats = { ...old.stats }
-
-      // Update attendance state based on action
-      if (action === 'checkIn') {
-        newAttendance.checkIn = optimisticTime
-        newAttendance.status = 'Present'
-      } else if (action === 'checkOut') {
-        newAttendance.checkOut = optimisticTime
-        newAttendance.status = 'Checked Out'
-      } else if (action === 'breakIn') {
-        newAttendance.breakIn = optimisticTime
-        newAttendance.status = 'On Break'
-      } else if (action === 'breakOut') {
-        newAttendance.breakOut = optimisticTime
-        newAttendance.status = 'Present'
-      }
-
-      // Add fake recent record for immediate feedback
-      let newRecent = [...(old.recent || [])]
-      const actionLabels = {
-        checkIn: { label: `Checked in at ${optimisticTime}`, icon: 'CheckCircle', color: 'bg-emerald-500' },
-        checkOut: { label: `Checked out at ${optimisticTime}`, icon: 'LogOut', color: 'bg-gray-500' },
-        breakIn: { label: `Started break at ${optimisticTime}`, icon: 'Coffee', color: 'bg-amber-500' },
-        breakOut: { label: `Ended break at ${optimisticTime}`, icon: 'Coffee', color: 'bg-blue-500' }
-      }
-
-      if (actionLabels[action]) {
-        newRecent.unshift({
-          ...actionLabels[action],
-          when: optimisticDate
-        })
-      }
-
-      return {
-        ...old,
-        attendance: newAttendance,
-        recent: newRecent.slice(0, 5)
-      }
-    })
-
-    const token = await getValidIdToken()
-    const base = getApiBase()
-
-    try {
-      const response = await fetch(`${base}/api/attendance/record`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ action })
-      })
-
-      if (response.ok) {
-        // Success - invalidate to get real server data
-        queryClient.invalidateQueries({ queryKey: ['emp-dashboard'] })
-        queryClient.invalidateQueries({ queryKey: ['emp-attendance'] })
-        queryClient.invalidateQueries({ queryKey: ['emp-weekly-hours'] })
-      } else {
-        // Revert on failure
-        queryClient.setQueryData(['emp-dashboard'], previousData)
-        const err = await response.json()
-        alert(`Failed to ${action}: ${err.error}`)
-      }
-    } catch (error) {
-      // Revert on error
-      queryClient.setQueryData(['emp-dashboard'], previousData)
-      console.error('Action error:', error)
-      alert('Network error. Please try again.')
-    } finally {
-      setActionLoading(false)
-    }
-  }
-
-  const getLeaveBalancePercentage = (type) => {
-    if (!leaveBalance || !leaveBalance[type]) return 0
-    const { used, total } = leaveBalance[type]
-    return total ? Math.round((used / total) * 100) : 0
-  }
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -246,147 +146,89 @@ export default function EmployeeDashboardPage() {
                 </div>
                 <div>
                   <CardTitle className="text-xl font-semibold">Time Tracker</CardTitle>
-                  <p className="text-sm text-muted-foreground">Track your work hours</p>
+                  <CardDescription>Track your work hours</CardDescription>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className={`h-3 w-3 rounded-full ${isWorking ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'}`} />
-                <span className="text-sm font-medium">
+                <span className={`animate-pulse h-3 w-3 rounded-full ${isWorking ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
                   {isWorking ? (isOnBreak ? 'On Break' : 'Working') : 'Not Working'}
                 </span>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Current Time Display */}
-            <div className="flex flex-col items-center justify-center py-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 rounded-xl">
-              <div className={`text-6xl font-bold tracking-tighter ${isWorking ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400'}`}>
-                {format(new Date(), "HH:mm")}
-              </div>
-              <p className="text-sm text-muted-foreground mt-2">
-                {format(new Date(), "EEEE, MMMM do")}
-              </p>
-            </div>
-
-            {/* Action Buttons */}
             <div className="grid grid-cols-2 gap-4">
-              {!attendance?.checkIn ? (
-                <Button
-                  className="col-span-2 h-14 text-lg bg-emerald-600 hover:bg-emerald-700 transition-all hover:shadow-lg text-white"
-                  onClick={() => handleAttendanceAction('checkIn')}
-                  disabled={actionLoading}
-                >
-                  {actionLoading ? (
-                    <RefreshCw className="mr-2 h-5 w-5 animate-spin" />
-                  ) : (
-                    <CheckCircle className="mr-2 h-5 w-5" />
-                  )}
-                  {actionLoading ? "Processing..." : "Check In"}
-                </Button>
-              ) : !attendance?.checkOut ? (
-                <>
-                  <Button
-                    variant="outline"
-                    className={`h-14 text-lg border-2 transition-all hover:shadow-md ${isOnBreak
-                      ? 'border-blue-300 text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30'
-                      : 'border-amber-300 text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30'
-                      }`}
-                    onClick={() => handleAttendanceAction(isOnBreak ? 'breakOut' : 'breakIn')}
-                    disabled={actionLoading}
-                  >
-                    <Coffee className="mr-2 h-5 w-5" />
-                    {isOnBreak ? "End Break" : "Start Break"}
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    className="h-14 text-lg transition-all hover:shadow-md"
-                    onClick={() => handleAttendanceAction('checkOut')}
-                    disabled={actionLoading}
-                  >
-                    <LogOut className="mr-2 h-5 w-5" />
-                    Check Out
-                  </Button>
-                </>
-              ) : (
-                <div className="col-span-2 text-center p-4 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border border-emerald-200 dark:border-emerald-800">
-                  <CheckCircle className="h-6 w-6 text-emerald-600 mx-auto mb-2" />
-                  <p className="font-medium text-emerald-700 dark:text-emerald-300">
-                    You have completed your shift today
-                  </p>
-                  <p className="text-sm text-emerald-600 dark:text-emerald-400 mt-1">
-                    Checked out at {attendance.checkOut}
-                  </p>
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">Check In</p>
+                <p className="text-2xl font-mono font-bold tracking-tight">{attendance?.checkIn || '--:--'}</p>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">Check Out</p>
+                <p className="text-2xl font-mono font-bold tracking-tight">{attendance?.checkOut || '--:--'}</p>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">Break Duration</p>
+                <div className="flex items-center gap-2">
+                  <Coffee className="h-4 w-4 text-amber-500" />
+                  <p className="text-lg font-mono">{attendance?.breakIn && attendance?.breakOut ? 'Completed' : (attendance?.breakIn ? 'In Progress' : '--')}</p>
                 </div>
-              )}
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">Total Hours</p>
+                <Badge variant="outline" className="text-lg px-3 py-1 border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">
+                  {attendance?.totalHours || '0h 0m'}
+                </Badge>
+              </div>
             </div>
 
-            {/* Today's Timeline */}
-            <div className="grid grid-cols-4 gap-4 pt-4 border-t">
-              <div className="text-center">
-                <p className="text-xs text-muted-foreground mb-1">Check In</p>
-                <p className="font-semibold text-sm">{attendance?.checkIn || '--:--'}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xs text-muted-foreground mb-1">Break Start</p>
-                <p className="font-semibold text-sm">{attendance?.breakIn || '--:--'}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xs text-muted-foreground mb-1">Break End</p>
-                <p className="font-semibold text-sm">{attendance?.breakOut || '--:--'}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xs text-muted-foreground mb-1">Check Out</p>
-                <p className="font-semibold text-sm">{attendance?.checkOut || '--:--'}</p>
-              </div>
+            <div className="pt-4 border-t">
+              <Button className="w-full" onClick={() => navigate('/employee/attendance')}>
+                Go to Attendance Page <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* Stats Cards Column */}
-        <div className="space-y-4">
-          {/* Weekly Hours */}
-          <Card className="transition-all duration-300 hover:shadow-lg">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Weekly Hours</CardTitle>
-              <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/30">
-                <BarChart2 className="h-4 w-4 text-blue-600" />
-              </div>
+        {/* Stats Column */}
+        <div className="space-y-6">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Weekly Overview</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{stats.totalHours}h</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Worked this week
-              </p>
-              <Progress value={Math.min((stats.totalHours / 40) * 100, 100)} className="h-2 mt-3" />
-              <p className="text-xs text-muted-foreground mt-1">{Math.round((stats.totalHours / 40) * 100)}% of 40h target</p>
+              <div className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-2xl font-bold">{stats.totalHours} hrs</span>
+                    <BarChart2 className="h-4 w-4 text-emerald-500" />
+                  </div>
+                  <Progress value={Math.min((parseFloat(stats.totalHours) / 40) * 100, 100)} className="h-2" />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {stats.daysPresent} days present this week
+                  </p>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
-          {/* Days Present */}
-          <Card className="transition-all duration-300 hover:shadow-lg">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Attendance</CardTitle>
-              <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30">
-                <Calendar className="h-4 w-4 text-emerald-600" />
-              </div>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Leave Balance</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{stats.daysPresent} <span className="text-lg font-normal text-muted-foreground">/ 5</span></div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Days present this week
-              </p>
-              <Progress value={(stats.daysPresent / 5) * 100} className="h-2 mt-3" />
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-2xl font-bold">{leaveBalance?.annual?.remaining || 0}</span>
+                    <span className="text-sm text-muted-foreground ml-1">/ {leaveBalance?.annual?.total || 0}</span>
+                  </div>
+                  <FileText className="h-4 w-4 text-blue-500" />
+                </div>
+                <p className="text-xs text-muted-foreground">Annual leaves remaining</p>
+              </div>
             </CardContent>
           </Card>
-
-          {/* Quick Apply Leave */}
-          <Button
-            className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 transition-all text-white"
-            onClick={() => navigate("/employee/leave-requests")}
-          >
-            <FileText className="mr-2 h-5 w-5" />
-            Apply for Leave
-          </Button>
         </div>
       </div>
 

@@ -52,7 +52,8 @@ class AttendanceService {
         action,
         time,
         verifyMethod: options.verifyMethod || 'manual',
-        deviceId: options.deviceId || null
+        deviceId: options.deviceId || null,
+        location: options.location || null // Pass location to repository
       });
 
       // Calculate hours if checkOut action
