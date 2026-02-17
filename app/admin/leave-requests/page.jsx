@@ -1,7 +1,6 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState, useMemo } from "react"
+import { useNavigate } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -12,14 +11,16 @@ import { format } from "date-fns"
 import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 import { getValidIdToken } from "@/lib/firebaseClient"
 
+const getApiBase = () => import.meta.env.VITE_API_URL || "http://localhost:3000"
+
 export default function AdminLeaveRequestsPage() {
-  const router = useRouter()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   const [currentUser, setCurrentUser] = useState(null)
   const [allRequests, setAllRequests] = useState([])
   const [filteredRequests, setFilteredRequests] = useState([])
   const [statusFilter, setStatusFilter] = useState("all")
-  const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(null) // ID of request being processed
 
   const [stats, setStats] = useState({
@@ -32,24 +33,18 @@ export default function AdminLeaveRequestsPage() {
   // Auth Check
   useEffect(() => {
     if (!isAuthenticated()) {
-      router.push("/admin/login")
+      navigate("/admin/login")
       return
     }
 
     const user = getCurrentUser()
     if (!user || (user.role !== "admin" && user.role !== "system_admin")) {
-      router.push("/admin/login")
+      navigate("/admin/login")
       return
     }
 
     setCurrentUser(user)
-  }, [router])
-
-  useEffect(() => {
-    if (currentUser) {
-      loadLeaveRequests()
-    }
-  }, [currentUser])
+  }, [navigate])
 
   useEffect(() => {
     if (statusFilter === "all") {
@@ -62,72 +57,57 @@ export default function AdminLeaveRequestsPage() {
     }
   }, [statusFilter, allRequests])
 
-  const getApiBase = () => {
-    return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
-  }
-
-  const loadLeaveRequests = async () => {
-    setLoading(true)
-    const token = await getValidIdToken()
-    const base = getApiBase()
-
-    if (!token) {
-      setLoading(false)
-      return
-    }
-
-    try {
-      // 1. Fetch Employees (optional, for cross-ref if needed, but API usually handles logic)
-
-      // 2. Fetch Leaves
-      const leaveRes = await fetch(`${base}/api/leave/all`, {
+  const { data: leaveRequests = [], isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['admin-leave-requests'],
+    queryFn: async () => {
+      const token = await getValidIdToken()
+      if (!token) throw new Error("Authentication failed.")
+      const base = import.meta.env.VITE_API_URL || "http://localhost:3000"
+      const response = await fetch(`${base}/api/leave/all`, {
         headers: { Authorization: `Bearer ${token}` },
       })
+      if (!response.ok) throw new Error(`Failed to load leave requests: ${response.status}`)
+      const data = await response.json()
+      return Array.isArray(data.requests) ? data.requests : (data.data || [])
+    },
+    enabled: !!currentUser,
+  })
 
-      if (leaveRes.ok) {
-        const data = await leaveRes.json()
-        const allLeaves = Array.isArray(data.requests) ? data.requests : data.requests || []
+  // Sync query data with local state for optimistic updates
+  useEffect(() => {
+    if (leaveRequests.length > 0) {
+      setAllRequests(leaveRequests)
 
-        // Use all leaves returned by backend (backend scopes to Org)
-        const orgLeaves = allLeaves
-
-        orgLeaves.sort((a, b) => {
-          const dateA = new Date(a.createdAt || 0)
-          const dateB = new Date(b.createdAt || 0)
-          return dateB - dateA
-        })
-
-        setAllRequests(orgLeaves)
-        setFilteredRequests(orgLeaves)
-
-        const pending = orgLeaves.filter((r) => r.status?.toLowerCase() === "pending").length
-        const approved = orgLeaves.filter((r) => r.status?.toLowerCase() === "approved").length
-        const rejected = orgLeaves.filter((r) => r.status?.toLowerCase() === "rejected").length
-
-        setStats({
-          total: orgLeaves.length,
-          pending,
-          approved,
-          rejected,
-        })
-      } else {
-        setAllRequests([])
-        setFilteredRequests([])
-      }
-    } catch (error) {
-      console.error("Failed to load leave requests:", error)
-      setAllRequests([])
-      setFilteredRequests([])
-    } finally {
-      setLoading(false)
+      // Update stats
+      const pending = leaveRequests.filter((r) => r.status?.toLowerCase() === "pending").length
+      const approved = leaveRequests.filter((r) => r.status?.toLowerCase() === "approved").length
+      const rejected = leaveRequests.filter((r) => r.status?.toLowerCase() === "rejected").length
+      setStats({ total: leaveRequests.length, pending, approved, rejected })
     }
-  }
+  }, [leaveRequests])
+
+  const error = queryError?.message || null
+  const loadLeaveRequests = () => queryClient.invalidateQueries({ queryKey: ['admin-leave-requests'] })
 
   const handleUpdateStatus = async (id, status) => {
     const token = await getValidIdToken()
     const base = getApiBase()
 
     if (!token) return
+
+    const previousRequests = [...allRequests]
+
+    // Optimistic Update: Update UI immediately
+    setAllRequests(prev => prev.map(req =>
+      req.id === id ? { ...req, status: status } : req
+    ))
+
+    // Also update cached query data
+    queryClient.setQueryData(['admin-leave-requests'], (oldData) => {
+      if (!oldData) return []
+      const list = Array.isArray(oldData) ? oldData : (oldData.data || [])
+      return list.map(req => req.id === id ? { ...req, status: status } : req)
+    })
 
     setActionLoading(id)
 
@@ -142,17 +122,20 @@ export default function AdminLeaveRequestsPage() {
       })
 
       if (response.ok) {
-        // Optimistic update
-        setAllRequests(prev => prev.map(req =>
-          req.id === id ? { ...req, status: status } : req
-        ))
-        // Refresh full data to be safe
+        // Success - background refresh to ensure consistency
         loadLeaveRequests()
+        queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] })
       } else {
+        // Revert on failure
+        setAllRequests(previousRequests)
+        loadLeaveRequests()
         alert("Failed to update status")
       }
     } catch (error) {
       console.error('Error updating leave request:', error)
+      // Revert on error
+      setAllRequests(previousRequests)
+      loadLeaveRequests()
       alert("Network error")
     } finally {
       setActionLoading(null)
@@ -231,7 +214,7 @@ export default function AdminLeaveRequestsPage() {
               Refresh
             </Button>
             <Button
-              onClick={() => router.push("/admin/dashboard")}
+              onClick={() => navigate("/admin/dashboard")}
               className="bg-white text-blue-700 hover:bg-blue-50"
             >
               <ArrowLeft className="mr-2 h-4 w-4" />

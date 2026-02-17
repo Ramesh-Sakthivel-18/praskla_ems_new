@@ -146,6 +146,114 @@ router.post('/login', async (req, res) => {
 });
 
 /**
+ * POST /api/auth/google
+ * Universal Google Login endpoint
+ */
+router.post('/google', async (req, res) => {
+  try {
+    const { idToken } = req.body;
+
+    if (!idToken) {
+      return res.status(400).json({ error: 'Missing ID token' });
+    }
+
+    console.log('🔐 Google Login: Verifying token...');
+
+    // Verify token with Firebase Admin
+    const firebaseAdmin = admin();
+    const decodedToken = await firebaseAdmin.auth().verifyIdToken(idToken);
+    const { email, name, picture, uid } = decodedToken;
+
+    console.log(`✅ Token verified for: ${email}`);
+
+    // Check if user exists in Firestore
+    let user = null;
+    let userOrgId = null;
+
+    // 1. Check Root Users (System Users)
+    const db = require('firebase-admin').firestore();
+    const systemUserQuery = await db.collection('users')
+      .where('email', '==', email)
+      .limit(1)
+      .get(); // Removed isSystemUser check to allow flexible lookup first
+
+    if (!systemUserQuery.empty) {
+      const doc = systemUserQuery.docs[0];
+      user = { id: doc.id, ...doc.data() };
+      // If it has organizationId, handle it, otherwise it's system user
+      if (user.organizationId) {
+        userOrgId = user.organizationId;
+        // Refetch from Org collection to be sure? Or trust Root?
+        // Our model says users are in organizations/{orgId}/users/{userId}
+        // BUT System Admins are in /users
+        // Let's assume standard users are ONLY in orgs unless they are system users.
+      } else {
+        userOrgId = null; // System User
+      }
+      console.log('✅ Found user in global cache/system:', user.name);
+    }
+
+    // 2. If not found, Search in Organizations
+    if (!user) {
+      console.log('🔍 Searching across all organizations...');
+      const allOrgs = await orgRepo.findAllActive();
+
+      for (const org of allOrgs) {
+        const foundUser = await userRepo.findByEmail(org.id, email);
+        if (foundUser) {
+          user = foundUser;
+          userOrgId = org.id;
+          console.log('✅ User found in organization:', org.name);
+          break;
+        }
+      }
+    }
+
+    if (!user) {
+      console.log('❌ User not found for Google Login:', email);
+      return res.status(404).json({
+        error: 'User not found',
+        message: 'No account found with this email. Please contact your administrator.'
+      });
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({
+        error: 'Account inactive',
+        message: 'Your account has been deactivated.'
+      });
+    }
+
+    // Create Custom Token with claims
+    const customToken = await firebaseAdmin.auth().createCustomToken(user.id, {
+      organizationId: userOrgId,
+      role: user.role,
+      email: user.email
+    });
+
+    // Return user data
+    const { passwordHash, ...userWithoutPassword } = user;
+
+    res.json({
+      success: true,
+      message: 'Google Login successful',
+      user: {
+        ...userWithoutPassword,
+        organizationId: userOrgId
+      },
+      token: customToken
+    });
+
+  } catch (error) {
+    console.error('❌ Google Login error:', error);
+    res.status(500).json({
+      error: 'Google Login failed',
+      message: error.message
+    });
+  }
+});
+
+/**
  * POST /api/auth/register/organization
  * Register new organization with business owner
  */

@@ -18,12 +18,15 @@ class EmployeeService {
    * Constructor with dependency injection
    * @param {UserRepository} userRepository
    * @param {QuotaService} quotaService
+   * @param {QuotaService} quotaService
    * @param {OrganizationRepository} organizationRepository (optional)
+   * @param {AuditLogService} auditLogService
    */
-  constructor(userRepository, quotaService, organizationRepository = null) {
+  constructor(userRepository, quotaService, organizationRepository = null, auditLogService = null) {
     this.userRepo = userRepository;
     this.quotaService = quotaService;
     this.orgRepo = organizationRepository;
+    this.auditService = auditLogService;
   }
 
   /**
@@ -91,7 +94,19 @@ class EmployeeService {
       // 6. Record creation in quota system
       await this.quotaService.recordUserCreation(orgId, targetRole, creatorId, creatorRole);
 
-      // 7. Remove password hash from response
+      // 7. Audit Log
+      if (this.auditService) {
+        await this.auditService.log({
+          organizationId: orgId,
+          actor: { uid: creatorId, name: 'Creator', role: creatorRole }, // ideally fetch name
+          action: 'EMPLOYEE_CREATE',
+          targetId: employee.id,
+          targetType: 'employee',
+          details: { name: employeeData.name, email: employeeData.email, role: targetRole }
+        });
+      }
+
+      // 8. Remove password hash from response
       const { passwordHash: _, ...employeeWithoutPassword } = employee;
 
       console.log(`✅ Employee created successfully: ${employee.name} (${employee.id})`);
@@ -212,6 +227,18 @@ class EmployeeService {
       // Update employee
       const updated = await this.userRepo.update(orgId, employeeId, updateData);
 
+      // Audit Log
+      if (this.auditService) {
+        await this.auditService.log({
+          organizationId: orgId,
+          actor: { uid: 'system', name: 'System', role: 'system' }, // TODO: Pass user context to updateEmployee
+          action: 'EMPLOYEE_UPDATE',
+          targetId: employeeId,
+          targetType: 'employee',
+          details: { updatedFields: Object.keys(updateData) }
+        });
+      }
+
       // Remove password hash
       const { passwordHash, ...updatedWithoutPassword } = updated;
 
@@ -240,19 +267,48 @@ class EmployeeService {
         throw new Error('Employee not found');
       }
 
+      // Idempotency: If already inactive, just return success
       if (!employee.isActive) {
-        throw new Error('Employee is already inactive');
+        console.log(`⚠️ Employee ${employee.name} is already inactive. Returning success.`);
+        return {
+          id: employee.id,
+          name: employee.name,
+          email: employee.email,
+          isActive: false,
+          deletedAt: employee.deletedAt || new Date().toISOString(),
+          deletedBy
+        };
       }
+
+      // Safe role access
+      const userRole = employee.role || 'employee';
 
       // Soft delete (mark as inactive)
       const deleted = await this.userRepo.softDelete(orgId, employeeId);
 
       // Record deletion in quota system (decrement counts)
+      // Only record if we actually flipped isActive from true to false
       await this.quotaService.recordUserDeletion(
         orgId,
-        'employee',
-        employee.createdBy // Original creator ID
+        userRole, // Use actual role (admin/employee)
+        employee.createdBy || null // Original creator ID
       );
+
+      // Audit Log
+      if (this.auditService) {
+        try {
+          await this.auditService.log({
+            organizationId: orgId,
+            actor: { uid: deletedBy, name: 'User', role: 'unknown' }, // Simple actor info
+            action: 'EMPLOYEE_DELETE_SOFT',
+            targetId: employeeId,
+            targetType: userRole,
+            details: { name: employee.name, email: employee.email }
+          });
+        } catch (auditError) {
+          console.warn('⚠️ Audit log failed (non-critical):', auditError.message);
+        }
+      }
 
       console.log(`✅ Employee deactivated: ${employee.name}`);
       return {

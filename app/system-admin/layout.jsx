@@ -1,8 +1,6 @@
-"use client"
-
 import { useEffect, useState } from "react"
-import { useRouter, usePathname } from "next/navigation"
-import Link from "next/link"
+import { useNavigate, useLocation, Outlet } from "react-router-dom"
+import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
@@ -19,8 +17,8 @@ import { getCurrentUser, isAuthenticated, logoutUser } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 
 export default function SystemAdminLayout({ children }) {
-    const router = useRouter()
-    const pathname = usePathname()
+    const navigate = useNavigate()
+    const { pathname } = useLocation()
     const [currentUser, setCurrentUser] = useState(null)
     const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -33,19 +31,19 @@ export default function SystemAdminLayout({ children }) {
 
         // Check authentication
         if (!isAuthenticated()) {
-            router.push("/system-admin/login")
+            navigate("/system-admin/login")
             return
         }
 
         const user = getCurrentUser()
         if (!user || user.role !== "system_admin") {
             alert("Unauthorized. System Admin access required.")
-            router.push("/system-admin/login")
+            navigate("/system-admin/login")
             return
         }
 
         setCurrentUser(user)
-    }, [pathname, isAuthPage, router])
+    }, [pathname, isAuthPage, navigate])
 
     // If it's a login page, render without sidebar
     if (isAuthPage) {
@@ -55,7 +53,7 @@ export default function SystemAdminLayout({ children }) {
     const handleLogout = () => {
         if (window.confirm("Are you sure you want to logout?")) {
             logoutUser()
-            router.push("/system-admin/login")
+            navigate("/system-admin/login")
         }
     }
 
@@ -127,7 +125,7 @@ export default function SystemAdminLayout({ children }) {
                 <div className="flex flex-col h-full">
                     {/* Logo */}
                     <div className="p-6 border-b">
-                        <Link href="/system-admin/dashboard" className="flex items-center gap-3">
+                        <Link to="/system-admin/dashboard" className="flex items-center gap-3">
                             <div className="p-2 bg-gradient-to-r from-orange-500 to-amber-500 rounded-lg shadow-md">
                                 <Shield className="h-6 w-6 text-white" />
                             </div>
@@ -147,7 +145,7 @@ export default function SystemAdminLayout({ children }) {
                             return (
                                 <Link
                                     key={link.href}
-                                    href={link.href}
+                                    to={link.href}
                                     onClick={() => setSidebarOpen(false)}
                                     className={cn(
                                         "flex items-center gap-3 px-4 py-3 rounded-lg transition-all group",
@@ -199,7 +197,7 @@ export default function SystemAdminLayout({ children }) {
             {/* Main Content */}
             <main className="lg:pl-64 pt-16 lg:pt-0 min-h-screen transition-all">
                 <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
-                    {children}
+                    {children || <Outlet />}
                 </div>
             </main>
         </div>

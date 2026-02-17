@@ -1,7 +1,6 @@
-"use client"
-
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useNavigate } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -30,12 +29,22 @@ import {
 import { safeRedirect } from "@/lib/redirectUtils"
 import { format } from "date-fns"
 
+const getApiBase = () => import.meta.env.VITE_API_URL || "http://localhost:3000"
+
+const fetchOrgDetails = async () => {
+  const token = localStorage.getItem("firebaseToken")
+  const base = getApiBase()
+  const orgRes = await fetch(`${base}/api/admin/organization`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!orgRes.ok) throw new Error("Failed to load organization")
+  return orgRes.json()
+}
+
 export default function BusinessOwnerProfilePage() {
-  const router = useRouter()
+  const navigate = useNavigate()
 
   const [currentUser, setCurrentUser] = useState(null)
-  const [organization, setOrganization] = useState(null)
-  const [loading, setLoading] = useState(true)
 
   const [editMode, setEditMode] = useState(false)
   const [editedProfile, setEditedProfile] = useState({
@@ -57,17 +66,15 @@ export default function BusinessOwnerProfilePage() {
   useEffect(() => {
     const current = localStorage.getItem("currentUser")
     if (!current) {
-      safeRedirect(router, "/business-owner/login")
+      safeRedirect(navigate, "/business-owner/login")
       return
     }
-
     const emp = JSON.parse(current)
     if (emp.role !== "business_owner") {
       alert("Unauthorized. Business Owner access required.")
-      safeRedirect(router, "/role-selection")
+      safeRedirect(navigate, "/role-selection")
       return
     }
-
     setCurrentUser(emp)
     setEditedProfile({
       name: emp.name || "",
@@ -75,34 +82,13 @@ export default function BusinessOwnerProfilePage() {
       department: emp.department || "",
       position: emp.position || "Business Owner",
     })
+  }, [navigate])
 
-    loadOrganizationDetails(emp)
-  }, [router])
-
-  const getApiBase = () => {
-    return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
-  }
-
-  const loadOrganizationDetails = async (user) => {
-    setLoading(true)
-    const token = localStorage.getItem("firebaseToken")
-    const base = getApiBase()
-
-    try {
-      const orgRes = await fetch(`${base}/api/admin/organization`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-
-      if (orgRes.ok) {
-        const data = await orgRes.json()
-        setOrganization(data)
-      }
-    } catch (error) {
-      console.error("Failed to load organization:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const { data: organization = null, isLoading: loading } = useQuery({
+    queryKey: ['bo-organization'],
+    queryFn: fetchOrgDetails,
+    enabled: !!currentUser,
+  })
 
   const handleSaveProfile = async () => {
     const token = localStorage.getItem("firebaseToken")
@@ -241,7 +227,7 @@ export default function BusinessOwnerProfilePage() {
               </div>
             </div>
             <Button
-              onClick={() => router.push("/business-owner/dashboard")}
+              onClick={() => navigate("/business-owner/dashboard")}
               className="bg-white text-purple-700 hover:bg-purple-50"
             >
               <ArrowLeft className="mr-2 h-4 w-4" />

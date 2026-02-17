@@ -1,7 +1,6 @@
-"use client"
-
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useNavigate } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,64 +13,74 @@ import { format } from "date-fns"
 import { safeRedirect } from "@/lib/redirectUtils"
 import { getValidIdToken } from "@/lib/firebaseClient"
 
+const getApiBase = () => import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+
+const fetchMyLeaves = async () => {
+    const token = await getValidIdToken()
+    if (!token) throw new Error("Not authenticated")
+    const response = await fetch(`${getApiBase()}/leave/my-leaves`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+    })
+    if (!response.ok) throw new Error(`Failed: ${response.status}`)
+    const result = await response.json()
+    return result.data || result.requests || (Array.isArray(result) ? result : [])
+}
+
 export default function EmployeeLeavePage() {
-    const router = useRouter()
+    const navigate = useNavigate()
+    const queryClient = useQueryClient()
     const [activeTab, setActiveTab] = useState("my-requests")
-    const [myRequests, setMyRequests] = useState([])
     const [formData, setFormData] = useState({
         startDate: "",
         endDate: "",
         reason: "",
         leaveType: "vacation"
     })
-    const [loading, setLoading] = useState(false)
     const [submitting, setSubmitting] = useState(false)
 
     useEffect(() => {
         if (!localStorage.getItem("currentUser")) {
-            safeRedirect(router, "/employee/login")
-            return
+            safeRedirect(navigate, "/employee/login")
         }
-        loadData()
     }, [])
 
-    const getApiBase = () => {
-        return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api'
-    }
-
-    const loadData = async () => {
-        setLoading(true)
-        const token = await getValidIdToken()
-        if (!token) {
-            setLoading(false)
-            return
-        }
-
-        try {
-            const response = await fetch(`${getApiBase()}/leave/my-leaves`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
-
-            if (response.ok) {
-                const result = await response.json()
-                // Backend returns { success: true, count: N, data: [...] }
-                const leaves = result.data || result.requests || (Array.isArray(result) ? result : [])
-                setMyRequests(leaves)
-            } else {
-                console.error('Failed to load leaves:', response.status)
-            }
-        } catch (error) {
-            console.error('Error loading leaves:', error)
-        } finally {
-            setLoading(false)
-        }
-    }
+    const { data: myRequests = [], isLoading: loading } = useQuery({
+        queryKey: ['emp-my-leaves'],
+        queryFn: fetchMyLeaves,
+    })
 
     const handleSubmit = async (e) => {
         e.preventDefault()
         setSubmitting(true)
         const token = await getValidIdToken()
         if (!token) return
+
+        // 1. Snapshot previous data
+        const previousData = queryClient.getQueryData(['emp-my-leaves'])
+
+        // 2. Optimistic Update
+        const tempId = `temp-${Date.now()}`
+        const newLeave = {
+            id: tempId,
+            ...formData,
+            status: 'Pending',
+            createdAt: new Date().toISOString(),
+            days: Math.ceil((new Date(formData.endDate) - new Date(formData.startDate)) / (1000 * 60 * 60 * 24)) + 1
+        }
+
+        queryClient.setQueryData(['emp-my-leaves'], (oldData) => {
+            const list = Array.isArray(oldData) ? oldData : (oldData?.data || oldData?.requests || [])
+            return [newLeave, ...list]
+        })
+
+        // Close form immediately
+        setFormData({
+            startDate: "",
+            endDate: "",
+            reason: "",
+            leaveType: "vacation"
+        })
+        setActiveTab("my-requests")
 
         try {
             const response = await fetch(`${getApiBase()}/leave/apply`, {
@@ -84,21 +93,22 @@ export default function EmployeeLeavePage() {
             })
 
             if (response.ok) {
-                alert('Leave application submitted successfully!')
-                setFormData({
-                    startDate: "",
-                    endDate: "",
-                    reason: "",
-                    leaveType: "vacation"
-                })
-                setActiveTab("my-requests")
-                loadData()
+                // Success - invalidate to get real server data (with real ID)
+                queryClient.invalidateQueries({ queryKey: ['emp-my-leaves'] })
+                queryClient.invalidateQueries({ queryKey: ['emp-dashboard'] })
+                // alert('Leave application submitted successfully!') // Optional: Remove alert for smoother flow? Or keep it?
+                // User sees it in the list, so maybe toast is better, but alert is consistent with app.
+                // kept simple for now. 
             } else {
+                // Revert
+                queryClient.setQueryData(['emp-my-leaves'], previousData)
                 const errorData = await response.json()
                 alert(errorData.error || 'Failed to submit application')
             }
         } catch (error) {
             console.error('Error submitting:', error)
+            // Revert
+            queryClient.setQueryData(['emp-my-leaves'], previousData)
             alert('Network error')
         } finally {
             setSubmitting(false)
@@ -108,22 +118,36 @@ export default function EmployeeLeavePage() {
     const handleCancel = async (leaveId) => {
         if (!confirm("Are you sure you want to cancel this leave request?")) return
 
+        // Optimistic Update
+        queryClient.setQueryData(['emp-my-leaves'], (oldData) => {
+            if (!oldData) return []
+            const list = Array.isArray(oldData) ? oldData : (oldData.data || [])
+            return list.filter(req => req.id !== leaveId)
+        })
+
         const token = await getValidIdToken()
         if (!token) return
 
         try {
             const response = await fetch(`${getApiBase()}/leave/${leaveId}`, {
-                method: 'DELETE', // Assuming backend supports DELETE /leave/:id for cancellation
+                method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             })
 
             if (response.ok) {
-                loadData()
+                // Background refresh to ensure consistency
+                queryClient.invalidateQueries({ queryKey: ['emp-my-leaves'] })
+                queryClient.invalidateQueries({ queryKey: ['emp-dashboard'] })
             } else {
                 alert('Failed to cancel leave')
+                // Revert
+                queryClient.invalidateQueries({ queryKey: ['emp-my-leaves'] })
             }
         } catch (error) {
             console.error('Error cancelling:', error)
+            alert('Network error')
+            // Revert
+            queryClient.invalidateQueries({ queryKey: ['emp-my-leaves'] })
         }
     }
 
@@ -208,7 +232,6 @@ export default function EmployeeLeavePage() {
 
                                             {req.status === 'Pending' && (
                                                 <div className="flex gap-2">
-                                                    {/* Edit could be added here */}
                                                     <Button
                                                         variant="outline"
                                                         size="sm"

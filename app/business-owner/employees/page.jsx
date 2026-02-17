@@ -1,7 +1,6 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState, useMemo } from "react"
+import { useNavigate } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,15 +28,31 @@ import {
 } from "lucide-react"
 import { safeRedirect } from "@/lib/redirectUtils"
 
+const getApiBase = () => import.meta.env.VITE_API_URL || "http://localhost:3000"
+
+const fetchEmployees = async () => {
+  const token = localStorage.getItem("firebaseToken")
+  const base = getApiBase()
+  if (!token) throw new Error("Authentication token not found. Please login again.")
+
+  // Fetch ONLY active employees/admins to prevent deleted ones from showing up
+  const employeesRes = await fetch(`${base}/api/admin/employees?isActive=true`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  if (employeesRes.status === 401) throw new Error("SESSION_EXPIRED")
+  if (!employeesRes.ok) throw new Error(`Failed to load employees: ${employeesRes.status}`)
+
+  const orgEmployees = await employeesRes.json()
+  return Array.isArray(orgEmployees) ? orgEmployees : (orgEmployees.employees || [])
+}
+
 export default function BusinessOwnerEmployeesPage() {
-  const router = useRouter()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   const [currentUser, setCurrentUser] = useState(null)
-  const [employees, setEmployees] = useState([])
-  const [filteredEmployees, setFilteredEmployees] = useState([])
   const [searchQuery, setSearchQuery] = useState("")
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
 
   const [showCreateAdmin, setShowCreateAdmin] = useState(false)
   const [createLoading, setCreateLoading] = useState(false)
@@ -53,97 +68,40 @@ export default function BusinessOwnerEmployeesPage() {
   useEffect(() => {
     const current = localStorage.getItem("currentUser")
     if (!current) {
-      safeRedirect(router, "/business-owner/login")
+      safeRedirect(navigate, "/business-owner/login")
       return
     }
-
     const emp = JSON.parse(current)
     if (emp.role !== "business_owner") {
       alert("Unauthorized. Business Owner access required.")
-      safeRedirect(router, "/role-selection")
+      safeRedirect(navigate, "/role-selection")
       return
     }
-
     setCurrentUser(emp)
-  }, [router])
+  }, [navigate])
 
-  useEffect(() => {
-    if (currentUser) {
-      loadEmployees()
-    }
-  }, [currentUser])
+  const { data: employees = [], isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['bo-employees'],
+    queryFn: fetchEmployees,
+    enabled: !!currentUser,
+  })
 
-  useEffect(() => {
-    if (!Array.isArray(employees)) return
-    const filtered = employees.filter((emp) => {
-      const query = searchQuery.toLowerCase()
-      return (
-        emp.name?.toLowerCase().includes(query) ||
-        emp.email?.toLowerCase().includes(query) ||
-        emp.department?.toLowerCase().includes(query) ||
-        emp.position?.toLowerCase().includes(query)
-      )
-    })
-    setFilteredEmployees(filtered)
+  const error = queryError?.message === "SESSION_EXPIRED"
+    ? (() => { setTimeout(() => { localStorage.clear(); safeRedirect(navigate, "/business-owner/login") }, 2000); return "Session expired. Please login again." })()
+    : queryError?.message || null
+
+  const filteredEmployees = useMemo(() => {
+    if (!Array.isArray(employees)) return []
+    const query = searchQuery.toLowerCase()
+    return employees.filter((emp) =>
+      emp.name?.toLowerCase().includes(query) ||
+      emp.email?.toLowerCase().includes(query) ||
+      emp.department?.toLowerCase().includes(query) ||
+      emp.position?.toLowerCase().includes(query)
+    )
   }, [searchQuery, employees])
 
-  const getApiBase = () => {
-    return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
-  }
-
-  const loadEmployees = async () => {
-    console.log("🔄 loadEmployees called, currentUser:", currentUser)
-    setLoading(true)
-    setError(null)
-
-    const token = localStorage.getItem("firebaseToken")
-    const base = getApiBase()
-
-    console.log("🔑 Token:", token ? "Present" : "Missing")
-    console.log("🌐 API Base:", base)
-
-    if (!token) {
-      setError("Authentication token not found. Please login again.")
-      setLoading(false)
-      return
-    }
-
-    try {
-      console.log("📡 Fetching employees...")
-      const employeesRes = await fetch(`${base}/api/admin/employees`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-
-      console.log("📊 Response status:", employeesRes.status)
-
-      if (employeesRes.ok) {
-        const orgEmployees = await employeesRes.json()
-        console.log("✅ Employees received:", orgEmployees)
-        console.log("📋 Type:", typeof orgEmployees, "Is Array:", Array.isArray(orgEmployees))
-        console.log("📋 Length:", Array.isArray(orgEmployees) ? orgEmployees.length : "N/A")
-
-        // Ensure we always set an array
-        const employeeArray = Array.isArray(orgEmployees) ? orgEmployees : (orgEmployees.employees || [])
-        console.log("📋 Setting employees array with length:", employeeArray.length)
-
-        setEmployees(employeeArray)
-        setFilteredEmployees(employeeArray)
-      } else if (employeesRes.status === 401) {
-        setError("Session expired. Please login again.")
-        setTimeout(() => {
-          localStorage.clear()
-          safeRedirect(router, "/business-owner/login")
-        }, 2000)
-      } else {
-        setError(`Failed to load employees: ${employeesRes.status}`)
-      }
-    } catch (error) {
-      console.error("Network error loading employees:", error)
-      setError("Network error. Please check your connection and try again.")
-    } finally {
-      setLoading(false)
-    }
-  }
+  const loadEmployees = () => queryClient.invalidateQueries({ queryKey: ['bo-employees'] })
 
   const handleCreateAdmin = async (e) => {
     e.preventDefault()
@@ -189,7 +147,9 @@ export default function BusinessOwnerEmployeesPage() {
         const adminEmail = newAdmin.email
         const adminPassword = newAdmin.password
 
-        setEmployees((prev) => [createdAdmin, ...prev])
+        // Invalidate both employees AND dashboard caches so they refresh instantly
+        queryClient.invalidateQueries({ queryKey: ['bo-employees'] })
+        queryClient.invalidateQueries({ queryKey: ['bo-dashboard'] })
 
         setShowCreateAdmin(false)
         setShowPassword(false)
@@ -223,13 +183,17 @@ export default function BusinessOwnerEmployeesPage() {
       return
     }
 
+    // Optimistic Update: Immediately remove from UI before API call finishes
+    queryClient.setQueryData(['bo-employees'], (oldData) => {
+      if (!oldData) return []
+      const list = Array.isArray(oldData) ? oldData : (oldData.employees || [])
+      return list.filter(emp => emp.id !== adminId)
+    })
+
     const token = localStorage.getItem("firebaseToken")
     const base = getApiBase()
 
     try {
-      const prevEmployees = [...employees]
-      setEmployees((prev) => prev.filter((e) => e.id !== adminId))
-
       const response = await fetch(`${base}/api/admin/employees/${adminId}`, {
         method: "DELETE",
         headers: {
@@ -238,15 +202,18 @@ export default function BusinessOwnerEmployeesPage() {
       })
 
       if (response.ok) {
-        alert("Admin deleted successfully!")
+        // Success - trigger background refresh to be sure
+        queryClient.invalidateQueries({ queryKey: ['bo-employees'] })
+        queryClient.invalidateQueries({ queryKey: ['bo-dashboard'] })
       } else {
-        setEmployees(prevEmployees)
         alert("Failed to delete admin")
+        // Revert optimistic update
+        queryClient.invalidateQueries({ queryKey: ['bo-employees'] })
       }
     } catch (error) {
       console.error("Delete admin error:", error)
       alert("Network error")
-      loadEmployees()
+      queryClient.invalidateQueries({ queryKey: ['bo-employees'] })
     }
   }
 
@@ -300,7 +267,7 @@ export default function BusinessOwnerEmployeesPage() {
                 Refresh
               </Button>
               <Button
-                onClick={() => router.push("/business-owner/dashboard")}
+                onClick={() => navigate("/business-owner/dashboard")}
                 className="bg-white text-purple-700 hover:bg-purple-50"
               >
                 <ArrowLeft className="mr-2 h-4 w-4" />
@@ -641,8 +608,15 @@ export default function BusinessOwnerEmployeesPage() {
                       <TableCell>{emp.position || "-"}</TableCell>
                       <TableCell>{emp.workingType || "-"}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800">
-                          Active
+                        <Badge
+                          variant="outline"
+                          className={
+                            emp.isActive === false
+                              ? "bg-red-50 text-red-700 border-red-200"
+                              : "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800"
+                          }
+                        >
+                          {emp.isActive === false ? 'Inactive' : 'Active'}
                         </Badge>
                       </TableCell>
                     </TableRow>

@@ -1,14 +1,11 @@
-"use client"
-
 import { cn } from "@/lib/utils"
 import { LayoutDashboard, Users, Clock, FileText, UserCircle, LogOut } from "lucide-react"
-import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 import { handleLogout } from "@/lib/redirectUtils"
 
 export function AdminSidebar() {
-  const pathname = usePathname()
-  const router = useRouter()
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
 
   const navItems = [
     { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -19,7 +16,7 @@ export function AdminSidebar() {
   ]
 
   const handleAdminLogout = () => {
-    handleLogout(router, 'admin')
+    handleLogout(navigate, 'admin')
   }
 
   return (
@@ -36,7 +33,7 @@ export function AdminSidebar() {
           return (
             <Link
               key={item.href}
-              href={item.href}
+              to={item.href}
               className={cn(
                 "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
                 isActive

@@ -255,10 +255,21 @@ class QuotaService {
       await this.orgRepo.decrementUserCount(orgId, role);
       console.log(`✅ Decremented organization ${role} count`);
 
-      // If employee was created by admin, decrement admin's quota
+      // If employee was created by an admin, decrement admin's quota
       if (role === 'employee' && creatorId) {
-        await this.userRepo.decrementAdminQuota(orgId, creatorId);
-        console.log(`✅ Decremented admin quota for ${creatorId}`);
+        try {
+          // Check if the creator is actually an admin before decrementing
+          const creator = await this.userRepo.findById(orgId, creatorId);
+          if (creator && creator.role === 'admin') {
+            await this.userRepo.decrementAdminQuota(orgId, creatorId);
+            console.log(`✅ Decremented admin quota for ${creatorId}`);
+          } else {
+            console.log(`ℹ️ Creator ${creatorId} is not an admin (role: ${creator?.role}), skipping quota decrement`);
+          }
+        } catch (quotaError) {
+          // Non-critical: don't fail the deletion just because quota decrement failed
+          console.warn(`⚠️ Could not decrement admin quota for ${creatorId}:`, quotaError.message);
+        }
       }
     } catch (error) {
       console.error('❌ QuotaService: Error recording user deletion:', error);

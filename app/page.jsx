@@ -1,13 +1,11 @@
-"use client"
-
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Building2, Users, Clock, BarChart3 } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { useNavigate } from "react-router-dom"
 import { safeRedirect } from "@/lib/redirectUtils"
 
 export default function LandingPage() {
-  const router = useRouter()
+  const navigate = useNavigate()
 
   return (
     <div className="min-h-screen bg-background">
@@ -23,7 +21,7 @@ export default function LandingPage() {
               modern offices and remote teams.
             </p>
             <div className="pt-4">
-              <Button size="lg" className="text-lg px-8 py-6" onClick={() => safeRedirect(router, "/role-selection")}>
+              <Button size="lg" className="text-lg px-8 py-6" onClick={() => safeRedirect(navigate, "/role-selection")}>
                 Get Started
               </Button>
             </div>

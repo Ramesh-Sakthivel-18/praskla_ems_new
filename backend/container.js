@@ -19,6 +19,7 @@ const UserRepository = require('./repositories/UserRepository');
 const AttendanceRepository = require('./repositories/AttendanceRepository');
 const LeaveRepository = require('./repositories/LeaveRepository');
 const StatisticsRepository = require('./repositories/StatisticsRepository');
+const AuditLogRepository = require('./repositories/AuditLogRepository');
 
 // ========================================
 // SERVICES
@@ -28,6 +29,9 @@ const QuotaService = require('./services/QuotaService');
 const EmployeeService = require('./services/EmployeeService');
 const LeaveService = require('./services/LeaveService');
 const StatisticsService = require('./services/StatisticsService');
+
+const AuditLogService = require('./services/AuditLogService');
+const NotificationService = require('./services/NotificationService');
 
 /**
  * Container Class
@@ -53,14 +57,22 @@ class Container {
     this.attendanceRepo = new AttendanceRepository(this.db);
     this.leaveRepo = new LeaveRepository(this.db);
     this.statisticsRepo = new StatisticsRepository(this.db);
+    this.auditLogRepo = new AuditLogRepository(this.db);
     console.log('✅ Repositories initialized');
 
     // ========================================
     // Initialize Services (with dependencies)
     // ========================================
+    this.notificationService = new NotificationService();
+    console.log('✅ NotificationService initialized');
+
+    this.auditLogService = new AuditLogService(this.auditLogRepo);
+    console.log('✅ AuditLogService initialized');
+
     this.attendanceService = new AttendanceService(
       this.attendanceRepo,
-      this.userRepo
+      this.userRepo,
+      this.notificationService
     );
     console.log('✅ AttendanceService initialized');
 
@@ -73,13 +85,16 @@ class Container {
     this.employeeService = new EmployeeService(
       this.userRepo,
       this.quotaService,
-      this.organizationRepo
+      this.organizationRepo,
+      this.auditLogService
     );
     console.log('✅ EmployeeService initialized');
 
     this.leaveService = new LeaveService(
       this.leaveRepo,
-      this.userRepo
+      this.userRepo,
+      this.auditLogService,
+      this.notificationService
     );
     console.log('✅ LeaveService initialized');
 
@@ -149,6 +164,14 @@ class Container {
     return this.statisticsService;
   }
 
+  /**
+   * Get AuditLogService instance
+   * @returns {AuditLogService}
+   */
+  getAuditLogService() {
+    return this.auditLogService;
+  }
+
   // ========================================
   // REPOSITORY GETTERS
   // ========================================
@@ -194,11 +217,38 @@ class Container {
   }
 
   /**
+   * Get AuditLogRepository instance
+   * @returns {AuditLogRepository}
+   */
+  getAuditLogRepo() {
+    return this.auditLogRepo;
+  }
+
+  /**
    * Get Firestore database instance
    * @returns {FirebaseFirestore.Firestore}
    */
   getDatabase() {
     return this.db;
+  }
+
+  /**
+   * Initialize Socket.io
+   * @param {Object} io 
+   */
+  initSocket(io) {
+    if (this.notificationService) {
+      this.notificationService.setIo(io);
+      console.log('✅ Socket.io initialized in Container');
+    }
+  }
+
+  /**
+   * Get NotificationService instance
+   * @returns {NotificationService}
+   */
+  getNotificationService() {
+    return this.notificationService;
   }
 
   /**

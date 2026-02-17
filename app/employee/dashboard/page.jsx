@@ -1,7 +1,6 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState, useMemo } from "react"
+import { useNavigate } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -16,51 +15,34 @@ import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 import { getValidIdToken } from "@/lib/firebaseClient"
 
 export default function EmployeeDashboardPage() {
-  const router = useRouter()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [currentUser, setCurrentUser] = useState(null)
-  const [attendance, setAttendance] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [stats, setStats] = useState({ totalHours: 0, daysPresent: 0 })
-  const [leaveBalance, setLeaveBalance] = useState(null)
-  const [upcomingLeaves, setUpcomingLeaves] = useState([])
-  const [recent, setRecent] = useState([])
   const [actionLoading, setActionLoading] = useState(false)
 
   // Auth Check
   useEffect(() => {
     if (!isAuthenticated()) {
-      safeRedirect(router, "/employee/login")
+      safeRedirect(navigate, "/employee/login")
       return
     }
 
     const user = getCurrentUser()
     if (!user || user.role !== 'employee') {
-      safeRedirect(router, "/employee/login")
+      safeRedirect(navigate, "/employee/login")
       return
     }
 
     setCurrentUser(user)
-    loadDashboardData()
-  }, [router])
+  }, [navigate])
 
-  const getApiBase = () => {
-    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
-  }
+  const getApiBase = () => import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
-  const loadDashboardData = async () => {
-    setLoading(true)
-    setError(null)
-    const token = await getValidIdToken()
-    const base = getApiBase()
-
-    if (!token) {
-      // Don't error hard on dashboard load, just redirect or show empty state if truly invalid
-      // But here allow soft fail
-    }
-
-    try {
-      // Fetch all data in parallel
+  const { data: dashboardData = {}, isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['emp-dashboard'],
+    queryFn: async () => {
+      const token = await getValidIdToken()
+      const base = getApiBase()
       const [todayRes, weeklyRes, balanceRes, upcomingRes, recordsRes] = await Promise.all([
         fetch(`${base}/api/attendance/today`, { headers: { 'Authorization': `Bearer ${token}` } }),
         fetch(`${base}/api/attendance/weekly-hours`, { headers: { 'Authorization': `Bearer ${token}` } }),
@@ -69,60 +51,100 @@ export default function EmployeeDashboardPage() {
         fetch(`${base}/api/attendance/my-records`, { headers: { 'Authorization': `Bearer ${token}` } })
       ])
 
-      // Process today's attendance
-      if (todayRes.ok) {
-        const data = await todayRes.json()
-        setAttendance(data)
-      }
-
-      // Process weekly stats
-      if (weeklyRes.ok) {
-        const data = await weeklyRes.json()
-        setStats({
-          totalHours: data.stats?.totalHours || 0,
-          daysPresent: data.stats?.daysWorked || 0
-        })
-      }
-
-      // Process recent activity from my-records
+      const result = {}
+      if (todayRes.ok) result.attendance = await todayRes.json()
+      if (weeklyRes.ok) { const d = await weeklyRes.json(); result.stats = { totalHours: d.stats?.totalHours || 0, daysPresent: d.stats?.daysWorked || 0 } }
+      else result.stats = { totalHours: 0, daysPresent: 0 }
+      if (balanceRes.ok) { const d = await balanceRes.json(); result.leaveBalance = d.data || null }
+      if (upcomingRes.ok) { const d = await upcomingRes.json(); result.upcomingLeaves = d.data || [] }
       if (recordsRes.ok) {
         const records = await recordsRes.json()
         const recordsArray = Array.isArray(records) ? records : (records.data || records.records || [])
-
-        // Build recent activity from attendance records
         const items = recordsArray.slice(0, 5).flatMap(d => {
           const events = []
-          if (d.checkIn) events.push({ label: `Checked in at ${d.checkIn}`, when: d.date, color: 'bg-emerald-500', icon: CheckCircle })
-          if (d.breakIn) events.push({ label: `Started break at ${d.breakIn}`, when: d.date, color: 'bg-amber-500', icon: Coffee })
-          if (d.breakOut) events.push({ label: `Ended break at ${d.breakOut}`, when: d.date, color: 'bg-blue-500', icon: Coffee })
-          if (d.checkOut) events.push({ label: `Checked out at ${d.checkOut}`, when: d.date, color: 'bg-gray-500', icon: LogOut })
+          if (d.checkIn) events.push({ label: `Checked in at ${d.checkIn}`, when: d.date, color: 'bg-emerald-500', icon: 'CheckCircle' })
+          if (d.breakIn) events.push({ label: `Started break at ${d.breakIn}`, when: d.date, color: 'bg-amber-500', icon: 'Coffee' })
+          if (d.breakOut) events.push({ label: `Ended break at ${d.breakOut}`, when: d.date, color: 'bg-blue-500', icon: 'Coffee' })
+          if (d.checkOut) events.push({ label: `Checked out at ${d.checkOut}`, when: d.date, color: 'bg-gray-500', icon: 'LogOut' })
           return events
         })
-        setRecent(items.slice(0, 5))
+        result.recent = items.slice(0, 5)
       }
+      return result
+    },
+    enabled: !!currentUser,
+  })
 
-      // Process leave balance
-      if (balanceRes.ok) {
-        const data = await balanceRes.json()
-        setLeaveBalance(data.data || null)
-      }
-
-      // Process upcoming leaves
-      if (upcomingRes.ok) {
-        const data = await upcomingRes.json()
-        setUpcomingLeaves(data.data || [])
-      }
-
-    } catch (err) {
-      console.error('Error loading dashboard:', err)
-      // setError(`Failed to load dashboard: ${err.message}`) // Optional: Suppress dashboard errors for cleaner UI, or show toast
-    } finally {
-      setLoading(false)
-    }
-  }
+  const attendance = dashboardData?.attendance || null
+  const stats = dashboardData?.stats || { totalHours: 0, daysPresent: 0 }
+  const leaveBalance = dashboardData?.leaveBalance || null
+  const upcomingLeaves = dashboardData?.upcomingLeaves || []
+  const recent = (dashboardData?.recent || []).map(item => ({
+    ...item,
+    icon: item.icon === 'CheckCircle' ? CheckCircle : item.icon === 'Coffee' ? Coffee : LogOut
+  }))
+  const error = queryError?.message || null
+  const loadDashboardData = () => queryClient.invalidateQueries({ queryKey: ['emp-dashboard'] })
 
   const handleAttendanceAction = async (action) => {
+    // Avoid double clicks
+    if (actionLoading) return
+
+    // Store previous data for rollback
+    const previousData = queryClient.getQueryData(['emp-dashboard'])
+
+    // Optimistic Update
     setActionLoading(true)
+
+    // Create optimistic attendance record
+    const now = new Date()
+    const optimisticTime = format(now, "HH:mm:ss")
+    const optimisticDate = format(now, "yyyy-MM-dd")
+
+    queryClient.setQueryData(['emp-dashboard'], (old) => {
+      if (!old) return old
+
+      const newAttendance = { ...old.attendance } || { date: optimisticDate }
+      const newStats = { ...old.stats }
+
+      // Update attendance state based on action
+      if (action === 'checkIn') {
+        newAttendance.checkIn = optimisticTime
+        newAttendance.status = 'Present'
+      } else if (action === 'checkOut') {
+        newAttendance.checkOut = optimisticTime
+        newAttendance.status = 'Checked Out'
+      } else if (action === 'breakIn') {
+        newAttendance.breakIn = optimisticTime
+        newAttendance.status = 'On Break'
+      } else if (action === 'breakOut') {
+        newAttendance.breakOut = optimisticTime
+        newAttendance.status = 'Present'
+      }
+
+      // Add fake recent record for immediate feedback
+      let newRecent = [...(old.recent || [])]
+      const actionLabels = {
+        checkIn: { label: `Checked in at ${optimisticTime}`, icon: 'CheckCircle', color: 'bg-emerald-500' },
+        checkOut: { label: `Checked out at ${optimisticTime}`, icon: 'LogOut', color: 'bg-gray-500' },
+        breakIn: { label: `Started break at ${optimisticTime}`, icon: 'Coffee', color: 'bg-amber-500' },
+        breakOut: { label: `Ended break at ${optimisticTime}`, icon: 'Coffee', color: 'bg-blue-500' }
+      }
+
+      if (actionLabels[action]) {
+        newRecent.unshift({
+          ...actionLabels[action],
+          when: optimisticDate
+        })
+      }
+
+      return {
+        ...old,
+        attendance: newAttendance,
+        recent: newRecent.slice(0, 5)
+      }
+    })
+
     const token = await getValidIdToken()
     const base = getApiBase()
 
@@ -137,42 +159,19 @@ export default function EmployeeDashboardPage() {
       })
 
       if (response.ok) {
-        const data = await response.json()
-        // Update attendance state directly from the response
-        setAttendance(data.data || data.record)
-
-        // Only refresh attendance-related data (not leave balance which doesn't change)
-        const [weeklyRes, recordsRes] = await Promise.all([
-          fetch(`${base}/api/attendance/weekly-hours`, { headers: { 'Authorization': `Bearer ${token}` } }),
-          fetch(`${base}/api/attendance/my-records`, { headers: { 'Authorization': `Bearer ${token}` } })
-        ])
-
-        if (weeklyRes.ok) {
-          const weeklyData = await weeklyRes.json()
-          setStats({
-            totalHours: weeklyData.stats?.totalHours || 0,
-            daysPresent: weeklyData.stats?.daysWorked || 0
-          })
-        }
-
-        if (recordsRes.ok) {
-          const records = await recordsRes.json()
-          const recordsArray = Array.isArray(records) ? records : (records.data || records.records || [])
-          const items = recordsArray.slice(0, 5).flatMap(d => {
-            const events = []
-            if (d.checkIn) events.push({ label: `Checked in at ${d.checkIn}`, when: d.date, color: 'bg-emerald-500', icon: CheckCircle })
-            if (d.breakIn) events.push({ label: `Started break at ${d.breakIn}`, when: d.date, color: 'bg-amber-500', icon: Coffee })
-            if (d.breakOut) events.push({ label: `Ended break at ${d.breakOut}`, when: d.date, color: 'bg-blue-500', icon: Coffee })
-            if (d.checkOut) events.push({ label: `Checked out at ${d.checkOut}`, when: d.date, color: 'bg-gray-500', icon: LogOut })
-            return events
-          })
-          setRecent(items.slice(0, 5))
-        }
+        // Success - invalidate to get real server data
+        queryClient.invalidateQueries({ queryKey: ['emp-dashboard'] })
+        queryClient.invalidateQueries({ queryKey: ['emp-attendance'] })
+        queryClient.invalidateQueries({ queryKey: ['emp-weekly-hours'] })
       } else {
+        // Revert on failure
+        queryClient.setQueryData(['emp-dashboard'], previousData)
         const err = await response.json()
         alert(`Failed to ${action}: ${err.error}`)
       }
     } catch (error) {
+      // Revert on error
+      queryClient.setQueryData(['emp-dashboard'], previousData)
       console.error('Action error:', error)
       alert('Network error. Please try again.')
     } finally {
@@ -383,7 +382,7 @@ export default function EmployeeDashboardPage() {
           {/* Quick Apply Leave */}
           <Button
             className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 transition-all text-white"
-            onClick={() => router.push("/employee/leave-requests")}
+            onClick={() => navigate("/employee/leave-requests")}
           >
             <FileText className="mr-2 h-5 w-5" />
             Apply for Leave
@@ -406,7 +405,7 @@ export default function EmployeeDashboardPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => router.push("/employee/leave-requests")}
+                onClick={() => navigate("/employee/leave-requests")}
                 className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
               >
                 Apply
@@ -457,7 +456,7 @@ export default function EmployeeDashboardPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => router.push("/employee/attendance")}
+                onClick={() => navigate("/employee/attendance")}
                 className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
               >
                 View All

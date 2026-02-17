@@ -1,7 +1,6 @@
-"use client"
-
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useNavigate } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -14,83 +13,68 @@ import {
 import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 import { getValidIdToken } from "@/lib/firebaseClient"
 
+const getApiBase = () => import.meta.env.VITE_API_URL || "http://localhost:3000/api"
+
+// Fetcher function (extracted so useQuery can call it)
+const fetchDashboardData = async () => {
+  const token = await getValidIdToken()
+  if (!token) throw new Error("Authentication token not found. Please login again.")
+  const base = getApiBase()
+
+  const [dashboardRes, adminQuotaRes] = await Promise.all([
+    fetch(`${base}/admin/dashboard/stats`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+    fetch(`${base}/admin/admins/quota-status`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+  ])
+
+  const dashboardData = dashboardRes.ok ? await dashboardRes.json() : null
+  if (dashboardRes.status === 401) throw new Error("SESSION_EXPIRED")
+  if (!dashboardRes.ok) {
+    const errData = await dashboardRes.json().catch(() => ({}))
+    throw new Error(errData.error || "Failed to load dashboard")
+  }
+
+  const adminQuotas = adminQuotaRes.ok ? (await adminQuotaRes.json()).admins || [] : []
+
+  return { dashboardData, adminQuotas }
+}
+
 export default function BusinessOwnerDashboardPage() {
-  const router = useRouter()
-  const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [currentUser, setCurrentUser] = useState(null)
-  const [error, setError] = useState(null)
-  const [dashboardData, setDashboardData] = useState(null)
-  const [adminQuotas, setAdminQuotas] = useState([])
 
   // Auth check
   useEffect(() => {
     if (!isAuthenticated()) {
-      router.push("/business-owner/login")
+      navigate("/business-owner/login")
       return
     }
-
     const user = getCurrentUser()
     if (!user || user.role !== "business_owner") {
-      router.push("/business-owner/login")
+      navigate("/business-owner/login")
       return
     }
-
     setCurrentUser(user)
-    loadDashboard()
-  }, [router])
+  }, [navigate])
 
-  const getApiBase = () => {
-    return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api"
-  }
+  // TanStack Query — cached, auto-refetch when stale
+  const { data, isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['bo-dashboard'],
+    queryFn: fetchDashboardData,
+    enabled: !!currentUser,
+  })
 
-  const loadDashboard = async () => {
-    setLoading(true)
-    setError(null)
-    const token = await getValidIdToken()
-    const base = getApiBase()
+  const dashboardData = data?.dashboardData || null
+  const adminQuotas = data?.adminQuotas || []
+  const error = queryError?.message === "SESSION_EXPIRED"
+    ? (() => { setTimeout(() => navigate("/business-owner/login"), 2000); return "Session expired. Please login again." })()
+    : queryError?.message || null
 
-    if (!token) {
-      setError("Authentication token not found. Please login again.")
-      setLoading(false)
-      return
-    }
-
-    try {
-      // Fetch dashboard stats and admin quotas in parallel
-      const [dashboardRes, adminQuotaRes] = await Promise.all([
-        fetch(`${base}/admin/dashboard/stats`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`${base}/admin/admins/quota-status`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-      ])
-
-      if (dashboardRes.ok) {
-        const data = await dashboardRes.json()
-        console.log("📊 Dashboard Data:", data)
-        setDashboardData(data)
-      } else if (dashboardRes.status === 401) {
-        setError("Session expired. Please login again.")
-        setTimeout(() => router.push("/business-owner/login"), 2000)
-        return
-      } else {
-        const errData = await dashboardRes.json()
-        setError(errData.error || "Failed to load dashboard")
-      }
-
-      if (adminQuotaRes.ok) {
-        const quotaData = await adminQuotaRes.json()
-        setAdminQuotas(quotaData.admins || [])
-      }
-
-    } catch (err) {
-      console.error("Failed to load dashboard", err)
-      setError(`Failed to load dashboard: ${err.message}`)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const loadDashboard = () => queryClient.invalidateQueries({ queryKey: ['bo-dashboard'] })
 
   // Calculate organization quota percentage
   const getOrgQuotaPercentage = () => {
@@ -305,7 +289,7 @@ export default function BusinessOwnerDashboardPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => router.push("/business-owner/employees")}
+                onClick={() => navigate("/business-owner/employees")}
                 className="text-[var(--purple-mid)]"
               >
                 Manage
@@ -370,7 +354,7 @@ export default function BusinessOwnerDashboardPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => router.push("/business-owner/leave-requests")}
+                onClick={() => navigate("/business-owner/leave-requests")}
                 className="text-[var(--purple-mid)]"
               >
                 View All
@@ -423,7 +407,7 @@ export default function BusinessOwnerDashboardPage() {
             <Button
               variant="outline"
               className="h-auto py-4 flex flex-col gap-2 hover:border-[var(--purple-mid)] hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-all"
-              onClick={() => router.push("/business-owner/employees")}
+              onClick={() => navigate("/business-owner/employees")}
             >
               <Users className="h-5 w-5 text-[var(--purple-mid)]" />
               <span className="text-sm">View Employees</span>
@@ -431,7 +415,7 @@ export default function BusinessOwnerDashboardPage() {
             <Button
               variant="outline"
               className="h-auto py-4 flex flex-col gap-2 hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all"
-              onClick={() => router.push("/business-owner/attendance")}
+              onClick={() => navigate("/business-owner/attendance")}
             >
               <Eye className="h-5 w-5 text-emerald-600" />
               <span className="text-sm">View Attendance</span>
@@ -439,7 +423,7 @@ export default function BusinessOwnerDashboardPage() {
             <Button
               variant="outline"
               className="h-auto py-4 flex flex-col gap-2 hover:border-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all"
-              onClick={() => router.push("/business-owner/leave-requests")}
+              onClick={() => navigate("/business-owner/leave-requests")}
             >
               <FileText className="h-5 w-5 text-amber-600" />
               <span className="text-sm">Leave Requests</span>
@@ -447,7 +431,7 @@ export default function BusinessOwnerDashboardPage() {
             <Button
               variant="outline"
               className="h-auto py-4 flex flex-col gap-2 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-all"
-              onClick={() => router.push("/business-owner/profile")}
+              onClick={() => navigate("/business-owner/profile")}
             >
               <Settings className="h-5 w-5 text-blue-600" />
               <span className="text-sm">Settings</span>

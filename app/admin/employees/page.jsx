@@ -1,7 +1,6 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState, useMemo } from "react"
+import { useNavigate } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -28,15 +27,14 @@ import {
 import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 import { getValidIdToken } from "@/lib/firebaseClient"
 
+const getApiBase = () => import.meta.env.VITE_API_URL || "http://localhost:3000"
+
 export default function AdminEmployeesPage() {
-  const router = useRouter()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   const [currentUser, setCurrentUser] = useState(null)
-  const [employees, setEmployees] = useState([])
-  const [filteredEmployees, setFilteredEmployees] = useState([])
   const [searchQuery, setSearchQuery] = useState("")
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
 
   const [showCreateEmployee, setShowCreateEmployee] = useState(false)
   const [createLoading, setCreateLoading] = useState(false)
@@ -54,84 +52,49 @@ export default function AdminEmployeesPage() {
   // Auth Check
   useEffect(() => {
     if (!isAuthenticated()) {
-      router.push("/admin/login")
+      navigate("/admin/login")
       return
     }
-
     const user = getCurrentUser()
     if (!user || (user.role !== "admin" && user.role !== "system_admin")) {
-      router.push("/admin/login")
+      navigate("/admin/login")
       return
     }
-
     setCurrentUser(user)
-  }, [router])
+  }, [navigate])
 
-  useEffect(() => {
-    if (currentUser) {
-      loadEmployees()
-    }
-  }, [currentUser])
-
-  useEffect(() => {
-    if (!Array.isArray(employees)) return
-    const filtered = employees.filter((emp) => {
-      const query = searchQuery.toLowerCase()
-      return (
-        emp.name?.toLowerCase().includes(query) ||
-        emp.email?.toLowerCase().includes(query) ||
-        emp.department?.toLowerCase().includes(query) ||
-        emp.position?.toLowerCase().includes(query)
-      )
-    })
-    setFilteredEmployees(filtered)
-  }, [searchQuery, employees])
-
-  const getApiBase = () => {
-    return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
-  }
-
-  const loadEmployees = async () => {
-    setLoading(true)
-    setError(null)
-
-    const token = await getValidIdToken()
-    const base = getApiBase()
-
-    if (!token) {
-      setError("Authentication failed. Please login again.")
-      setLoading(false)
-      return
-    }
-
-    try {
-      // Fetch only 'employee' role for Admin view to exclude Business Owners and Admins
-      const response = await fetch(`${base}/api/admin/employees?role=employee`, {
+  const { data: employees = [], isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['admin-employees'],
+    queryFn: async () => {
+      const token = await getValidIdToken()
+      if (!token) throw new Error("Authentication failed. Please login again.")
+      const base = import.meta.env.VITE_API_URL || "http://localhost:3000"
+      // Fetch only active employees
+      const response = await fetch(`${base}/api/admin/employees?role=employee&isActive=true`, {
         headers: { Authorization: `Bearer ${token}` },
       })
+      if (response.status === 401) throw new Error("Session expired.")
+      if (!response.ok) throw new Error(`Failed to load employees: ${response.status}`)
+      const data = await response.json()
+      return Array.isArray(data) ? data : (data.employees || [])
+    },
+    enabled: !!currentUser,
+  })
 
-      if (response.ok) {
-        const data = await response.json()
-        // Determine if data is array or object with employees array
-        const employeeArray = Array.isArray(data) ? data : (data.employees || [])
+  const error = queryError?.message || null
 
-        // Filter out Business Owners from Admin view if desired, or keep them view-only
-        // Generally Admins manage "Employees", seeing BOs/Admins is fine but editing might be restricted backend side
-        setEmployees(employeeArray)
-        setFilteredEmployees(employeeArray)
-      } else if (response.status === 401) {
-        setError("Session expired. Please login again.")
-        // setTimeout(() => router.push("/admin/login"), 2000)
-      } else {
-        setError(`Failed to load employees: ${response.status}`)
-      }
-    } catch (error) {
-      console.error("Network error loading employees:", error)
-      setError("Failed to connect to backend server")
-    } finally {
-      setLoading(false)
-    }
-  }
+  const filteredEmployees = useMemo(() => {
+    if (!Array.isArray(employees)) return []
+    const query = searchQuery.toLowerCase()
+    return employees.filter((emp) =>
+      emp.name?.toLowerCase().includes(query) ||
+      emp.email?.toLowerCase().includes(query) ||
+      emp.department?.toLowerCase().includes(query) ||
+      emp.position?.toLowerCase().includes(query)
+    )
+  }, [searchQuery, employees])
+
+  const loadEmployees = () => queryClient.invalidateQueries({ queryKey: ['admin-employees'] })
 
   const handleCreateEmployee = async (e) => {
     e.preventDefault()
@@ -160,7 +123,8 @@ export default function AdminEmployeesPage() {
 
       if (response.ok) {
         const createdEmployee = data.employee || data
-        setEmployees((prev) => [createdEmployee, ...prev])
+        loadEmployees()
+        queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] })
 
         setShowCreateEmployee(false)
         setShowPassword(false)
@@ -184,6 +148,42 @@ export default function AdminEmployeesPage() {
       alert("Network error")
     } finally {
       setCreateLoading(false)
+    }
+  }
+
+  const handleDeleteEmployee = async (employeeId, employeeName) => {
+    if (!window.confirm(`Delete employee "${employeeName}"? This will deactivate their account.`)) {
+      return
+    }
+
+    // Optimistic Update
+    queryClient.setQueryData(['admin-employees'], (oldData) => {
+      if (!oldData) return []
+      const list = Array.isArray(oldData) ? oldData : (oldData.employees || [])
+      return list.filter(emp => emp.id !== employeeId)
+    })
+
+    const token = await getValidIdToken()
+    const base = getApiBase()
+
+    try {
+      const response = await fetch(`${base}/api/admin/employees/${employeeId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      if (response.ok) {
+        // Success
+        queryClient.invalidateQueries({ queryKey: ['admin-employees'] })
+        queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] })
+      } else {
+        alert("Failed to delete employee")
+        queryClient.invalidateQueries({ queryKey: ['admin-employees'] })
+      }
+    } catch (error) {
+      console.error("Delete employee error:", error)
+      alert("Network error")
+      queryClient.invalidateQueries({ queryKey: ['admin-employees'] })
     }
   }
 
@@ -220,7 +220,7 @@ export default function AdminEmployeesPage() {
               Refresh
             </Button>
             <Button
-              onClick={() => router.push("/admin/dashboard")}
+              onClick={() => navigate("/admin/dashboard")}
               className="bg-white text-blue-700 hover:bg-blue-50"
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
@@ -395,13 +395,14 @@ export default function AdminEmployeesPage() {
                 <TableHead>Role</TableHead>
                 <TableHead>Department</TableHead>
                 <TableHead>Position</TableHead>
-                <TableHead className="text-right">Status</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredEmployees.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
                     No employees found
                   </TableCell>
                 </TableRow>
@@ -424,10 +425,20 @@ export default function AdminEmployeesPage() {
                     </TableCell>
                     <TableCell>{emp.department || "-"}</TableCell>
                     <TableCell>{emp.position || "-"}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell>
                       <Badge className={emp.isActive ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-red-100 text-red-700 hover:bg-red-200"}>
                         {emp.isActive ? "Active" : "Inactive"}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => handleDeleteEmployee(emp.id, emp.name)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))

@@ -7,6 +7,8 @@
 
 const express = require('express');
 const cors = require('cors');
+const http = require('http');
+const { Server } = require('socket.io');
 require('dotenv').config();
 
 // Import container (initializes all services and repositories)
@@ -18,6 +20,7 @@ const adminRoutes = require('./routes/admin');
 const attendanceRoutes = require('./routes/attendance');
 const leaveRoutes = require('./routes/leave');
 const systemAdminRoutes = require('./routes/system_admin');
+const hikvisionRoutes = require('./routes/hikvision');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -78,6 +81,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/leave', leaveRoutes);
 app.use('/api/system-admin', systemAdminRoutes);
+app.use('/api/event', hikvisionRoutes);
 
 // ========================================
 // ERROR HANDLING
@@ -115,7 +119,18 @@ app.use((err, req, res, next) => {
 // ========================================
 // SERVER STARTUP
 // ========================================
-const server = app.listen(PORT, () => {
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: '*', // Allow all origins for now (adjust for production)
+    methods: ['GET', 'POST']
+  }
+});
+
+// Initialize Socket.io in container
+container.initSocket(io);
+
+server.listen(PORT, () => {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('✅ Hikvision EMS Server Started Successfully!');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -123,6 +138,7 @@ const server = app.listen(PORT, () => {
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔥 Firebase: Connected`);
   console.log(`💾 Redis: ${container.getRedisClient().isAvailable() ? 'Connected' : 'Disabled (In-Memory Mode)'}`);
+  console.log(`🔌 Socket.io: Initialized`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('\n✅ Server is ready to accept requests!');
   console.log(`\n📖 API Documentation: http://localhost:${PORT}/\n`);

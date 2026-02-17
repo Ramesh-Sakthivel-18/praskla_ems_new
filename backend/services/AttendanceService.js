@@ -18,10 +18,12 @@ class AttendanceService {
    * Constructor with dependency injection
    * @param {AttendanceRepository} attendanceRepository
    * @param {UserRepository} userRepository (optional, for validation)
+   * @param {NotificationService} notificationService (optional)
    */
-  constructor(attendanceRepository, userRepository = null) {
+  constructor(attendanceRepository, userRepository = null, notificationService = null) {
     this.attendanceRepo = attendanceRepository;
     this.userRepo = userRepository;
+    this.notificationService = notificationService;
   }
 
   /**
@@ -59,6 +61,18 @@ class AttendanceService {
       }
 
       console.log(`✅ AttendanceService: Successfully recorded ${action} for ${userName}`);
+
+      // Notification
+      if (this.notificationService) {
+        this.notificationService.sendToOrg(orgId, 'attendance:update', {
+          userId,
+          userName,
+          action,
+          time: attendance.time,
+          date: attendance.date
+        });
+      }
+
       return attendance;
     } catch (error) {
       console.error(`❌ AttendanceService: Error recording attendance:`, error);
@@ -151,8 +165,8 @@ class AttendanceService {
    * @returns {Promise<Object>} Fixed record
    */
   async fixRecordIfNeeded(orgId, record) {
-    const needsFix = !record.hoursWorked || 
-                     (record.totalHours && record.totalHours.includes('NaN'));
+    const needsFix = !record.hoursWorked ||
+      (record.totalHours && record.totalHours.includes('NaN'));
 
     if (!needsFix) {
       return record;
@@ -177,7 +191,7 @@ class AttendanceService {
 
       if (!record) {
         console.log(`📋 No attendance record for today`);
-        return { 
+        return {
           status: 'not_started',
           date: today
         };

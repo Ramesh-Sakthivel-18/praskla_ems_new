@@ -1,7 +1,6 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState, useMemo } from "react"
+import { useNavigate } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -14,30 +13,31 @@ import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 import { getValidIdToken } from "@/lib/firebaseClient"
 
 export default function SystemAdminProfilePage() {
-    const router = useRouter()
-    const [loading, setLoading] = useState(true)
+    const navigate = useNavigate()
+    const queryClient = useQueryClient()
     const [currentUser, setCurrentUser] = useState(null)
     const [profileData, setProfileData] = useState(null)
+    const [loading, setLoading] = useState(true)
 
     useEffect(() => {
         if (!isAuthenticated()) {
-            router.push("/system-admin/login")
+            navigate("/system-admin/login")
             return
         }
 
         const user = getCurrentUser()
         if (!user || user.role !== "system_admin") {
             alert("Unauthorized. System Admin access required.")
-            router.push("/system-admin/login")
+            navigate("/system-admin/login")
             return
         }
 
         setCurrentUser(user)
         loadProfile()
-    }, [router])
+    }, [navigate])
 
     const getApiBase = () => {
-        return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api"
+        return import.meta.env.VITE_API_URL || "http://localhost:3000/api"
     }
 
     const loadProfile = async () => {

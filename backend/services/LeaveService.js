@@ -16,10 +16,14 @@ class LeaveService {
    * Constructor with dependency injection
    * @param {LeaveRepository} leaveRepository
    * @param {UserRepository} userRepository
+   * @param {AuditLogService} auditLogService
+   * @param {NotificationService} notificationService
    */
-  constructor(leaveRepository, userRepository) {
+  constructor(leaveRepository, userRepository, auditLogService = null, notificationService = null) {
     this.leaveRepo = leaveRepository;
     this.userRepo = userRepository;
+    this.auditService = auditLogService;
+    this.notificationService = notificationService;
   }
 
   /**
@@ -74,6 +78,28 @@ class LeaveService {
       });
 
       console.log(`✅ Leave request created: ${leave.id} (${leave.days} days)`);
+
+      // Audit Log
+      if (this.auditService) {
+        await this.auditService.log({
+          organizationId: orgId,
+          actor: { uid: userId, name: user.name, role: user.role },
+          action: 'LEAVE_CREATE',
+          targetId: leave.id,
+          targetType: 'leave_request',
+          details: { type: leaveData.leaveType, dates: `${leaveData.startDate} to ${leaveData.endDate}` }
+        });
+      }
+
+      // Notification
+      if (this.notificationService) {
+        this.notificationService.sendToOrgAdmins(orgId, 'leave:created', {
+          leaveId: leave.id,
+          userName: user.name,
+          type: leaveData.leaveType
+        });
+      }
+
       return leave;
     } catch (error) {
       console.error(`❌ LeaveService: Error applying for leave:`, error);
@@ -92,7 +118,7 @@ class LeaveService {
 
     try {
       const leave = await this.leaveRepo.findById(orgId, leaveId);
-      
+
       if (!leave) {
         console.log(`⚠️ Leave request not found: ${leaveId}`);
         return null;
@@ -118,7 +144,7 @@ class LeaveService {
 
     try {
       const leaves = await this.leaveRepo.findByUser(orgId, userId, options);
-      
+
       console.log(`✅ Retrieved ${leaves.length} leave requests`);
       return leaves;
     } catch (error) {
@@ -138,7 +164,7 @@ class LeaveService {
 
     try {
       const leaves = await this.leaveRepo.findAll(orgId, filters);
-      
+
       console.log(`✅ Retrieved ${leaves.length} leave requests`);
       return leaves;
     } catch (error) {
@@ -157,7 +183,7 @@ class LeaveService {
 
     try {
       const pendingLeaves = await this.leaveRepo.findPending(orgId);
-      
+
       console.log(`✅ Retrieved ${pendingLeaves.length} pending leave requests`);
       return pendingLeaves;
     } catch (error) {
@@ -203,6 +229,28 @@ class LeaveService {
       );
 
       console.log(`✅ Leave approved: ${leaveId} by ${reviewer.name}`);
+
+      // Audit Log
+      if (this.auditService) {
+        await this.auditService.log({
+          organizationId: orgId,
+          actor: { uid: reviewerId, name: reviewer.name, role: reviewer.role },
+          action: 'LEAVE_APPROVE',
+          targetId: leaveId,
+          targetType: 'leave_request',
+          details: { comments, applicantId: leave.userId }
+        });
+      }
+
+      // Notification
+      if (this.notificationService) {
+        this.notificationService.sendToUser(leave.userId, 'leave:approved', {
+          leaveId,
+          reviewerName: reviewer.name,
+          status: 'approved'
+        });
+      }
+
       return approved;
     } catch (error) {
       console.error(`❌ LeaveService: Error approving leave:`, error);
@@ -247,6 +295,28 @@ class LeaveService {
       );
 
       console.log(`❌ Leave rejected: ${leaveId} by ${reviewer.name}`);
+
+      // Audit Log
+      if (this.auditService) {
+        await this.auditService.log({
+          organizationId: orgId,
+          actor: { uid: reviewerId, name: reviewer.name, role: reviewer.role },
+          action: 'LEAVE_REJECT',
+          targetId: leaveId,
+          targetType: 'leave_request',
+          details: { comments, applicantId: leave.userId }
+        });
+      }
+
+      // Notification
+      if (this.notificationService) {
+        this.notificationService.sendToUser(leave.userId, 'leave:rejected', {
+          leaveId,
+          reviewerName: reviewer.name,
+          status: 'rejected'
+        });
+      }
+
       return rejected;
     } catch (error) {
       console.error(`❌ LeaveService: Error rejecting leave:`, error);
@@ -344,6 +414,19 @@ class LeaveService {
       await this.leaveRepo.delete(orgId, leaveId);
 
       console.log(`✅ Leave cancelled: ${leaveId}`);
+
+      // Audit Log
+      if (this.auditService) {
+        await this.auditService.log({
+          organizationId: orgId,
+          actor: { uid: userId, name: 'User', role: 'employee' }, // Fetch user if needed, but userId is known
+          action: 'LEAVE_CANCEL',
+          targetId: leaveId,
+          targetType: 'leave_request',
+          details: { cancelledBy: userId }
+        });
+      }
+
       return true;
     } catch (error) {
       console.error(`❌ LeaveService: Error cancelling leave:`, error);
@@ -363,7 +446,7 @@ class LeaveService {
 
     try {
       const stats = await this.leaveRepo.getUserStats(orgId, userId, year);
-      
+
       console.log(`✅ Leave stats generated for user:`, stats);
       return stats;
     } catch (error) {
@@ -384,7 +467,7 @@ class LeaveService {
 
     try {
       const stats = await this.leaveRepo.getOrgStats(orgId, startDate, endDate);
-      
+
       console.log(`✅ Organization leave stats generated:`, stats);
       return stats;
     } catch (error) {
@@ -515,7 +598,7 @@ class LeaveService {
     // Check if leave duration is reasonable (e.g., max 90 days)
     const diffMs = end - start;
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1;
-    
+
     if (diffDays > 90) {
       throw new Error('Leave duration cannot exceed 90 days. Please contact HR for extended leave.');
     }

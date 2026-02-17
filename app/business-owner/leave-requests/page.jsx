@@ -1,7 +1,6 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState, useMemo } from "react"
+import { useNavigate } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -11,133 +10,71 @@ import { FileText, Clock, CheckCircle, XCircle, Calendar, ArrowLeft, RefreshCw, 
 import { format } from "date-fns"
 import { safeRedirect } from "@/lib/redirectUtils"
 
+const getApiBase = () => import.meta.env.VITE_API_URL || "http://localhost:3000"
+
+const fetchLeaveRequests = async () => {
+  const token = localStorage.getItem("firebaseToken")
+  const base = getApiBase()
+
+  const leaveRes = await fetch(`${base}/api/leave/all`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  if (!leaveRes.ok) throw new Error(`Failed to load leave requests: ${leaveRes.status}`)
+
+  const data = await leaveRes.json()
+  const allLeaves = Array.isArray(data.requests) ? data.requests : data.requests || []
+
+  allLeaves.sort((a, b) => {
+    const dateA = new Date(a.createdAt || 0)
+    const dateB = new Date(b.createdAt || 0)
+    return dateB - dateA
+  })
+
+  return allLeaves
+}
+
 export default function BusinessOwnerLeaveRequestsPage() {
-  const router = useRouter()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   const [currentUser, setCurrentUser] = useState(null)
-  const [allRequests, setAllRequests] = useState([])
-  const [filteredRequests, setFilteredRequests] = useState([])
   const [statusFilter, setStatusFilter] = useState("all")
-  const [loading, setLoading] = useState(true)
-
-  const [stats, setStats] = useState({
-    total: 0,
-    pending: 0,
-    approved: 0,
-    rejected: 0,
-  })
 
   useEffect(() => {
     const current = localStorage.getItem("currentUser")
     if (!current) {
-      safeRedirect(router, "/business-owner/login")
+      safeRedirect(navigate, "/business-owner/login")
       return
     }
-
     const emp = JSON.parse(current)
     if (emp.role !== "business_owner") {
       alert("Unauthorized. Business Owner access required.")
-      safeRedirect(router, "/role-selection")
+      safeRedirect(navigate, "/role-selection")
       return
     }
-
     setCurrentUser(emp)
-  }, [router])
+  }, [navigate])
 
-  useEffect(() => {
-    if (currentUser) {
-      loadLeaveRequests()
-    }
-  }, [currentUser])
+  const { data: allRequests = [], isLoading: loading } = useQuery({
+    queryKey: ['bo-leave-requests'],
+    queryFn: fetchLeaveRequests,
+    enabled: !!currentUser,
+  })
 
-  useEffect(() => {
-    if (statusFilter === "all") {
-      setFilteredRequests(allRequests)
-    } else {
-      const filtered = allRequests.filter(
-        (req) => req.status.toLowerCase() === statusFilter.toLowerCase()
-      )
-      setFilteredRequests(filtered)
-    }
+  const filteredRequests = useMemo(() => {
+    if (statusFilter === "all") return allRequests
+    return allRequests.filter((req) => req.status?.toLowerCase() === statusFilter.toLowerCase())
   }, [statusFilter, allRequests])
 
-  const getApiBase = () => {
-    return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
-  }
+  const stats = useMemo(() => {
+    const pending = allRequests.filter((r) => r.status?.toLowerCase() === "pending").length
+    const approved = allRequests.filter((r) => r.status?.toLowerCase() === "approved").length
+    const rejected = allRequests.filter((r) => r.status?.toLowerCase() === "rejected").length
+    return { total: allRequests.length, pending, approved, rejected }
+  }, [allRequests])
 
-  const loadLeaveRequests = async () => {
-    console.log("🔄 Loading leave requests, currentUser:", currentUser)
-    setLoading(true)
-    const token = localStorage.getItem("firebaseToken")
-    const base = getApiBase()
-
-    try {
-      const empRes = await fetch(`${base}/api/admin/employees`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-
-      let orgEmployeeIds = new Set()
-      if (empRes.ok) {
-        const empData = await empRes.json()
-        console.log("📊 Employees response:", empData)
-        const allEmployees = Array.isArray(empData) ? empData : empData.employees || []
-        // Backend already filters by org, just filter by active status
-        const orgEmployees = allEmployees.filter((e) => e.isActive !== false)
-        orgEmployeeIds = new Set(orgEmployees.map((e) => e.id))
-        console.log("👥 Employee IDs for leave filtering:", orgEmployeeIds.size)
-      }
-
-      const leaveRes = await fetch(`${base}/api/leave/all`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-
-      console.log("📋 Leave API response status:", leaveRes.status)
-
-      if (leaveRes.ok) {
-        const data = await leaveRes.json()
-        console.log("📋 Leave API data:", data)
-        const allLeaves = Array.isArray(data.requests) ? data.requests : data.requests || []
-        console.log("📋 All leaves count:", allLeaves.length)
-        console.log("📋 All leaves:", allLeaves)
-        console.log("📋 Employee IDs in set:", [...orgEmployeeIds])
-        console.log("📋 Leave employeeIds:", allLeaves.map(l => l.employeeId))
-
-        // Skip filtering - just show all leaves for the org
-        const orgLeaves = allLeaves
-        console.log("📋 Org leaves after filter:", orgLeaves.length)
-
-        orgLeaves.sort((a, b) => {
-          const dateA = new Date(a.createdAt || 0)
-          const dateB = new Date(b.createdAt || 0)
-          return dateB - dateA
-        })
-
-        setAllRequests(orgLeaves)
-        setFilteredRequests(orgLeaves)
-
-        const pending = orgLeaves.filter((r) => r.status?.toLowerCase() === "pending").length
-        const approved = orgLeaves.filter((r) => r.status?.toLowerCase() === "approved").length
-        const rejected = orgLeaves.filter((r) => r.status?.toLowerCase() === "rejected").length
-
-        setStats({
-          total: orgLeaves.length,
-          pending,
-          approved,
-          rejected,
-        })
-      } else {
-        console.error("📋 Leave API error:", leaveRes.status)
-        setAllRequests([])
-        setFilteredRequests([])
-      }
-    } catch (error) {
-      console.error("Failed to load leave requests:", error)
-      setAllRequests([])
-      setFilteredRequests([])
-    } finally {
-      setLoading(false)
-    }
-  }
+  const loadLeaveRequests = () => queryClient.invalidateQueries({ queryKey: ['bo-leave-requests'] })
 
   const getStatusBadge = (status) => {
     const normalizedStatus = status?.toLowerCase()
@@ -220,7 +157,7 @@ export default function BusinessOwnerLeaveRequestsPage() {
                 Refresh
               </Button>
               <Button
-                onClick={() => router.push("/business-owner/dashboard")}
+                onClick={() => navigate("/business-owner/dashboard")}
                 className="bg-white text-purple-700 hover:bg-purple-50"
               >
                 <ArrowLeft className="mr-2 h-4 w-4" />

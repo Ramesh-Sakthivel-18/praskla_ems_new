@@ -1,7 +1,6 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState, useMemo } from "react"
+import { useNavigate } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,13 +12,11 @@ import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 import { getValidIdToken } from "@/lib/firebaseClient"
 
 export default function AdminAttendancePage() {
-  const router = useRouter()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   const [currentUser, setCurrentUser] = useState(null)
   const [dateFilter, setDateFilter] = useState(format(new Date(), "yyyy-MM-dd"))
-  const [attendanceRecords, setAttendanceRecords] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
 
   const [stats, setStats] = useState({
     totalEmployees: 0,
@@ -32,116 +29,37 @@ export default function AdminAttendancePage() {
   // Auth Check
   useEffect(() => {
     if (!isAuthenticated()) {
-      router.push("/admin/login")
+      navigate("/admin/login")
       return
     }
 
     const user = getCurrentUser()
     if (!user || (user.role !== "admin" && user.role !== "system_admin")) {
-      router.push("/admin/login")
+      navigate("/admin/login")
       return
     }
 
     setCurrentUser(user)
-  }, [router])
+  }, [navigate])
 
-  useEffect(() => {
-    if (currentUser) {
-      loadAttendance()
-    }
-  }, [currentUser, dateFilter])
-
-  const getApiBase = () => {
-    return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
-  }
-
-  const loadAttendance = async () => {
-    setLoading(true)
-    setError(null)
-    const token = await getValidIdToken()
-    const base = getApiBase()
-
-    if (!token) {
-      setError("Authentication failed")
-      setLoading(false)
-      return
-    }
-
-    try {
-      // 1. Fetch Employees only (exclude Admin/BO) to calculate stats
-      const empRes = await fetch(`${base}/api/admin/employees?role=employee`, {
+  const { data: attendanceRecords = [], isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['admin-attendance', dateFilter],
+    queryFn: async () => {
+      const token = await getValidIdToken()
+      if (!token) throw new Error("Authentication failed.")
+      const base = import.meta.env.VITE_API_URL || "http://localhost:3000"
+      const response = await fetch(`${base}/api/admin/attendance?date=${dateFilter}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
+      if (!response.ok) throw new Error(`Failed to load attendance: ${response.status}`)
+      const data = await response.json()
+      return Array.isArray(data) ? data : (data.records || data.data || [])
+    },
+    enabled: !!currentUser,
+  })
 
-      let orgEmployees = []
-      if (empRes.ok) {
-        const empData = await empRes.json()
-        const allEmployees = Array.isArray(empData) ? empData : empData.employees || []
-        // Filter active employees (Admins typically view all employee attendance)
-        orgEmployees = allEmployees.filter((e) => e.isActive !== false)
-      } else {
-        // If fail to get employees, we might only show records returned by attendance API
-        console.warn("Failed to fetch employees list for stats calc")
-      }
-
-      const orgEmployeeIds = new Set(orgEmployees.map((e) => e.id))
-      const totalEmployees = orgEmployees.length
-
-      // 2. Fetch Attendance
-      const targetDate = new Date(dateFilter)
-      const dateStr = format(targetDate, "yyyy-MM-dd")
-
-      const attRes = await fetch(`${base}/api/admin/attendance?date=${dateStr}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-
-      if (attRes.ok) {
-        const data = await attRes.json()
-        const allRecords = data.records || []
-
-        // Filter records to only those belonging to organization's employees
-        // This handles cases where API might return more data or we want to be strict
-        // Using userId || employeeId for robust matching
-        const orgRecords = allRecords.filter((r) => {
-          // If we have an employee list, strictly filter. If not (e.g. error fetching employees), allow all.
-          if (orgEmployeeIds.size > 0) {
-            return orgEmployeeIds.has(r.userId || r.employeeId)
-          }
-          return true
-        })
-
-        setAttendanceRecords(orgRecords)
-
-        const present = orgRecords.filter((r) => r.checkIn && !r.checkOut).length
-        const checkedOut = orgRecords.filter((r) => r.checkOut).length
-        const onBreak = orgRecords.filter((r) => r.breakIn && !r.breakOut).length
-
-        // Absent = Total - Records (roughly, assuming one record per person present)
-        const absent = Math.max(totalEmployees - orgRecords.length, 0)
-
-        setStats({
-          totalEmployees: totalEmployees > 0 ? totalEmployees : orgRecords.length,
-          presentEmployees: present,
-          absentEmployees: absent,
-          checkedOut,
-          onBreak,
-        })
-      } else if (attRes.status === 401) {
-        setError("Session expired")
-        // router.push("/admin/login")
-      } else {
-        const err = await attRes.json()
-        setError(err.error || "Failed to fetch attendance")
-        setAttendanceRecords([])
-      }
-    } catch (error) {
-      console.error("Failed to load attendance:", error)
-      setError("Network error")
-      setAttendanceRecords([])
-    } finally {
-      setLoading(false)
-    }
-  }
+  const error = queryError?.message || null
+  const loadAttendance = () => queryClient.invalidateQueries({ queryKey: ['admin-attendance', dateFilter] })
 
   const getStatusBadge = (record) => {
     if (record.checkOut) {
@@ -184,7 +102,7 @@ export default function AdminAttendancePage() {
               />
             </div>
             <Button
-              onClick={() => router.push("/admin/dashboard")}
+              onClick={() => navigate("/admin/dashboard")}
               className="bg-white text-blue-700 hover:bg-blue-50"
             >
               <ArrowLeft className="mr-2 h-4 w-4" />

@@ -1,7 +1,6 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState, useMemo } from "react"
+import { useNavigate } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,11 +17,12 @@ import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 import { getValidIdToken } from "@/lib/firebaseClient"
 
 export default function EmployeeProfilePage() {
-  const router = useRouter()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [currentUser, setCurrentUser] = useState(null)
-  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState("details")
+  const [loading, setLoading] = useState(true)
 
   // Profile Data
   const [profileData, setProfileData] = useState({
@@ -45,14 +45,14 @@ export default function EmployeeProfilePage() {
 
   useEffect(() => {
     if (!isAuthenticated()) {
-      safeRedirect(router, "/employee/login")
+      safeRedirect(navigate, "/employee/login")
       return
     }
     loadProfile()
   }, [])
 
   const getApiBase = () => {
-    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api'
+    return import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
   }
 
   const loadProfile = async () => {

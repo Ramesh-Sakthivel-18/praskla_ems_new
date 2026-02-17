@@ -1,7 +1,6 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState, useMemo } from "react"
+import { useNavigate } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -14,72 +13,44 @@ import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 import { getValidIdToken } from "@/lib/firebaseClient"
 
 export default function AdminDashboardPage() {
-  const router = useRouter()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [currentUser, setCurrentUser] = useState(null)
-  const [dashboardData, setDashboardData] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
 
   // Auth Check
   useEffect(() => {
     if (!isAuthenticated()) {
-      router.push("/admin/login")
+      navigate("/admin/login")
       return
     }
-
     const user = getCurrentUser()
     if (!user || (user.role !== "admin" && user.role !== "system_admin")) {
-      router.push("/admin/login")
+      navigate("/admin/login")
       return
     }
-
     setCurrentUser(user)
-    loadDashboard()
-  }, [router])
+  }, [navigate])
 
-  const getApiBase = () => {
-    return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
-  }
 
-  const loadDashboard = async () => {
-    setLoading(true)
-    setError(null)
 
-    const token = await getValidIdToken()
-    if (!token) {
-      setError("Authentication failed. Please login again.")
-      setLoading(false)
-      return
-    }
-
-    const apiBase = getApiBase()
-
-    try {
-      // Use the dedicated dashboard stats endpoint
+  const { data: dashboardData = null, isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['admin-dashboard'],
+    queryFn: async () => {
+      const token = await getValidIdToken()
+      if (!token) throw new Error("Authentication failed. Please login again.")
+      const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3000"
       const response = await fetch(`${apiBase}/api/admin/dashboard/stats`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
       })
+      if (response.status === 401) throw new Error("Session expired. Please login again.")
+      if (!response.ok) { const errData = await response.json(); throw new Error(errData.error || "Failed to load dashboard") }
+      return response.json()
+    },
+    enabled: !!currentUser,
+  })
 
-      if (response.ok) {
-        const data = await response.json()
-        setDashboardData(data)
-      } else if (response.status === 401) {
-        setError("Session expired. Please login again.")
-      } else {
-        const errData = await response.json()
-        setError(errData.error || "Failed to load dashboard")
-      }
-
-    } catch (e) {
-      console.error('Failed to load dashboard:', e)
-      setError("Failed to connect to backend server")
-    } finally {
-      setLoading(false)
-    }
-  }
+  const error = queryError?.message || null
+  const loadDashboard = () => queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] })
 
   // Calculate quota percentage
   const getQuotaPercentage = () => {
@@ -165,7 +136,7 @@ export default function AdminDashboardPage() {
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
-          <Button onClick={() => router.push("/admin/employees")} size="sm" className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md">
+          <Button onClick={() => navigate("/admin/employees")} size="sm" className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md">
             <Plus className="h-4 w-4" />
             Add Employee
           </Button>
@@ -246,7 +217,7 @@ export default function AdminDashboardPage() {
             <Button
               variant="outline"
               className="h-24 flex flex-col gap-2 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-              onClick={() => router.push("/admin/employees")}
+              onClick={() => navigate("/admin/employees")}
             >
               <Users className="h-6 w-6 text-blue-600" />
               Manage Staff
@@ -254,7 +225,7 @@ export default function AdminDashboardPage() {
             <Button
               variant="outline"
               className="h-24 flex flex-col gap-2 hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-              onClick={() => router.push("/admin/attendance")}
+              onClick={() => navigate("/admin/attendance")}
             >
               <Calendar className="h-6 w-6 text-emerald-600" />
               Check Attendance
@@ -262,7 +233,7 @@ export default function AdminDashboardPage() {
             <Button
               variant="outline"
               className="h-24 flex flex-col gap-2 hover:border-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20"
-              onClick={() => router.push("/admin/leave-requests")}
+              onClick={() => navigate("/admin/leave-requests")}
             >
               <FileText className="h-6 w-6 text-amber-600" />
               Review Leaves
@@ -276,7 +247,7 @@ export default function AdminDashboardPage() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg">Pending Leaves</CardTitle>
-                <Button variant="ghost" size="sm" onClick={() => router.push("/admin/leave-requests")}>View All</Button>
+                <Button variant="ghost" size="sm" onClick={() => navigate("/admin/leave-requests")}>View All</Button>
               </div>
             </CardHeader>
             <CardContent className="pt-0">

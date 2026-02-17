@@ -1,7 +1,5 @@
-"use client"
-
 import { useState } from "react"
-import Link from "next/link"
+import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -9,11 +7,12 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Shield, ArrowLeft, Loader2, AlertCircle, Eye, EyeOff, Mail, Lock } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { useNavigate } from "react-router-dom"
 import { loginUser, getRoleRedirectPath } from "@/lib/auth"
+import GoogleLoginButton from "@/app/components/auth/GoogleLoginButton"
 
 export default function AdminLoginPage() {
-  const router = useRouter()
+  const navigate = useNavigate()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
@@ -38,7 +37,7 @@ export default function AdminLoginPage() {
       if (result.success) {
         if (result.user.role === "admin" || result.user.role === "system_admin") {
           const redirectPath = getRoleRedirectPath(result.user.role)
-          router.push(redirectPath)
+          navigate(redirectPath)
         } else {
           setError("Access denied. Only administrators can login here.")
           setLoading(false)
@@ -68,7 +67,7 @@ export default function AdminLoginPage() {
 
       <div className="w-full max-w-md space-y-6 px-4 relative z-10">
         {/* Back Button */}
-        <Link href="/" className="inline-block">
+        <Link to="/" className="inline-block">
           <Button variant="ghost" className="gap-2 hover:bg-white/50 dark:hover:bg-gray-800/50 transition-all">
             <ArrowLeft className="h-4 w-4" />
             Back to Home
@@ -160,7 +159,7 @@ export default function AdminLoginPage() {
                     Remember me
                   </Label>
                 </div>
-                <Link href="/forgot-password" className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline">
+                <Link to="/forgot-password" className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline">
                   Forgot password?
                 </Link>
               </div>
@@ -180,6 +179,19 @@ export default function AdminLoginPage() {
                   "Sign In"
                 )}
               </Button>
+
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-gray-300 dark:border-gray-700" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-white dark:bg-gray-900 px-2 text-gray-500">
+                    Or continue with
+                  </span>
+                </div>
+              </div>
+
+              <GoogleLoginButton role="admin" />
             </form>
 
             {/* Footer */}
@@ -203,6 +215,6 @@ export default function AdminLoginPage() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </div >
   )
 }

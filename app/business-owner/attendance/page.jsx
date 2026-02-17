@@ -1,7 +1,6 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState, useMemo } from "react"
+import { useNavigate } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,125 +10,79 @@ import { Calendar, Clock, UserCheck, UserX, Coffee, LogOut, ArrowLeft, RefreshCw
 import { format } from "date-fns"
 import { safeRedirect } from "@/lib/redirectUtils"
 
+const getApiBase = () => import.meta.env.VITE_API_URL || "http://localhost:3000"
+
+const fetchAttendance = async (dateFilter) => {
+  const token = localStorage.getItem("firebaseToken")
+  const base = getApiBase()
+
+  const empRes = await fetch(`${base}/api/admin/employees?role=employee`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  let orgEmployees = []
+  if (empRes.ok) {
+    const empData = await empRes.json()
+    const allEmployees = Array.isArray(empData) ? empData : empData.employees || []
+    orgEmployees = allEmployees.filter((e) => e.isActive !== false)
+  }
+
+  const orgEmployeeIds = new Set(orgEmployees.map((e) => e.id))
+  const totalEmployees = orgEmployees.length
+  const dateStr = format(new Date(dateFilter), "yyyy-MM-dd")
+
+  const attRes = await fetch(`${base}/api/admin/attendance?date=${dateStr}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  let orgRecords = []
+  if (attRes.ok) {
+    const data = await attRes.json()
+    const allRecords = data.records || []
+    orgRecords = allRecords.filter((r) => orgEmployeeIds.has(r.userId || r.employeeId))
+  }
+
+  return { orgRecords, totalEmployees }
+}
+
 export default function BusinessOwnerAttendancePage() {
-  const router = useRouter()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   const [currentUser, setCurrentUser] = useState(null)
   const [dateFilter, setDateFilter] = useState(format(new Date(), "yyyy-MM-dd"))
-  const [attendanceRecords, setAttendanceRecords] = useState([])
-  const [loading, setLoading] = useState(true)
-
-  const [stats, setStats] = useState({
-    totalEmployees: 0,
-    presentEmployees: 0,
-    absentEmployees: 0,
-    checkedOut: 0,
-    onBreak: 0,
-  })
 
   useEffect(() => {
     const current = localStorage.getItem("currentUser")
     if (!current) {
-      safeRedirect(router, "/business-owner/login")
+      safeRedirect(navigate, "/business-owner/login")
       return
     }
-
     const emp = JSON.parse(current)
     if (emp.role !== "business_owner") {
       alert("Unauthorized. Business Owner access required.")
-      safeRedirect(router, "/role-selection")
+      safeRedirect(navigate, "/role-selection")
       return
     }
-
     setCurrentUser(emp)
-  }, [router])
+  }, [navigate])
 
-  useEffect(() => {
-    if (currentUser) {
-      loadAttendance()
-    }
-  }, [currentUser, dateFilter])
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['bo-attendance', dateFilter],
+    queryFn: () => fetchAttendance(dateFilter),
+    enabled: !!currentUser,
+  })
 
-  const getApiBase = () => {
-    return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
-  }
+  const attendanceRecords = data?.orgRecords || []
+  const totalEmployees = data?.totalEmployees || 0
 
-  const loadAttendance = async () => {
-    console.log("🔄 Loading attendance, currentUser:", currentUser)
-    setLoading(true)
-    const token = localStorage.getItem("firebaseToken")
-    const base = getApiBase()
-
-    try {
-      // Fetch only employees (exclude Admin/BO) for attendance stats
-      const empRes = await fetch(`${base}/api/admin/employees?role=employee`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-
-      let orgEmployees = []
-      if (empRes.ok) {
-        const empData = await empRes.json()
-        console.log("📊 Employees response:", empData)
-        const allEmployees = Array.isArray(empData) ? empData : empData.employees || []
-        // Filter only active employees (backend already filters by role)
-        orgEmployees = allEmployees.filter((e) => e.isActive !== false)
-        console.log("👥 Filtered employees for attendance:", orgEmployees.length)
-      }
-
-      const orgEmployeeIds = new Set(orgEmployees.map((e) => e.id))
-      const totalEmployees = orgEmployees.length
-
-      const targetDate = new Date(dateFilter)
-      const dateStr = format(targetDate, "yyyy-MM-dd")
-
-      const attRes = await fetch(`${base}/api/admin/attendance?date=${dateStr}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-
-      if (attRes.ok) {
-        const data = await attRes.json()
-        const allRecords = data.records || []
-        // Note: Backend might return records for all users if not filtered, but we filter by org employees here just in case,
-        // although backend /attendance endpoint for admin should already filter by organizationId.
-        // However, the previous logic filtered by 'orgEmployeeIds' which were only 'employee' role.
-        // If we want to show admins too, we should relax this or include admins in orgEmployeeIds.
-        // For now, keeping logic consistent with "Employees" page which shows all.
-        // If 'orgEmployees' above (lines 74) filters for role='employee', then attendance will only show for employees.
-        // If we want to show all, we should have fetched all employees.
-        // Let's stick to the previous behavior but use the correct property.
-        const orgRecords = allRecords.filter((r) => orgEmployeeIds.has(r.userId || r.employeeId))
-
-        setAttendanceRecords(orgRecords)
-
-        const present = orgRecords.filter((r) => r.checkIn && !r.checkOut).length
-        const checkedOut = orgRecords.filter((r) => r.checkOut).length
-        const onBreak = orgRecords.filter((r) => r.breakIn && !r.breakOut).length
-        const absent = Math.max(totalEmployees - orgRecords.length, 0)
-
-        setStats({
-          totalEmployees,
-          presentEmployees: present,
-          absentEmployees: absent,
-          checkedOut,
-          onBreak,
-        })
-      } else {
-        setAttendanceRecords([])
-        setStats({
-          totalEmployees,
-          presentEmployees: 0,
-          absentEmployees: totalEmployees,
-          checkedOut: 0,
-          onBreak: 0,
-        })
-      }
-    } catch (error) {
-      console.error("Failed to load attendance:", error)
-      setAttendanceRecords([])
-    } finally {
-      setLoading(false)
-    }
-  }
+  const stats = useMemo(() => {
+    const present = attendanceRecords.filter((r) => r.checkIn && !r.checkOut).length
+    const checkedOut = attendanceRecords.filter((r) => r.checkOut).length
+    const onBreak = attendanceRecords.filter((r) => r.breakIn && !r.breakOut).length
+    const absent = Math.max(totalEmployees - attendanceRecords.length, 0)
+    return { totalEmployees, presentEmployees: present, absentEmployees: absent, checkedOut, onBreak }
+  }, [attendanceRecords, totalEmployees])
 
   const getStatusBadge = (record) => {
     if (record.checkOut) {
@@ -179,7 +132,7 @@ export default function BusinessOwnerAttendancePage() {
                 />
               </div>
               <Button
-                onClick={() => router.push("/business-owner/dashboard")}
+                onClick={() => navigate("/business-owner/dashboard")}
                 className="bg-white text-purple-700 hover:bg-purple-50"
               >
                 <ArrowLeft className="mr-2 h-4 w-4" />

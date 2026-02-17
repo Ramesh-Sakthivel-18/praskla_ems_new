@@ -189,7 +189,7 @@ router.put('/employees/:id', authenticateToken, requireAdmin, async (req, res) =
  * DELETE Employee (ADMIN ONLY)
  * DELETE /api/admin/employees/:id
  */
-router.delete('/employees/:id', authenticateToken, requireAdmin, async (req, res) => {
+router.delete('/employees/:id', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
   console.log(`🗑️ DELETE /api/admin/employees/${req.params.id}`);
   try {
     const { organizationId, uid: deletedBy } = req.user;

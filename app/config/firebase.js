@@ -6,16 +6,16 @@
  */
 
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 
 // Your Firebase Web App Configuration
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyCM7Rv2xTf55PZ8-y95n7FctN45nIBXOko",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "ems-project-799d6.firebaseapp.com",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "ems-project-799d6",
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "ems-project-799d6.firebasestorage.app",
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "100915421632",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:100915421632:web:9c494abab14198d4682825"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyCM7Rv2xTf55PZ8-y95n7FctN45nIBXOko",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "ems-project-799d6.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "ems-project-799d6",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "ems-project-799d6.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "100915421632",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:100915421632:web:9c494abab14198d4682825"
 };
 
 // Initialize Firebase (singleton pattern)
@@ -30,6 +30,7 @@ if (!getApps().length) {
 
 // Export auth instance for authentication
 export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
 
 // Export app instance
 export default app;

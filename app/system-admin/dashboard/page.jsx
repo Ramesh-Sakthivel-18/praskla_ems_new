@@ -1,7 +1,6 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState, useMemo } from "react"
+import { useNavigate } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -15,71 +14,45 @@ import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 import { getValidIdToken } from "@/lib/firebaseClient"
 
 export default function SystemAdminDashboardPage() {
-    const router = useRouter()
-    const [loading, setLoading] = useState(true)
+    const navigate = useNavigate()
+    const queryClient = useQueryClient()
     const [currentUser, setCurrentUser] = useState(null)
-    const [error, setError] = useState(null)
-    const [dashboardData, setDashboardData] = useState(null)
 
     useEffect(() => {
         if (!isAuthenticated()) {
-            router.push("/system-admin/login")
+            navigate("/system-admin/login")
             return
         }
 
         const user = getCurrentUser()
         if (!user || user.role !== "system_admin") {
             alert("Unauthorized. System Admin access required.")
-            router.push("/system-admin/login")
+            navigate("/system-admin/login")
             return
         }
 
         setCurrentUser(user)
-        loadDashboard()
-    }, [router])
+    }, [navigate])
 
-    const getApiBase = () => {
-        return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api"
-    }
-
-    const loadDashboard = async () => {
-        setLoading(true)
-        setError(null)
-        const token = await getValidIdToken()
-        const base = getApiBase()
-
-        if (!token) {
-            setError("Authentication token not found. Please login again.")
-            setLoading(false)
-            return
-        }
-
-        try {
+    const { data: dashboardData = null, isLoading: loading, error: queryError } = useQuery({
+        queryKey: ['sa-dashboard'],
+        queryFn: async () => {
+            const token = await getValidIdToken()
+            if (!token) throw new Error("Authentication token not found. Please login again.")
+            const base = import.meta.env.VITE_API_URL || "http://localhost:3000/api"
             const response = await fetch(`${base}/system-admin/dashboard/stats`, {
                 headers: { Authorization: `Bearer ${token}` },
             })
+            if (response.status === 401) throw new Error("Session expired. Please login again.")
+            if (response.status === 403) throw new Error("Access denied. System Admin privileges required.")
+            if (!response.ok) { const errData = await response.json(); throw new Error(errData.error || "Failed to load dashboard") }
+            return response.json()
+        },
+        enabled: !!currentUser,
+    })
 
-            if (response.ok) {
-                const data = await response.json()
-                setDashboardData(data)
-            } else if (response.status === 401) {
-                setError("Session expired. Please login again.")
-                setTimeout(() => router.push("/system-admin/login"), 2000)
-                return
-            } else if (response.status === 403) {
-                setError("Access denied. System Admin privileges required.")
-                return
-            } else {
-                const errData = await response.json()
-                setError(errData.error || "Failed to load dashboard")
-            }
-        } catch (error) {
-            console.error("Failed to load dashboard:", error)
-            setError(`Failed to connect to server: ${error.message}`)
-        } finally {
-            setLoading(false)
-        }
-    }
+    const error = queryError?.message || null
+    const loadDashboard = () => queryClient.invalidateQueries({ queryKey: ['sa-dashboard'] })
 
     const formatDate = (dateString) => {
         try {
@@ -281,7 +254,7 @@ export default function SystemAdminDashboardPage() {
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => router.push("/system-admin/organizations")}
+                            onClick={() => navigate("/system-admin/organizations")}
                             className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
                         >
                             View All
@@ -327,7 +300,7 @@ export default function SystemAdminDashboardPage() {
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            onClick={() => router.push(`/system-admin/organizations?id=${org.id}`)}
+                                            onClick={() => navigate(`/system-admin/organizations?id=${org.id}`)}
                                             className="hover:bg-orange-50"
                                         >
                                             <Eye className="h-4 w-4 text-orange-600" />
@@ -344,7 +317,7 @@ export default function SystemAdminDashboardPage() {
             <div className="grid gap-4 md:grid-cols-2">
                 <Button
                     className="h-16 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-md"
-                    onClick={() => router.push("/system-admin/organizations")}
+                    onClick={() => navigate("/system-admin/organizations")}
                 >
                     <Building2 className="mr-2 h-5 w-5" />
                     Manage Organizations
@@ -352,7 +325,7 @@ export default function SystemAdminDashboardPage() {
                 <Button
                     variant="outline"
                     className="h-16 border-orange-200 hover:bg-orange-50 hover:border-orange-300"
-                    onClick={() => router.push("/system-admin/profile")}
+                    onClick={() => navigate("/system-admin/profile")}
                 >
                     <BarChart3 className="mr-2 h-5 w-5 text-orange-600" />
                     View System Reports

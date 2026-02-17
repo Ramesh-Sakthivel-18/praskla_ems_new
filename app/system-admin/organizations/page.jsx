@@ -1,7 +1,6 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useEffect, useState, useMemo } from "react"
+import { useNavigate, useSearchParams } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -25,13 +24,15 @@ import {
 import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 import { getValidIdToken } from "@/lib/firebaseClient"
 
+const getApiBase = () => import.meta.env.VITE_API_URL || "http://localhost:3000/api"
+
+const EMPTY_ARRAY = []
+
 export default function SystemAdminOrganizationsPage() {
-    const router = useRouter()
+    const navigate = useNavigate()
     const searchParams = useSearchParams()
-    const [loading, setLoading] = useState(true)
+    const queryClient = useQueryClient()
     const [currentUser, setCurrentUser] = useState(null)
-    const [error, setError] = useState(null)
-    const [organizations, setOrganizations] = useState([])
     const [filteredOrgs, setFilteredOrgs] = useState([])
     const [searchQuery, setSearchQuery] = useState("")
     const [activeTab, setActiveTab] = useState("all")
@@ -46,65 +47,43 @@ export default function SystemAdminOrganizationsPage() {
 
     useEffect(() => {
         if (!isAuthenticated()) {
-            router.push("/system-admin/login")
+            navigate("/system-admin/login")
             return
         }
 
         const user = getCurrentUser()
         if (!user || user.role !== "system_admin") {
             alert("Unauthorized. System Admin access required.")
-            router.push("/system-admin/login")
+            navigate("/system-admin/login")
             return
         }
 
         setCurrentUser(user)
         loadOrganizations()
-    }, [router])
+    }, [navigate])
+
+    const { data: organizations = EMPTY_ARRAY, isLoading: loading, error: queryError } = useQuery({
+        queryKey: ['sa-organizations'],
+        queryFn: async () => {
+            const token = await getValidIdToken()
+            if (!token) throw new Error("Authentication failed.")
+            const base = import.meta.env.VITE_API_URL || "http://localhost:3000/api"
+            const response = await fetch(`${base}/system-admin/organizations`, {
+                headers: { Authorization: `Bearer ${token}` },
+            })
+            if (!response.ok) throw new Error(`Failed: ${response.status}`)
+            const data = await response.json()
+            return Array.isArray(data) ? data : (data.organizations || [])
+        },
+        enabled: !!currentUser,
+    })
+
+    const error = queryError?.message || null
+    const loadOrganizations = () => queryClient.invalidateQueries({ queryKey: ['sa-organizations'] })
 
     useEffect(() => {
         filterOrganizations()
     }, [organizations, searchQuery, activeTab])
-
-    const getApiBase = () => {
-        return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api"
-    }
-
-    const loadOrganizations = async () => {
-        setLoading(true)
-        setError(null)
-        const token = await getValidIdToken()
-        const base = getApiBase()
-
-        if (!token) {
-            setError("Authentication token not found. Please login again.")
-            setLoading(false)
-            return
-        }
-
-        try {
-            const response = await fetch(`${base}/system-admin/organizations`, {
-                headers: { Authorization: `Bearer ${token}` },
-            })
-
-            if (response.ok) {
-                const data = await response.json()
-                setOrganizations(data.organizations || data.data || [])
-            } else if (response.status === 401) {
-                setError("Session expired. Please login again.")
-                setTimeout(() => router.push("/system-admin/login"), 2000)
-            } else if (response.status === 403) {
-                setError("Access denied. System Admin privileges required.")
-            } else {
-                const errData = await response.json()
-                setError(errData.error || "Failed to load organizations")
-            }
-        } catch (error) {
-            console.error("Failed to load organizations:", error)
-            setError(`Failed to connect to server: ${error.message}`)
-        } finally {
-            setLoading(false)
-        }
-    }
 
     const filterOrganizations = () => {
         let filtered = [...organizations]
@@ -187,6 +166,21 @@ export default function SystemAdminOrganizationsPage() {
         const token = await getValidIdToken()
         const base = getApiBase()
         const action = selectedOrg.isActive ? "deactivate" : "activate"
+        const newStatus = !selectedOrg.isActive
+
+        // Optimistic Update
+        queryClient.setQueryData(['sa-organizations'], (oldData) => {
+            if (!oldData) return []
+            const list = Array.isArray(oldData) ? oldData : (oldData.organizations || [])
+            return list.map(org =>
+                org.id === selectedOrg.id ? { ...org, isActive: newStatus } : org
+            )
+        })
+
+        // Also update the selectedOrg state so the modal reflects the change immediately
+        setSelectedOrg(prev => ({ ...prev, isActive: newStatus }))
+        // Close modal immediately for better UX
+        setShowToggleModal(false)
 
         try {
             const response = await fetch(`${base}/system-admin/organizations/${selectedOrg.id}/${action}`, {
@@ -195,15 +189,20 @@ export default function SystemAdminOrganizationsPage() {
             })
 
             if (response.ok) {
-                setShowToggleModal(false)
+                // Background refresh
                 loadOrganizations()
+                queryClient.invalidateQueries({ queryKey: ['sa-dashboard'] })
             } else {
                 const errData = await response.json()
                 alert(errData.error || `Failed to ${action} organization`)
+                // Revert
+                loadOrganizations()
             }
         } catch (error) {
             console.error(`Failed to ${action} organization:`, error)
             alert(`Failed to ${action} organization: ` + error.message)
+            // Revert
+            loadOrganizations()
         } finally {
             setActionLoading(false)
         }

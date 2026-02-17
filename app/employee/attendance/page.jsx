@@ -1,7 +1,6 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState, useMemo } from "react"
+import { useNavigate } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -14,67 +13,70 @@ import { format } from "date-fns"
 import { safeRedirect } from "@/lib/redirectUtils"
 import { getValidIdToken } from "@/lib/firebaseClient"
 
+const fetchAttendanceData = async () => {
+  const token = await getValidIdToken()
+  if (!token) throw new Error("Not authenticated")
+  const base = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+
+  const [historyRes, todayRes] = await Promise.all([
+    fetch(`${base}/attendance/my-records`, { headers: { 'Authorization': `Bearer ${token}` } }),
+    fetch(`${base}/attendance/today`, { headers: { 'Authorization': `Bearer ${token}` } })
+  ])
+
+  const result = {}
+
+  if (historyRes.ok) {
+    const data = await historyRes.json()
+    result.records = processRecords(data)
+  } else {
+    result.records = []
+  }
+
+  if (todayRes.ok) {
+    result.today = await todayRes.json()
+  }
+
+  return result
+}
+
+// Helper to process/clean records (fix NaN hours etc)
+const processRecords = (data) => {
+  if (!Array.isArray(data)) return []
+  return data.map(r => {
+    if (r.totalHours && String(r.totalHours).includes('NaN')) {
+      return { ...r, totalHours: 'Pending' }
+    }
+    return r
+  })
+}
+
 export default function EmployeeAttendancePage() {
-  const router = useRouter()
-  const [attendanceRecords, setAttendanceRecords] = useState([])
-  const [todayRecord, setTodayRecord] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [actionLoading, setActionLoading] = useState(false)
-  const [error, setError] = useState(null)
 
   useEffect(() => {
-    // Basic auth check handled by layout, but good to be safe
     if (!localStorage.getItem("currentUser")) {
-      safeRedirect(router, "/employee/login")
-      return
+      safeRedirect(navigate, "/employee/login")
     }
-    loadData()
   }, [])
 
-  const getApiBase = () => {
-    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api'
-  }
+  const { data, isLoading: loading, error } = useQuery({
+    queryKey: ['emp-attendance'],
+    queryFn: fetchAttendanceData,
+  })
 
-  const loadData = async () => {
-    setLoading(true)
-    setError(null)
-    const token = await getValidIdToken()
-
-    if (!token) return
-
-    try {
-      const base = getApiBase()
-      const [historyRes, todayRes] = await Promise.all([
-        fetch(`${base}/attendance/my-records`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`${base}/attendance/today`, { headers: { 'Authorization': `Bearer ${token}` } })
-      ])
-
-      if (historyRes.ok) {
-        const data = await historyRes.json()
-        setAttendanceRecords(processRecords(data))
-      }
-
-      if (todayRes.ok) {
-        const data = await todayRes.json()
-        setTodayRecord(data)
-      }
-
-    } catch (err) {
-      console.error('Error loading data:', err)
-      setError('Failed to load attendance records')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const attendanceRecords = data?.records || []
+  const todayRecord = data?.today || null
 
   const handleAction = async (action) => {
     setActionLoading(true)
     const token = await getValidIdToken()
-
     if (!token) return
 
     try {
-      const response = await fetch(`${getApiBase()}/attendance/record`, {
+      const base = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+      const response = await fetch(`${base}/attendance/record`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -84,7 +86,8 @@ export default function EmployeeAttendancePage() {
       })
 
       if (response.ok) {
-        loadData() // Refresh data
+        queryClient.invalidateQueries({ queryKey: ['emp-attendance'] })
+        queryClient.invalidateQueries({ queryKey: ['emp-dashboard'] })
       } else {
         const err = await response.json()
         alert(`Failed to ${action}: ${err.error}`)
@@ -95,26 +98,6 @@ export default function EmployeeAttendancePage() {
     } finally {
       setActionLoading(false)
     }
-  }
-
-  // Helper to process/clean records (fix NaN hours etc)
-  const processRecords = (data) => {
-    if (!Array.isArray(data)) return []
-    return data.map(r => {
-      // Basic formatting if needed, backend ideally sends formatted strings
-      // If validation needed on totalHours seeing 'NaN', fix it here
-      if (r.totalHours && r.totalHours.includes('NaN')) {
-        return { ...r, totalHours: calculateHours(r.checkIn, r.checkOut, r.breakIn, r.breakOut) }
-      }
-      return r
-    })
-  }
-
-  const calculateHours = (inTime, outTime, breakStart, breakEnd) => {
-    // Simplified client-side recalc if backend fails
-    if (!inTime || !outTime) return '-'
-    // Parsing logic omitted for brevity, assuming standard format; if complex, rely on backend
-    return 'Pending'
   }
 
   const isWorking = todayRecord?.checkIn && !todayRecord?.checkOut

@@ -1,13 +1,11 @@
-"use client"
-
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Shield, User, Building2 } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { useNavigate } from "react-router-dom"
 import { safeRedirect } from "@/lib/redirectUtils"
 
 export default function RoleSelectionPage() {
-  const router = useRouter()
+  const navigate = useNavigate()
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
@@ -21,7 +19,7 @@ export default function RoleSelectionPage() {
           {/* Admin */}
           <Card
             className="border-2 hover:border-primary transition-all cursor-pointer"
-            onClick={() => safeRedirect(router, "/admin/login")}
+            onClick={() => safeRedirect(navigate, "/admin/login")}
           >
             <CardHeader className="text-center pb-4">
               <div className="flex justify-center mb-4">
@@ -38,7 +36,7 @@ export default function RoleSelectionPage() {
               <Button
                 className="w-full"
                 size="lg"
-                onClick={() => safeRedirect(router, "/admin/login")}
+                onClick={() => safeRedirect(navigate, "/admin/login")}
               >
                 Continue as Admin
               </Button>
@@ -48,7 +46,7 @@ export default function RoleSelectionPage() {
           {/* Employee */}
           <Card
             className="border-2 hover:border-accent transition-all cursor-pointer"
-            onClick={() => safeRedirect(router, "/employee/login")}
+            onClick={() => safeRedirect(navigate, "/employee/login")}
           >
             <CardHeader className="text-center pb-4">
               <div className="flex justify-center mb-4">
@@ -66,7 +64,7 @@ export default function RoleSelectionPage() {
                 className="w-full"
                 size="lg"
                 variant="secondary"
-                onClick={() => safeRedirect(router, "/employee/login")}
+                onClick={() => safeRedirect(navigate, "/employee/login")}
               >
                 Continue as Employee
               </Button>
@@ -76,7 +74,7 @@ export default function RoleSelectionPage() {
           {/* Business Owner */}
           <Card
             className="border-2 hover:border-purple-500 transition-all cursor-pointer"
-            onClick={() => safeRedirect(router, "/business-owner/register")}
+            onClick={() => safeRedirect(navigate, "/business-owner/register")}
           >
             <CardHeader className="text-center pb-4">
               <div className="flex justify-center mb-4">
@@ -94,7 +92,7 @@ export default function RoleSelectionPage() {
                 className="w-full"
                 size="lg"
                 variant="outline"
-                onClick={() => safeRedirect(router, "/business-owner/register")}
+                onClick={() => safeRedirect(navigate, "/business-owner/register")}
               >
                 Continue as Business Owner
               </Button>

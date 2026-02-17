@@ -1,8 +1,6 @@
-"use client"
-
 import { useState } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
+import { useNavigate } from "react-router-dom"
+import { Link } from "react-router-dom"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,7 +9,7 @@ import { Shield, Mail, Lock, Loader2, AlertCircle, ArrowLeft } from "lucide-reac
 import { loginUser } from "@/lib/auth"
 
 export default function SystemAdminLoginPage() {
-    const router = useRouter()
+    const navigate = useNavigate()
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
     const [loading, setLoading] = useState(false)
@@ -40,7 +38,7 @@ export default function SystemAdminLoginPage() {
             }
 
             // Redirect to dashboard
-            router.push("/system-admin/dashboard")
+            navigate("/system-admin/dashboard")
         } catch (error) {
             console.error("Login error:", error)
             setError(error.message || "Login failed. Please try again.")
@@ -145,20 +143,17 @@ export default function SystemAdminLoginPage() {
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 w-full text-center text-sm">
-                        <Link
-                            href="/admin/login"
+                        <Link to="/admin/login"
                             className="text-blue-600 hover:text-blue-700 hover:underline"
                         >
                             Admin
                         </Link>
-                        <Link
-                            href="/business-owner/login"
+                        <Link to="/business-owner/login"
                             className="text-purple-600 hover:text-purple-700 hover:underline"
                         >
                             Business Owner
                         </Link>
-                        <Link
-                            href="/employee/login"
+                        <Link to="/employee/login"
                             className="text-emerald-600 hover:text-emerald-700 hover:underline"
                         >
                             Employee
@@ -169,7 +164,7 @@ export default function SystemAdminLoginPage() {
                         variant="ghost"
                         size="sm"
                         className="w-full text-muted-foreground hover:text-foreground"
-                        onClick={() => router.push("/")}
+                        onClick={() => navigate("/")}
                     >
                         <ArrowLeft className="mr-2 h-4 w-4" />
                         Back to Home

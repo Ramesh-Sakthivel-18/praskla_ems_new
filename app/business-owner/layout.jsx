@@ -1,8 +1,6 @@
-"use client"
-
 import { useEffect, useState } from "react"
-import { useRouter, usePathname } from "next/navigation"
-import Link from "next/link"
+import { useNavigate, useLocation, Outlet } from "react-router-dom"
+import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
@@ -22,8 +20,10 @@ import { getCurrentUser, isAuthenticated, logoutUser } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 
 export default function BusinessOwnerLayout({ children }) {
-  const router = useRouter()
-  const pathname = usePathname()
+  // children is used for auth pages (login/register wrapped directly)
+  // Outlet is used for nested routes (dashboard, employees, etc.)
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
   const [currentUser, setCurrentUser] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -36,18 +36,18 @@ export default function BusinessOwnerLayout({ children }) {
 
     // Check authentication
     if (!isAuthenticated()) {
-      router.push("/business-owner/login")
+      navigate("/business-owner/login")
       return
     }
 
     const user = getCurrentUser()
     if (!user || user.role !== "business_owner") {
-      router.push("/business-owner/login")
+      navigate("/business-owner/login")
       return
     }
 
     setCurrentUser(user)
-  }, [pathname, isAuthPage, router])
+  }, [pathname, isAuthPage, navigate])
 
   // If it's a login/register page, render without sidebar
   if (isAuthPage) {
@@ -57,7 +57,7 @@ export default function BusinessOwnerLayout({ children }) {
   const handleLogout = () => {
     if (window.confirm("Are you sure you want to logout?")) {
       logoutUser()
-      router.push("/business-owner/login")
+      navigate("/business-owner/login")
     }
   }
 
@@ -137,7 +137,7 @@ export default function BusinessOwnerLayout({ children }) {
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="p-6 border-b">
-            <Link href="/business-owner/dashboard" className="flex items-center gap-3">
+            <Link to="/business-owner/dashboard" className="flex items-center gap-3">
               <div className="p-2 bg-gradient-to-r from-[var(--purple-start)] to-[var(--purple-end)] rounded-lg">
                 <Building2 className="h-6 w-6 text-white" />
               </div>
@@ -157,7 +157,7 @@ export default function BusinessOwnerLayout({ children }) {
               return (
                 <Link
                   key={link.href}
-                  href={link.href}
+                  to={link.href}
                   onClick={() => setSidebarOpen(false)}
                   className={cn(
                     "flex items-center gap-3 px-4 py-3 rounded-lg transition-all",
@@ -207,7 +207,7 @@ export default function BusinessOwnerLayout({ children }) {
       {/* Main Content */}
       <main className="lg:pl-64 pt-16 lg:pt-0">
         <div className="p-4 md:p-6 lg:p-8">
-          {children}
+          {children || <Outlet />}
         </div>
       </main>
     </div>

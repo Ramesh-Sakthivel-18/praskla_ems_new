@@ -1,18 +1,16 @@
-"use client"
-
 import { useState } from "react"
-import Link from "next/link"
+import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Building2, ArrowLeft, Loader2, CheckCircle2, AlertCircle, LogIn, Eye, EyeOff, Mail, Lock, User, Phone, Building } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { useNavigate } from "react-router-dom"
 import { registerOrganization } from "@/lib/auth"
 
 export default function BusinessRegisterPage() {
-  const router = useRouter()
+  const navigate = useNavigate()
   const [formData, setFormData] = useState({
     organizationName: "",
     name: "",
@@ -61,7 +59,7 @@ export default function BusinessRegisterPage() {
       if (result.success) {
         setSuccess(true)
         setTimeout(() => {
-          router.push("/business-owner/login")
+          navigate("/business-owner/login")
         }, 2000)
       } else {
         setError(result.error || "Registration failed. Please try again.")
@@ -89,7 +87,7 @@ export default function BusinessRegisterPage() {
 
       <div className="w-full max-w-lg space-y-6 px-4 relative z-10">
         {/* Back Button */}
-        <Link href="/" className="inline-block">
+        <Link to="/" className="inline-block">
           <Button variant="ghost" className="gap-2 hover:bg-white/50 dark:hover:bg-gray-800/50 transition-all">
             <ArrowLeft className="h-4 w-4" />
             Back to Home
@@ -301,7 +299,7 @@ export default function BusinessRegisterPage() {
             </div>
 
             {/* Login Link */}
-            <Link href="/business-owner/login">
+            <Link to="/business-owner/login">
               <Button
                 variant="outline"
                 className="w-full h-12 border-2 border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/30 hover:border-purple-300 dark:hover:border-purple-700 transition-all group"
