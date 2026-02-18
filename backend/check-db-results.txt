@@ -1,0 +1,26 @@
+=== org_demo_001 users ===
+Count: 8
+  user_admin_001 | admin@democompany.com | admin | pwd_valid=true
+  user_admin_002 | bob@democompany.com | admin | pwd_valid=true
+  user_emp_001 | charlie@democompany.com | employee | pwd_valid=true
+  user_emp_002 | diana@democompany.com | employee | pwd_valid=true
+  user_emp_003 | eve@democompany.com | employee | pwd_valid=true
+  user_emp_004 | frank@democompany.com | employee | pwd_valid=true
+  user_emp_005 | grace@democompany.com | employee | pwd_valid=true
+  user_owner_001 | owner@democompany.com | business_owner | pwd_valid=true
+
+=== org_test_002 users ===
+Count: 6
+  geV7gU7kU1FoMzw9Hb94 | logith123@gmail.com | employee | pwd_valid=false
+  user_admin_003 | kevin@testorg.com | admin | pwd_valid=true
+  user_emp_006 | laura@testorg.com | employee | pwd_valid=true
+  user_emp_007 | mike@testorg.com | employee | pwd_valid=true
+  user_emp_008 | nina@testorg.com | employee | pwd_valid=true
+  user_owner_002 | test@testorg.com | business_owner | pwd_valid=true
+
+=== root users ===
+Count: 0
+
+=== organizations ===
+Count: 1
+  YOpVt8lf14LcliQwjxlF | Hikvision Test Corp | active=true

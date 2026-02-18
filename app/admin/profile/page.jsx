@@ -1,6 +1,6 @@
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,17 +25,18 @@ import {
   Eye,
   EyeOff
 } from "lucide-react"
-import { safeRedirect } from "@/lib/redirectUtils"
 import { format } from "date-fns"
 import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 import { getValidIdToken } from "@/lib/firebaseClient"
 
 export default function AdminProfilePage() {
   const navigate = useNavigate()
+  // eslint-disable-next-line no-unused-vars
   const queryClient = useQueryClient()
 
   const [currentUser, setCurrentUser] = useState(null)
   const [organization, setOrganization] = useState(null)
+  const [loading, setLoading] = useState(false) // Fixed: Added missing state
 
   const [editMode, setEditMode] = useState(false)
   const [editedProfile, setEditedProfile] = useState({
@@ -76,13 +77,14 @@ export default function AdminProfilePage() {
     })
 
     loadOrganizationDetails(emp)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate])
 
   const getApiBase = () => {
     return import.meta.env.VITE_API_URL || "http://localhost:3000"
   }
 
-  const loadOrganizationDetails = async (user) => {
+  const loadOrganizationDetails = async () => {
     setLoading(true)
     const token = await getValidIdToken()
     const base = getApiBase()
@@ -217,233 +219,230 @@ export default function AdminProfilePage() {
 
   if (!currentUser) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
         <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 animate-in fade-in-50 duration-500">
+    <div className="min-h-screen bg-slate-50 animate-in fade-in-50 duration-500">
       <div className="mx-auto max-w-5xl px-4 py-8 space-y-6">
-        {/* Header */}
-        <header className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 p-6 text-white shadow-xl">
-          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNGM0LjQxOCAwIDgtMy41ODIgOC04cy0zLjU4Mi04LTgtOC04IDMuNTgyLTggOCAzLjU4MiA4IDggOHoiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4xIi8+PC9nPjwvc3ZnPg==')] opacity-30" />
-          <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-4">
-              <Avatar className="h-16 w-16 border-4 border-white/20 shadow-xl">
-                <AvatarFallback className="bg-white/20 text-white text-xl font-bold">
-                  {getInitials(currentUser.name)}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight">{currentUser.name}</h1>
-                <p className="text-blue-100">{currentUser.email}</p>
-                <div className="flex gap-2 mt-2">
-                  <Badge className="bg-white/20 text-white border-0">
-                    <Shield className="mr-1 h-3 w-3" />
-                    {currentUser.role === 'admin' ? 'Administrator' : 'System Admin'}
-                  </Badge>
-                </div>
+        {/* ── Page Header ─────────────────────────────────── */}
+        <div className="bg-white border border-slate-200 rounded-xl px-6 py-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6 shadow-sm">
+          <div className="flex items-center gap-5">
+            <Avatar className="h-20 w-20 border-4 border-slate-50 shadow-sm">
+              <AvatarFallback className="bg-blue-600 text-white text-2xl font-bold">
+                {getInitials(currentUser.name)}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{currentUser.name}</h1>
+              <p className="text-slate-500 font-medium">{currentUser.email}</p>
+              <div className="flex gap-2 mt-2">
+                <Badge className="bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100 shadow-none">
+                  <Shield className="mr-1 h-3 w-3" />
+                  {currentUser.role === 'admin' ? 'Administrator' : 'System Admin'}
+                </Badge>
               </div>
             </div>
-            <Button
-              onClick={() => navigate("/admin/dashboard")}
-              className="bg-white text-blue-700 hover:bg-blue-50"
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Dashboard
-            </Button>
           </div>
-        </header>
+          <Button
+            onClick={() => navigate("/admin/dashboard")}
+            variant="outline"
+            className="border-slate-200 text-slate-600 hover:bg-slate-50"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Dashboard
+          </Button>
+        </div>
 
         <div className="grid gap-6 md:grid-cols-3">
           {/* Left Column - Quick Info */}
-          <Card className="border-0 shadow-lg">
-            <CardContent className="pt-6 space-y-4">
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                  <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
-                    <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden h-fit">
+            <div className="p-6 space-y-4">
+              <h3 className="font-semibold text-slate-900 mb-4">Account Details</h3>
+              <div className="space-y-4 text-sm">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-slate-100 rounded-lg">
+                    <Calendar className="h-4 w-4 text-slate-600" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Member since</p>
-                    <p className="font-medium">{formatDate(currentUser.createdAt)}</p>
+                    <p className="text-xs text-slate-400">Member since</p>
+                    <p className="font-medium text-slate-700">{formatDate(currentUser.createdAt)}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                  <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg">
-                    <Building2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-slate-100 rounded-lg">
+                    <Building2 className="h-4 w-4 text-slate-600" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Organization</p>
-                    <p className="font-medium">{organization?.name || "Loading..."}</p>
+                    <p className="text-xs text-slate-400">Organization</p>
+                    <p className="font-medium text-slate-700">{organization?.name || "Loading..."}</p>
                   </div>
                 </div>
                 {organization && (
-                  <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                    <div className="p-2 bg-green-100 dark:bg-green-900/50 rounded-lg">
-                      <Users className="h-4 w-4 text-green-600 dark:text-green-400" />
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-slate-100 rounded-lg">
+                      <Users className="h-4 w-4 text-slate-600" />
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Total Staff</p>
-                      <p className="font-medium">{organization.employeeCount || 0} employees</p>
+                      <p className="text-xs text-slate-400">Total Staff</p>
+                      <p className="font-medium text-slate-700">{organization.employeeCount || 0} employees</p>
                     </div>
                   </div>
                 )}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           {/* Right Column */}
           <div className="md:col-span-2 space-y-6">
             {/* Profile Information */}
-            <Card className="border-0 shadow-lg overflow-hidden">
-              <CardHeader className="flex flex-row items-center justify-between bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-b">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <User className="h-5 w-5 text-blue-600" />
-                    Profile Information
-                  </CardTitle>
-                  <CardDescription>Update your personal details</CardDescription>
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="p-1.5 bg-blue-50 border border-blue-100 rounded-lg">
+                    <User className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-800">Profile Information</h2>
+                    <p className="text-xs text-slate-400">Update your personal details</p>
+                  </div>
                 </div>
                 {!editMode ? (
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
                     onClick={() => setEditMode(true)}
-                    className="bg-white dark:bg-gray-800"
+                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                   >
-                    <Edit className="mr-2 h-4 w-4" />
+                    <Edit className="mr-2 h-3.5 w-3.5" />
                     Edit
                   </Button>
                 ) : (
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={handleCancelEdit}>
-                      <X className="mr-2 h-4 w-4" />
+                    <Button variant="ghost" size="sm" onClick={handleCancelEdit} className="text-slate-500">
                       Cancel
                     </Button>
-                    <Button size="sm" onClick={handleSaveProfile} className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
-                      <Save className="mr-2 h-4 w-4" />
+                    <Button size="sm" onClick={handleSaveProfile} className="bg-blue-600 hover:bg-blue-700 text-white">
+                      <Save className="mr-2 h-3.5 w-3.5" />
                       Save
                     </Button>
                   </div>
                 )}
-              </CardHeader>
-              <CardContent className="pt-6 space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
+              </div>
+              <div className="p-6">
+                <div className="grid gap-5 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="name">Full Name</Label>
+                    <Label htmlFor="name" className="text-xs font-medium text-slate-500 uppercase">Full Name</Label>
                     {editMode ? (
                       <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input
                           id="name"
                           value={editedProfile.name}
                           onChange={(e) => setEditedProfile((s) => ({ ...s, name: e.target.value }))}
-                          className="pl-10"
+                          className="pl-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
                         />
                       </div>
                     ) : (
-                      <div className="flex items-center gap-3 rounded-lg border bg-gray-50 dark:bg-gray-800/50 px-4 py-3">
-                        <User className="h-4 w-4 text-gray-400" />
-                        <span>{currentUser.name}</span>
+                      <div className="text-sm font-medium text-slate-900 border-b border-slate-100 pb-2">
+                        {currentUser.name}
                       </div>
                     )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email Address</Label>
-                    <div className="flex items-center gap-3 rounded-lg border bg-gray-100 dark:bg-gray-800 px-4 py-3">
-                      <Mail className="h-4 w-4 text-gray-400" />
-                      <span className="text-muted-foreground">{currentUser.email}</span>
+                    <Label htmlFor="email" className="text-xs font-medium text-slate-500 uppercase">Email Address</Label>
+                    <div className="flex items-center gap-2 text-sm text-slate-900 border-b border-slate-100 pb-2 opacity-75">
+                      <Mail className="h-3.5 w-3.5 text-slate-400" />
+                      {currentUser.email}
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="phone">Phone Number</Label>
+                    <Label htmlFor="phone" className="text-xs font-medium text-slate-500 uppercase">Phone Number</Label>
                     {editMode ? (
                       <div className="relative">
-                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input
                           id="phone"
                           type="tel"
                           placeholder="Enter phone number"
                           value={editedProfile.phone}
                           onChange={(e) => setEditedProfile((s) => ({ ...s, phone: e.target.value }))}
-                          className="pl-10"
+                          className="pl-10 border-slate-200"
                         />
                       </div>
                     ) : (
-                      <div className="flex items-center gap-3 rounded-lg border bg-gray-50 dark:bg-gray-800/50 px-4 py-3">
-                        <Phone className="h-4 w-4 text-gray-400" />
-                        <span>{currentUser.phone || "Not provided"}</span>
+                      <div className="text-sm font-medium text-slate-900 border-b border-slate-100 pb-2">
+                        {currentUser.phone || "Not provided"}
                       </div>
                     )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="position">Position</Label>
+                    <Label htmlFor="position" className="text-xs font-medium text-slate-500 uppercase">Position</Label>
                     {editMode ? (
                       <div className="relative">
-                        <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input
                           id="position"
                           placeholder="Your position"
                           value={editedProfile.position}
                           onChange={(e) => setEditedProfile((s) => ({ ...s, position: e.target.value }))}
-                          className="pl-10"
+                          className="pl-10 border-slate-200"
                         />
                       </div>
                     ) : (
-                      <div className="flex items-center gap-3 rounded-lg border bg-gray-50 dark:bg-gray-800/50 px-4 py-3">
-                        <Briefcase className="h-4 w-4 text-gray-400" />
-                        <span>{currentUser.position || "Admin"}</span>
+                      <div className="text-sm font-medium text-slate-900 border-b border-slate-100 pb-2">
+                        {currentUser.position || "Admin"}
                       </div>
                     )}
                   </div>
 
                   <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="department">Department</Label>
+                    <Label htmlFor="department" className="text-xs font-medium text-slate-500 uppercase">Department</Label>
                     {editMode ? (
                       <div className="relative">
-                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input
                           id="department"
                           placeholder="Department"
                           value={editedProfile.department}
                           onChange={(e) => setEditedProfile((s) => ({ ...s, department: e.target.value }))}
-                          className="pl-10"
+                          className="pl-10 border-slate-200"
                         />
                       </div>
                     ) : (
-                      <div className="flex items-center gap-3 rounded-lg border bg-gray-50 dark:bg-gray-800/50 px-4 py-3">
-                        <Building2 className="h-4 w-4 text-gray-400" />
-                        <span>{currentUser.department || "Not specified"}</span>
+                      <div className="text-sm font-medium text-slate-900 border-b border-slate-100 pb-2">
+                        {currentUser.department || "Not specified"}
                       </div>
                     )}
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
             {/* Security Section */}
-            <Card className="border-0 shadow-lg overflow-hidden">
-              <CardHeader className="bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-950/30 dark:to-orange-950/30 border-b">
-                <CardTitle className="flex items-center gap-2">
-                  <Lock className="h-5 w-5 text-red-600" />
-                  Security
-                </CardTitle>
-                <CardDescription>Manage your password and security settings</CardDescription>
-              </CardHeader>
-              <CardContent className="pt-6">
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                <div className="p-1.5 bg-red-50 border border-red-100 rounded-lg">
+                  <Lock className="h-4 w-4 text-red-600" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-800">Security</h2>
+                  <p className="text-xs text-slate-400">Manage your password</p>
+                </div>
+              </div>
+              <div className="p-6">
                 {!showPasswordChange ? (
                   <Button
                     variant="outline"
                     onClick={() => setShowPasswordChange(true)}
-                    className="border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-950/30"
+                    className="border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-red-600 hover:border-red-100 transition-colors"
                   >
-                    <Lock className="mr-2 h-4 w-4 text-red-600" />
                     Change Password
                   </Button>
                 ) : (
@@ -457,12 +456,12 @@ export default function AdminProfilePage() {
                           value={passwordData.currentPassword}
                           onChange={(e) => setPasswordData((s) => ({ ...s, currentPassword: e.target.value }))}
                           required
-                          className="pr-10"
+                          className="pr-10 border-slate-200"
                         />
                         <button
                           type="button"
                           onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                         >
                           {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
@@ -477,16 +476,17 @@ export default function AdminProfilePage() {
                           value={passwordData.newPassword}
                           onChange={(e) => setPasswordData((s) => ({ ...s, newPassword: e.target.value }))}
                           required
-                          className="pr-10"
+                          className="pr-10 border-slate-200"
                         />
                         <button
                           type="button"
                           onClick={() => setShowNewPassword(!showNewPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                         >
                           {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
                       </div>
+                      <p className="text-xs text-slate-500">Must be at least 6 characters long</p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="confirmPassword">Confirm New Password</Label>
@@ -496,27 +496,29 @@ export default function AdminProfilePage() {
                         value={passwordData.confirmPassword}
                         onChange={(e) => setPasswordData((s) => ({ ...s, confirmPassword: e.target.value }))}
                         required
+                        className="border-slate-200"
                       />
                     </div>
-                    <div className="flex gap-2 pt-2">
+                    <div className="flex gap-3 pt-2">
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="ghost"
                         onClick={() => {
                           setShowPasswordChange(false)
                           setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" })
                         }}
+                        className="text-slate-500 hover:text-slate-700"
                       >
                         Cancel
                       </Button>
-                      <Button type="submit" className="bg-gradient-to-r from-red-600 to-orange-600 text-white">
+                      <Button type="submit" className="bg-red-600 hover:bg-red-700 text-white">
                         Update Password
                       </Button>
                     </div>
                   </form>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
         </div>
       </div>

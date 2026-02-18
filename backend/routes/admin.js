@@ -138,6 +138,29 @@ router.get('/employees/active', authenticateToken, requireAdminOrBusinessOwner, 
 });
 
 /**
+ * GET Employees Created by Me (ADMIN ONLY)
+ * GET /api/admin/employees/created-by-me
+ * NOTE: This MUST be before /employees/:id to prevent route shadowing
+ */
+router.get('/employees/created-by-me', authenticateToken, requireAdmin, async (req, res) => {
+  console.log('📋 GET /api/admin/employees/created-by-me');
+  try {
+    const { organizationId, uid: adminId } = req.user;
+
+    const employees = await employeeService.getEmployeesCreatedByAdmin(organizationId, adminId);
+
+    res.json({
+      count: employees.length,
+      employees
+    });
+
+  } catch (error) {
+    console.error('❌ Error getting admin employees:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET Employee by ID (ADMIN + BUSINESS OWNER)
  * GET /api/admin/employees/:id
  */
@@ -301,27 +324,7 @@ router.get('/employees/department/:dept', authenticateToken, requireAdminOrBusin
   }
 });
 
-/**
- * GET Employees Created by Me (ADMIN ONLY)
- * GET /api/admin/employees/created-by-me
- */
-router.get('/employees/created-by-me', authenticateToken, requireAdmin, async (req, res) => {
-  console.log('📋 GET /api/admin/employees/created-by-me');
-  try {
-    const { organizationId, uid: adminId } = req.user;
-
-    const employees = await employeeService.getEmployeesCreatedByAdmin(organizationId, adminId);
-
-    res.json({
-      count: employees.length,
-      employees
-    });
-
-  } catch (error) {
-    console.error('❌ Error getting admin employees:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+// created-by-me route moved above /employees/:id to prevent shadowing
 
 // ============================================
 // ATTENDANCE MANAGEMENT (View Only for Both)
@@ -493,7 +496,7 @@ router.get('/leaves/stats/summary', authenticateToken, requireAdminOrBusinessOwn
     const { organizationId } = req.user;
     const year = parseInt(req.query.year) || new Date().getFullYear();
 
-    const stats = await leaveService.getOrganizationLeaveStats(organizationId, year);
+    const stats = await leaveService.getLeaveSummary(organizationId);
 
     res.json({ year, stats });
 

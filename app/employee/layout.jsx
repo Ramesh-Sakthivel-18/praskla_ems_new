@@ -103,12 +103,12 @@ export default function EmployeeLayout({ children }) {
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
             {/* Mobile Header */}
-            <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white dark:bg-slate-800 border-b px-4 py-3 flex items-center justify-between">
+            <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white dark:bg-slate-800 border-b border-sidebar-border px-4 py-3 flex items-center justify-between shadow-sm">
                 <div className="flex items-center gap-2">
-                    <div className="p-1 bg-emerald-600 rounded-md">
+                    <div className="p-1 bg-blue-600 rounded-md">
                         <Building2 className="h-5 w-5 text-white" />
                     </div>
-                    <span className="font-semibold text-emerald-950 dark:text-emerald-50">Employee Portal</span>
+                    <span className="font-semibold text-slate-900 dark:text-slate-50">Employee Portal</span>
                 </div>
                 <Button
                     variant="ghost"
@@ -122,7 +122,7 @@ export default function EmployeeLayout({ children }) {
             {/* Sidebar Overlay (Mobile) */}
             {sidebarOpen && (
                 <div
-                    className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+                    className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 lg:hidden"
                     onClick={() => setSidebarOpen(false)}
                 />
             )}
@@ -130,21 +130,21 @@ export default function EmployeeLayout({ children }) {
             {/* Sidebar */}
             <aside
                 className={cn(
-                    "fixed top-0 left-0 z-40 h-screen w-64 bg-white dark:bg-slate-800 border-r transition-transform duration-300",
+                    "fixed top-0 left-0 z-50 h-screen w-64 bg-white dark:bg-slate-800 border-r border-sidebar-border transition-transform duration-300 ease-in-out shadow-lg lg:shadow-none",
                     "lg:translate-x-0",
                     sidebarOpen ? "translate-x-0" : "-translate-x-full"
                 )}
             >
                 <div className="flex flex-col h-full">
                     {/* Logo */}
-                    <div className="p-6 border-b">
+                    <div className="h-16 flex items-center px-6 border-b border-sidebar-border">
                         <Link to="/employee/dashboard" className="flex items-center gap-3">
-                            <div className="p-2 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-lg shadow-md">
-                                <Building2 className="h-6 w-6 text-white" />
+                            <div className="p-2 bg-blue-600 rounded-lg shadow-sm">
+                                <Building2 className="h-5 w-5 text-white" />
                             </div>
                             <div>
-                                <h2 className="font-bold text-lg text-slate-800 dark:text-slate-100">Employee</h2>
-                                <p className="text-xs text-muted-foreground">Self-Service Portal</p>
+                                <h2 className="font-bold text-lg text-slate-900 dark:text-slate-100 tracking-tight">HIKVISION</h2>
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Employee</p>
                             </div>
                         </Link>
                     </div>
@@ -161,32 +161,31 @@ export default function EmployeeLayout({ children }) {
                                     to={link.href}
                                     onClick={() => setSidebarOpen(false)}
                                     className={cn(
-                                        "flex items-center gap-3 px-4 py-3 rounded-lg transition-all group",
-                                        "hover:bg-emerald-50 dark:hover:bg-emerald-950/30",
+                                        "flex items-center gap-3 px-4 py-3 rounded-lg transition-all group border border-transparent",
                                         active
-                                            ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md hover:shadow-lg hover:from-emerald-600 hover:to-teal-700"
-                                            : "text-slate-600 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-400"
+                                            ? "bg-blue-50 border-blue-100 text-blue-700 shadow-sm dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300"
+                                            : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 hover:text-slate-900 dark:hover:bg-slate-800/50 dark:hover:text-slate-200"
                                     )}
                                 >
-                                    <Icon className={cn("h-5 w-5", active ? "text-white" : "text-slate-500 group-hover:text-emerald-600 dark:text-slate-400 dark:group-hover:text-emerald-400")} />
+                                    <Icon className={cn("h-5 w-5", active ? "text-blue-600 dark:text-blue-400" : "text-slate-400 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300")} />
                                     <span className="font-medium">{link.label}</span>
                                 </Link>
                             )
                         })}
                     </nav>
 
-                    <Separator />
+                    <Separator className="opacity-50" />
 
                     {/* User Profile */}
-                    <div className="p-4 space-y-3">
-                        <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-100 dark:border-slate-700">
-                            <Avatar className="h-10 w-10 border-2 border-emerald-100">
-                                <AvatarFallback className="bg-emerald-100 text-emerald-700 font-bold">
+                    <div className="p-4 space-y-3 bg-slate-50/50 dark:bg-slate-900/50">
+                        <div className="flex items-center gap-3 p-3 bg-white dark:bg-slate-800 rounded-lg border border-sidebar-border shadow-sm">
+                            <Avatar className="h-10 w-10 border-2 border-white dark:border-slate-700 shadow-sm">
+                                <AvatarFallback className="bg-blue-100 text-blue-700 font-bold text-xs">
                                     {getInitials(currentUser?.name)}
                                 </AvatarFallback>
                             </Avatar>
                             <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate text-slate-900 dark:text-slate-100">
+                                <p className="text-sm font-semibold truncate text-slate-900 dark:text-slate-100">
                                     {currentUser?.name || "Employee"}
                                 </p>
                                 <p className="text-xs text-muted-foreground truncate">
@@ -197,7 +196,7 @@ export default function EmployeeLayout({ children }) {
 
                         <Button
                             variant="outline"
-                            className="w-full justify-start hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-950/30 dark:hover:border-red-900"
+                            className="w-full justify-start text-red-600 border-red-100 hover:bg-red-50 hover:text-red-700 hover:border-red-200 dark:border-red-900/30 dark:text-red-400 dark:hover:bg-red-950/30"
                             onClick={handleLogout}
                         >
                             <LogOut className="mr-2 h-4 w-4" />
@@ -208,8 +207,8 @@ export default function EmployeeLayout({ children }) {
             </aside>
 
             {/* Main Content */}
-            <main className="lg:pl-64 pt-16 lg:pt-0 min-h-screen transition-all">
-                <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
+            <main className="lg:pl-64 pt-16 lg:pt-0 min-h-screen transition-all bg-slate-50 dark:bg-slate-950">
+                <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
                     {children || <Outlet />}
                 </div>
             </main>

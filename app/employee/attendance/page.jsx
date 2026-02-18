@@ -57,17 +57,83 @@ const processRecords = (data) => {
 }
 
 /**
- * Get accurate geolocation with high accuracy enabled.
- * Returns a Promise that resolves with { lat, lng, accuracy } or null on error.
+ * Multi-strategy location acquisition with automatic fallbacks.
+ * 
+ * Strategy order:
+ *   1. GPS (high accuracy, enableHighAccuracy: true) — most precise (~5-15m)
+ *   2. Network/WiFi (low accuracy fallback) — moderate precision (~20-100m)
+ *   3. IP Geolocation API — coarse fallback (~1-50km)
+ * 
+ * Also handles permission prompts and provides source info.
+ * 
+ * @param {Function} onStatusUpdate - callback for real-time status updates
+ * @returns {Promise<{lat, lng, accuracy, source, timestamp} | null>}
  */
-const getAccurateLocation = () => {
-  return new Promise((resolve) => {
-    if (!navigator.geolocation) {
-      console.warn('Geolocation not supported')
-      resolve(null)
-      return
-    }
+const getAccurateLocation = async (onStatusUpdate) => {
+  const updateStatus = (msg) => {
+    console.log(`📍 Location: ${msg}`)
+    if (onStatusUpdate) onStatusUpdate(msg)
+  }
 
+  // Check if Geolocation API is available
+  if (!navigator.geolocation) {
+    updateStatus('Geolocation not supported, trying IP fallback...')
+    return await getIPLocation(updateStatus)
+  }
+
+  // Step 1: Check and request permission
+  if (navigator.permissions) {
+    try {
+      const permission = await navigator.permissions.query({ name: 'geolocation' })
+      if (permission.state === 'denied') {
+        updateStatus('Location permission denied. Please enable location in browser settings.')
+        return await getIPLocation(updateStatus)
+      }
+      if (permission.state === 'prompt') {
+        updateStatus('Requesting location permission...')
+      }
+    } catch (e) {
+      // permissions API not supported, proceed anyway
+    }
+  }
+
+  // Step 2: Try GPS (high accuracy)
+  updateStatus('Acquiring GPS location...')
+  const gpsResult = await getPositionWithOptions({
+    enableHighAccuracy: true,
+    timeout: 10000,
+    maximumAge: 0
+  })
+
+  if (gpsResult) {
+    updateStatus(`GPS location acquired (±${Math.round(gpsResult.accuracy)}m)`)
+    return { ...gpsResult, source: 'gps' }
+  }
+
+  // Step 3: Fallback to network/WiFi (low accuracy)
+  updateStatus('GPS unavailable, trying network location...')
+  const networkResult = await getPositionWithOptions({
+    enableHighAccuracy: false,
+    timeout: 8000,
+    maximumAge: 60000 // accept cached position up to 1 min old
+  })
+
+  if (networkResult) {
+    updateStatus(`Network location acquired (±${Math.round(networkResult.accuracy)}m)`)
+    return { ...networkResult, source: 'network' }
+  }
+
+  // Step 4: Final fallback — IP-based geolocation
+  updateStatus('Network location unavailable, trying IP geolocation...')
+  return await getIPLocation(updateStatus)
+}
+
+/**
+ * Get position using the Geolocation API with specified options.
+ * @returns {Promise<{lat, lng, accuracy, timestamp} | null>}
+ */
+const getPositionWithOptions = (options) => {
+  return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         resolve({
@@ -78,16 +144,47 @@ const getAccurateLocation = () => {
         })
       },
       (err) => {
-        console.warn('Geolocation error:', err.message)
+        console.warn(`Geolocation error (highAccuracy=${options.enableHighAccuracy}):`, err.message)
         resolve(null)
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0
-      }
+      options
     )
   })
+}
+
+/**
+ * IP-based geolocation fallback using free API.
+ * Returns approximate location based on IP address (~city level accuracy).
+ * @returns {Promise<{lat, lng, accuracy, source, timestamp} | null>}
+ */
+const getIPLocation = async (updateStatus) => {
+  try {
+    // Try ipapi.co (free, no API key needed, 1000 req/day)
+    const response = await fetch('https://ipapi.co/json/', {
+      signal: AbortSignal.timeout(5000)
+    })
+    if (response.ok) {
+      const data = await response.json()
+      if (data.latitude && data.longitude) {
+        const result = {
+          lat: data.latitude,
+          lng: data.longitude,
+          accuracy: 5000, // ~5km city-level accuracy
+          source: 'ip',
+          timestamp: Date.now(),
+          city: data.city,
+          region: data.region
+        }
+        if (updateStatus) updateStatus(`IP location acquired (${data.city || 'approximate'})`)
+        return result
+      }
+    }
+  } catch (e) {
+    console.warn('IP geolocation failed:', e.message)
+  }
+
+  if (updateStatus) updateStatus('All location methods failed')
+  return null
 }
 
 export default function EmployeeAttendancePage() {
@@ -95,6 +192,8 @@ export default function EmployeeAttendancePage() {
   const queryClient = useQueryClient()
   const [actionLoading, setActionLoading] = useState(false)
   const [locationStatus, setLocationStatus] = useState('') // '', 'fetching', 'success', 'error'
+  const [locationMessage, setLocationMessage] = useState('') // real-time progress message
+  const [locationSource, setLocationSource] = useState('') // 'gps', 'network', 'ip'
   const [locationError, setLocationError] = useState(null)
 
   useEffect(() => {
@@ -114,17 +213,22 @@ export default function EmployeeAttendancePage() {
   const handleAction = useCallback(async (action) => {
     setActionLoading(true)
     setLocationStatus('fetching')
+    setLocationMessage('Initializing location...')
+    setLocationSource('')
     setLocationError(null)
 
     try {
-      // Always get a fresh, accurate location right before the action
-      const freshLocation = await getAccurateLocation()
+      // Get location with real-time status updates
+      const freshLocation = await getAccurateLocation((statusMsg) => {
+        setLocationMessage(statusMsg)
+      })
 
       if (!freshLocation) {
         setLocationStatus('error')
-        setLocationError('Could not get location. The action will proceed without location data.')
+        setLocationError('Could not get location via any method. The action will proceed without location data.')
       } else {
         setLocationStatus('success')
+        setLocationSource(freshLocation.source || 'unknown')
       }
 
       const token = await getValidIdToken()
@@ -149,8 +253,13 @@ export default function EmployeeAttendancePage() {
       if (response.ok) {
         queryClient.invalidateQueries({ queryKey: ['emp-attendance'] })
         queryClient.invalidateQueries({ queryKey: ['emp-dashboard'] })
-        setLocationStatus('')
-        setLocationError(null)
+        // Keep success status visible for 3 seconds
+        setTimeout(() => {
+          setLocationStatus('')
+          setLocationMessage('')
+          setLocationSource('')
+          setLocationError(null)
+        }, 3000)
       } else {
         const err = await response.json()
         alert(`Failed to ${action}: ${err.error}`)
@@ -169,7 +278,7 @@ export default function EmployeeAttendancePage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <RefreshCw className="h-8 w-8 animate-spin text-emerald-600" />
+        <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     )
   }
@@ -187,17 +296,17 @@ export default function EmployeeAttendancePage() {
           </p>
         </div>
         <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg">
-          <Calendar className="h-5 w-5 text-emerald-600" />
+          <Calendar className="h-5 w-5 text-blue-600" />
           <span className="font-medium">{format(new Date(), "MMMM yyyy")}</span>
         </div>
       </div>
 
       {/* Today's Status Card */}
-      <Card className="border-t-4 border-t-emerald-500 shadow-sm">
+      <Card className="border-t-4 border-t-blue-500 shadow-sm">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg flex items-center gap-2">
-              <Clock className="h-5 w-5 text-emerald-600" />
+              <Clock className="h-5 w-5 text-blue-600" />
               Today's Status
             </CardTitle>
             <Badge variant={isWorking ? "default" : "secondary"} className={isWorking ? "bg-emerald-600" : "bg-slate-200 text-slate-700"}>
@@ -242,13 +351,22 @@ export default function EmployeeAttendancePage() {
           <div className="flex flex-col gap-2 mt-4 pt-4 border-t">
             {locationStatus === 'fetching' && (
               <p className="text-sm text-yellow-600 flex items-center gap-2">
-                <RefreshCw className="h-3 w-3 animate-spin" /> Getting precise GPS location...
+                <RefreshCw className="h-3 w-3 animate-spin" /> {locationMessage || 'Acquiring location...'}
               </p>
             )}
             {locationStatus === 'success' && (
-              <p className="text-sm text-emerald-600 flex items-center gap-2">
-                <MapPin className="h-3 w-3" /> Location captured successfully
-              </p>
+              <div className="text-sm text-emerald-600 flex items-center gap-2">
+                <MapPin className="h-3 w-3" />
+                <span>Location captured</span>
+                {locationSource && (
+                  <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${locationSource === 'gps' ? 'border-emerald-400 text-emerald-700 bg-emerald-50' :
+                    locationSource === 'network' ? 'border-blue-400 text-blue-700 bg-blue-50' :
+                      'border-amber-400 text-amber-700 bg-amber-50'
+                    }`}>
+                    {locationSource === 'gps' ? '📡 GPS' : locationSource === 'network' ? '📶 Network' : '🌐 IP'}
+                  </Badge>
+                )}
+              </div>
             )}
             {locationError && (
               <p className="text-sm text-amber-600 flex items-center gap-2">

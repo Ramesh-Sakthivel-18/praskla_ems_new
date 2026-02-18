@@ -154,7 +154,7 @@ export default function EmployeeLeavePage() {
     const getStatusBadge = (status) => {
         switch (status) {
             case 'Approved':
-                return <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border-none"><CheckCircle className="w-3 h-3 mr-1" /> Approved</Badge>
+                return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-200 border-none"><CheckCircle className="w-3 h-3 mr-1" /> Approved</Badge>
             case 'Rejected':
                 return <Badge variant="destructive" className="bg-red-100 text-red-800 hover:bg-red-200 border-none"><XCircle className="w-3 h-3 mr-1" /> Rejected</Badge>
             default:
@@ -193,7 +193,7 @@ export default function EmployeeLeavePage() {
                                 <div className="text-center py-12 border-2 border-dashed rounded-lg bg-slate-50 dark:bg-slate-900/50">
                                     <FileText className="h-10 w-10 mx-auto text-slate-300 mb-3" />
                                     <p className="text-slate-500 font-medium">No leave requests found</p>
-                                    <Button variant="link" onClick={() => setActiveTab("apply")} className="text-emerald-600 mt-2">
+                                    <Button variant="link" onClick={() => setActiveTab("apply")} className="text-blue-600 mt-2">
                                         Apply for your first leave
                                     </Button>
                                 </div>
@@ -267,7 +267,7 @@ export default function EmployeeLeavePage() {
                                             value={formData.startDate}
                                             onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
                                             required
-                                            className="focus-visible:ring-emerald-500"
+                                            className="focus-visible:ring-blue-500"
                                         />
                                     </div>
                                     <div className="space-y-2">
@@ -278,7 +278,7 @@ export default function EmployeeLeavePage() {
                                             value={formData.endDate}
                                             onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
                                             required
-                                            className="focus-visible:ring-emerald-500"
+                                            className="focus-visible:ring-blue-500"
                                         />
                                     </div>
                                 </div>
@@ -287,7 +287,7 @@ export default function EmployeeLeavePage() {
                                     <Label htmlFor="leaveType">Leave Type</Label>
                                     <select
                                         id="leaveType"
-                                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                                         value={formData.leaveType}
                                         onChange={(e) => setFormData({ ...formData, leaveType: e.target.value })}
                                     >
@@ -307,7 +307,7 @@ export default function EmployeeLeavePage() {
                                         onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
                                         placeholder="Please provide a reason for your leave..."
                                         required
-                                        className="min-h-[100px] focus-visible:ring-emerald-500"
+                                        className="min-h-[100px] focus-visible:ring-blue-500"
                                     />
                                 </div>
 
@@ -315,7 +315,7 @@ export default function EmployeeLeavePage() {
                                     <Button type="button" variant="outline" onClick={() => setActiveTab('my-requests')}>
                                         Cancel
                                     </Button>
-                                    <Button type="submit" disabled={submitting} className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[150px]">
+                                    <Button type="submit" disabled={submitting} className="bg-blue-600 hover:bg-blue-700 text-white min-w-[150px]">
                                         {submitting ? "Submitting..." : "Submit Request"}
                                     </Button>
                                 </div>

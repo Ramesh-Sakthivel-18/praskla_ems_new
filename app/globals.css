@@ -3,171 +3,169 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Office-inspired color palette: slate blues and warm grays for professional look */
+/* 
+  PROFESSIONAL BLUE ENTERPRISE THEME 
+  Clean, Authoritative, No Gradients
+*/
 :root {
-  --background: oklch(0.96 0.01 240);
-  --foreground: oklch(0.2 0.02 240);
-  --card: oklch(0.99 0.005 240);
-  --card-foreground: oklch(0.2 0.02 240);
-  --popover: oklch(0.99 0.005 240);
-  --popover-foreground: oklch(0.2 0.02 240);
-  --primary: oklch(0.45 0.12 240);
-  --primary-foreground: oklch(0.99 0.005 240);
-  --secondary: oklch(0.88 0.02 240);
-  --secondary-foreground: oklch(0.2 0.02 240);
-  --muted: oklch(0.92 0.015 240);
-  --muted-foreground: oklch(0.5 0.02 240);
-  --accent: #9C27B0;
-  --accent-foreground: oklch(0.99 0.005 240);
-  --destructive: oklch(0.55 0.22 20);
-  --destructive-foreground: oklch(0.99 0.005 240);
-  --border: oklch(0.88 0.02 240);
-  --input: oklch(0.88 0.02 240);
-  --ring: oklch(0.45 0.12 240);
-  --chart-1: #9C27B0;
-  --chart-2: oklch(0.6 0.18 180);
-  --chart-3: oklch(0.45 0.12 240);
-  --chart-4: oklch(0.65 0.15 280);
-  --chart-5: oklch(0.7 0.12 150);
+  /* Royal Blue Primary - Solid & Professional */
+  --primary: oklch(0.45 0.15 260);
+  --primary-foreground: oklch(1 0 0);
+
+  /* Clean White Backgrounds */
+  --background: oklch(0.99 0.002 260);
+  --foreground: oklch(0.2 0.03 260);
+
+
+  /* Surfaces */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.03 260);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.03 260);
+
+  /* Accents */
+  --secondary: oklch(0.96 0.01 260);
+  --secondary-foreground: oklch(0.2 0.03 260);
+
+  --muted: oklch(0.96 0.01 260);
+  --muted-foreground: oklch(0.55 0.05 260);
+
+  --accent: oklch(0.94 0.02 260);
+  --accent-foreground: oklch(0.2 0.03 260);
+
+  --destructive: oklch(0.55 0.2 25);
+  --destructive-foreground: oklch(1 0 0);
+
+  --border: oklch(0.92 0.01 260);
+  --input: oklch(0.92 0.01 260);
+  --ring: oklch(0.45 0.15 260);
+
   --radius: 0.5rem;
-  --sidebar: oklch(0.25 0.03 240);
-  --sidebar-foreground: oklch(0.95 0.01 240);
-  --sidebar-primary: #9C27B0;
-  --sidebar-primary-foreground: oklch(0.99 0.005 240);
-  --sidebar-accent: oklch(0.35 0.04 240);
-  --sidebar-accent-foreground: oklch(0.95 0.01 240);
-  --sidebar-border: oklch(0.35 0.04 240);
-  --sidebar-ring: oklch(0.45 0.12 240);
-  /* Purple theme (from screenshot) */
-  --purple-start: #6b2ea6;
-  --purple-mid: #9C27B0;
-  --purple-end: #b77bd6;
-  --primary-gradient: linear-gradient(90deg, var(--purple-start), var(--purple-mid) 45%, var(--purple-end));
-  --primary-gradient-radial: radial-gradient(ellipse at top left, var(--purple-start), var(--purple-mid), var(--purple-end));
-  --on-primary: oklch(0.99 0.005 240);
+
+  /* Charts - Professional Blue Scale */
+  --chart-1: oklch(0.45 0.15 260);
+  --chart-2: oklch(0.55 0.12 260);
+  --chart-3: oklch(0.65 0.10 260);
+  --chart-4: oklch(0.75 0.08 260);
+  --chart-5: oklch(0.85 0.05 260);
+
+  /* Sidebar - Clean White */
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.3 0.03 260);
+  --sidebar-primary: oklch(0.45 0.15 260);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.96 0.01 260);
+  --sidebar-accent-foreground: oklch(0.2 0.03 260);
+  --sidebar-border: oklch(0.92 0.01 260);
+  --sidebar-ring: oklch(0.45 0.15 260);
+
+  /* Explicitly NO Gradients */
+  --primary-gradient: var(--primary);
+  --primary-gradient-radial: var(--primary);
+  --on-primary: var(--primary-foreground);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
-  --chart-1: #9C27B0;
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: #9C27B0;
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
+  /* Dark Mode - Deep Professional Blue-Grey */
+  --background: oklch(0.15 0.03 260);
+  --foreground: oklch(0.98 0.01 260);
+
+  --card: oklch(0.18 0.03 260);
+  --card-foreground: oklch(0.98 0.01 260);
+
+  --popover: oklch(0.18 0.03 260);
+  --popover-foreground: oklch(0.98 0.01 260);
+
+  --primary: oklch(0.5 0.15 260);
+  --primary-foreground: oklch(1 0 0);
+
+  --secondary: oklch(0.25 0.04 260);
+  --secondary-foreground: oklch(0.98 0.01 260);
+
+  --muted: oklch(0.25 0.04 260);
+  --muted-foreground: oklch(0.7 0.04 260);
+
+  --accent: oklch(0.25 0.04 260);
+  --accent-foreground: oklch(0.98 0.01 260);
+
+  --destructive: oklch(0.4 0.15 25);
+  --destructive-foreground: oklch(0.98 0.01 260);
+
+  --border: oklch(0.25 0.04 260);
+  --input: oklch(0.25 0.04 260);
+  --ring: oklch(0.5 0.15 260);
+
+  --sidebar: oklch(0.18 0.03 260);
+  --sidebar-foreground: oklch(0.9 0.02 260);
+  --sidebar-primary: oklch(0.5 0.15 260);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.25 0.04 260);
+  --sidebar-accent-foreground: oklch(0.98 0.01 260);
+  --sidebar-border: oklch(0.25 0.04 260);
+  --sidebar-ring: oklch(0.5 0.15 260);
 }
 
 /* ========================================
-   BROWSER COMPATIBILITY & MOBILE FIXES
+   GLOBAL SMOOTHNESS & UTILITIES
    ======================================== */
 
-/* Safe area insets for iPhone X+ notch/home indicator */
 html {
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
 }
 
-/* Fix 100vh issue on mobile Safari (includes URL bar) */
+/* Smooth Transitions for Interactive Elements */
+a,
+button,
+input,
+select,
+textarea,
+[role="button"] {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Modern Card Lift Effect (Subtle) */
+.hover-lift {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.08);
+  /* No colored glow, just shadow */
+}
+
+/* Glass Panel - Clean & Professional */
+.glass-panel {
+  background: color-mix(in oklch, var(--card), transparent 10%);
+  backdrop-filter: blur(16px);
+  border: 1px solid color-mix(in oklch, var(--border), transparent 40%);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.dark .glass-panel {
+  background: color-mix(in oklch, var(--card), transparent 20%);
+  border: 1px solid color-mix(in oklch, var(--border), transparent 60%);
+}
+
 .min-h-screen {
   min-height: 100vh;
   min-height: 100dvh;
-  /* Dynamic viewport height - excludes UI */
 }
 
-/* Webkit prefix for backdrop-blur (Safari < 15) */
-.backdrop-blur,
-.backdrop-blur-sm,
-.backdrop-blur-md,
-.backdrop-blur-lg,
-.backdrop-blur-xl,
-.backdrop-blur-2xl,
-.backdrop-blur-3xl {
-  -webkit-backdrop-filter: var(--tw-backdrop-blur);
-}
-
-/* Performance hints for animations */
-.animate-pulse {
-  will-change: opacity;
-}
-
-/* Respect reduced motion preferences */
-@media (prefers-reduced-motion: reduce) {
-
-  .animate-pulse,
-  .animate-spin,
-  .animate-bounce {
-    animation: none !important;
-  }
-
-  * {
-    transition-duration: 0.01ms !important;
-  }
-}
-
-/* Touch target minimum size for mobile */
-@media (pointer: coarse) {
-
-  button,
-  a,
-  [role="button"],
-  input[type="checkbox"],
-  input[type="radio"] {
-    min-height: 44px;
-    min-width: 44px;
-  }
-
-
-}
-
-/* Prevent text selection on interactive elements (app-like feel) */
 button,
 [role="button"] {
   -webkit-user-select: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
-/* Smooth scrolling with momentum on iOS */
 .overflow-auto,
 .overflow-y-auto,
-.overflow-x-auto,
 .overflow-scroll {
   -webkit-overflow-scrolling: touch;
-}
-
-/* Hide scrollbars on mobile for cleaner app-like feel */
-@media (max-width: 768px) {
-  ::-webkit-scrollbar {
-    display: none;
-  }
-
-  * {
-    scrollbar-width: none;
-  }
 }
 
 @theme inline {
@@ -220,34 +218,18 @@ button,
     @apply bg-background text-foreground;
   }
 
-  /* Utility helpers to apply the purple theme quickly */
-  .bg-primary-gradient {
-    background-image: var(--primary-gradient) !important;
-    color: var(--on-primary) !important;
+  /* FORCE Solid Colors - Override any legacy gradient classes */
+  .bg-primary-gradient,
+  .bg-primary-gradient-radial,
+  .from-primary,
+  .to-primary {
+    background-image: none !important;
+    background-color: var(--primary) !important;
   }
 
-  .bg-primary-gradient-radial {
-    background-image: var(--primary-gradient-radial) !important;
-    color: var(--on-primary) !important;
-  }
-
-  .bg-primary {
-    background-color: var(--purple-mid) !important;
-    color: var(--on-primary) !important;
-  }
-
-  .text-primary {
-    color: var(--purple-mid) !important;
-  }
-
-  .btn-primary {
-    background-image: var(--primary-gradient);
-    color: var(--on-primary);
-    border: none;
-  }
-
-  .sidebar-primary {
-    background-image: linear-gradient(180deg, rgba(107, 46, 166, 0.95), rgba(156, 39, 176, 0.95));
-    color: var(--on-primary);
+  .text-primary-gradient {
+    background: none !important;
+    -webkit-text-fill-color: initial !important;
+    color: var(--primary) !important;
   }
 }

@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import {
-  Building2, Users, Shield, UserCheck, UserX, FileText,
-  Plus, RefreshCw, AlertCircle, TrendingUp, ChevronRight,
-  Settings, Eye, Clock
+  Building2, Users, Shield, UserCheck, FileText,
+  RefreshCw, AlertCircle, ChevronRight,
+  Settings, Eye, Clock, CalendarDays
 } from "lucide-react"
 import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 import { getValidIdToken } from "@/lib/firebaseClient"
@@ -88,7 +88,7 @@ export default function BusinessOwnerDashboardPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-[var(--purple-mid)]" />
+          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-blue-600" />
           <p className="text-muted-foreground">Loading dashboard...</p>
         </div>
       </div>
@@ -107,26 +107,26 @@ export default function BusinessOwnerDashboardPage() {
       subtitle: `${employees.inactive || 0} inactive`,
       icon: Users,
       color: "text-blue-600",
-      bgColor: "bg-blue-50 dark:bg-blue-950/30",
-      borderColor: "border-blue-200 dark:border-blue-800"
+      bgColor: "bg-blue-50 dark:bg-blue-900/30",
+      borderColor: "border-blue-100 dark:border-blue-900"
     },
     {
       title: "Admins",
       value: adminQuotas.length,
       subtitle: "Managing employees",
       icon: Shield,
-      color: "text-purple-600",
-      bgColor: "bg-purple-50 dark:bg-purple-950/30",
-      borderColor: "border-purple-200 dark:border-purple-800"
+      color: "text-indigo-600",
+      bgColor: "bg-indigo-50 dark:bg-indigo-900/30",
+      borderColor: "border-indigo-100 dark:border-indigo-900"
     },
     {
       title: "Present Today",
       value: attendance.present || 0,
       subtitle: "Checked in",
       icon: UserCheck,
-      color: "text-emerald-600",
-      bgColor: "bg-emerald-50 dark:bg-emerald-950/30",
-      borderColor: "border-emerald-200 dark:border-emerald-800"
+      color: "text-blue-500",
+      bgColor: "bg-blue-50 dark:bg-blue-900/30",
+      borderColor: "border-blue-100 dark:border-blue-900"
     },
     {
       title: "Pending Leaves",
@@ -134,25 +134,25 @@ export default function BusinessOwnerDashboardPage() {
       subtitle: "Awaiting approval",
       icon: FileText,
       color: "text-amber-600",
-      bgColor: "bg-amber-50 dark:bg-amber-950/30",
-      borderColor: "border-amber-200 dark:border-amber-800"
+      bgColor: "bg-amber-50 dark:bg-amber-900/30",
+      borderColor: "border-amber-100 dark:border-amber-900"
     },
   ]
 
   return (
-    <div className="space-y-6 p-1">
+    <div className="space-y-6 animate-in fade-in-50 duration-500">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-gray-900 to-gray-600 dark:from-gray-100 dark:to-gray-400 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
             Business Owner Dashboard
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-slate-500 mt-1">
             Manage your organization and oversee operations
           </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={loadDashboard} variant="outline" size="sm" className="gap-2">
+          <Button onClick={loadDashboard} variant="outline" size="sm" className="gap-2 border-slate-200 hover:bg-slate-50">
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
@@ -168,7 +168,7 @@ export default function BusinessOwnerDashboardPage() {
               <div>
                 <p className="font-medium text-red-900 dark:text-red-200">Error</p>
                 <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
-                <Button size="sm" variant="outline" onClick={loadDashboard} className="mt-2">
+                <Button size="sm" variant="outline" onClick={loadDashboard} className="mt-2 text-red-700 border-red-200 hover:bg-red-100">
                   <RefreshCw className="mr-2 h-4 w-4" />
                   Retry
                 </Button>
@@ -185,20 +185,19 @@ export default function BusinessOwnerDashboardPage() {
           return (
             <Card
               key={index}
-              className={`relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 border ${stat.borderColor}`}
+              className={`relative overflow-hidden transition-all duration-300 hover:shadow-md border ${stat.borderColor}`}
             >
-              <div className={`absolute inset-0 ${stat.bgColor} opacity-50`} />
               <CardHeader className="relative flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
+                <CardTitle className="text-sm font-medium text-slate-500">
                   {stat.title}
                 </CardTitle>
-                <div className={`p-2.5 rounded-xl ${stat.bgColor}`}>
-                  <Icon className={`h-5 w-5 ${stat.color}`} />
+                <div className={`p-2 rounded-lg ${stat.bgColor}`}>
+                  <Icon className={`h-4 w-4 ${stat.color}`} />
                 </div>
               </CardHeader>
               <CardContent className="relative">
-                <div className="text-3xl font-bold tracking-tight">{stat.value}</div>
-                <p className="text-xs text-muted-foreground mt-1">{stat.subtitle}</p>
+                <div className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">{stat.value}</div>
+                <p className="text-xs text-slate-500 mt-1">{stat.subtitle}</p>
               </CardContent>
             </Card>
           )
@@ -206,67 +205,67 @@ export default function BusinessOwnerDashboardPage() {
       </div>
 
       {/* Organization Quota Overview */}
-      <Card className="transition-all duration-300 hover:shadow-lg">
-        <CardHeader className="pb-3">
+      <Card className="transition-all duration-300 hover:shadow-md border-slate-200">
+        <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-lg font-semibold">Organization Capacity</CardTitle>
-              <p className="text-sm text-muted-foreground mt-1">
+              <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">Organization Capacity</CardTitle>
+              <p className="text-sm text-slate-500 mt-1">
                 Monitor your organization's resource utilization
               </p>
             </div>
-            <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30">
+            <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/30">
               <Building2 className="h-5 w-5 text-blue-600" />
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="grid gap-6 md:grid-cols-3">
+        <CardContent className="pt-6">
+          <div className="grid gap-8 md:grid-cols-3">
             {/* Employees Quota */}
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Employees</span>
-                <span className="text-sm text-muted-foreground">
-                  {quota.organization?.totalEmployees || 0} / {quota.organization?.maxEmployees || 0}
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Employees</span>
+                <span className="text-sm text-slate-500">
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{quota.organization?.totalEmployees || 0}</span> / {quota.organization?.maxEmployees || 0}
                 </span>
               </div>
               <Progress
                 value={getOrgQuotaPercentage()}
-                className="h-2"
+                className="h-2 bg-slate-100 dark:bg-slate-800 [&>div]:bg-blue-600"
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-slate-400">
                 {quota.organization?.maxEmployees - (quota.organization?.totalEmployees || 0)} slots available
               </p>
             </div>
             {/* Admins Quota */}
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Admins</span>
-                <span className="text-sm text-muted-foreground">
-                  {adminQuotas.length} / {quota.organization?.maxAdmins || 0}
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Admins</span>
+                <span className="text-sm text-slate-500">
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{adminQuotas.length}</span> / {quota.organization?.maxAdmins || 0}
                 </span>
               </div>
               <Progress
                 value={quota.organization?.maxAdmins ? (adminQuotas.length / quota.organization.maxAdmins) * 100 : 0}
-                className="h-2"
+                className="h-2 bg-slate-100 dark:bg-slate-800 [&>div]:bg-indigo-600"
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-slate-400">
                 {(quota.organization?.maxAdmins || 0) - adminQuotas.length} admin slots available
               </p>
             </div>
             {/* Business Owners Quota */}
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Business Owners</span>
-                <span className="text-sm text-muted-foreground">
-                  {quota.organization?.totalBusinessOwners || 1} / {quota.organization?.maxBusinessOwners || 5}
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Business Owners</span>
+                <span className="text-sm text-slate-500">
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{quota.organization?.totalBusinessOwners || 1}</span> / {quota.organization?.maxBusinessOwners || 5}
                 </span>
               </div>
               <Progress
                 value={quota.organization?.maxBusinessOwners ? ((quota.organization?.totalBusinessOwners || 1) / quota.organization.maxBusinessOwners) * 100 : 20}
-                className="h-2"
+                className="h-2 bg-slate-100 dark:bg-slate-800 [&>div]:bg-slate-600"
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-slate-400">
                 {(quota.organization?.maxBusinessOwners || 5) - (quota.organization?.totalBusinessOwners || 1)} slots available
               </p>
             </div>
@@ -277,12 +276,12 @@ export default function BusinessOwnerDashboardPage() {
       {/* Admin Management and Pending Leaves Row */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Admin Quota Management */}
-        <Card className="transition-all duration-300 hover:shadow-lg">
-          <CardHeader className="pb-3">
+        <Card className="transition-all duration-300 hover:shadow-md border-slate-200">
+          <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-lg font-semibold">Admin Quota Management</CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">
+                <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">Admin Quota Management</CardTitle>
+                <p className="text-sm text-slate-500 mt-1">
                   Monitor and manage admin employee creation limits
                 </p>
               </div>
@@ -290,17 +289,17 @@ export default function BusinessOwnerDashboardPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => navigate("/business-owner/employees")}
-                className="text-[var(--purple-mid)]"
+                className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 h-8"
               >
                 Manage
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6">
             {adminQuotas.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Shield className="h-10 w-10 mx-auto mb-2 opacity-50" />
+              <div className="text-center py-8 text-slate-400">
+                <Shield className="h-10 w-10 mx-auto mb-2 opacity-20" />
                 <p>No admins created yet</p>
                 <p className="text-xs mt-1">Create admins to delegate employee management</p>
               </div>
@@ -311,28 +310,28 @@ export default function BusinessOwnerDashboardPage() {
                   return (
                     <div
                       key={admin.id}
-                      className="p-4 rounded-lg bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800"
+                      className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800"
                     >
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                            <Shield className="h-4 w-4 text-purple-600" />
+                          <div className="h-9 w-9 rounded-full bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center shadow-sm">
+                            <Shield className="h-4 w-4 text-indigo-600" />
                           </div>
                           <div>
-                            <p className="font-medium text-sm">{admin.name}</p>
-                            <p className="text-xs text-muted-foreground">{admin.email}</p>
+                            <p className="font-medium text-sm text-slate-900 dark:text-slate-100">{admin.name}</p>
+                            <p className="text-xs text-slate-500">{admin.email}</p>
                           </div>
                         </div>
-                        <Badge variant={usage >= 90 ? "destructive" : usage >= 70 ? "warning" : "secondary"}>
+                        <Badge variant={usage >= 90 ? "destructive" : "secondary"} className="bg-white border-slate-200 text-slate-700">
                           {admin.quota?.created || 0} / {admin.quota?.limit || 0}
                         </Badge>
                       </div>
-                      <Progress value={usage} className="h-1.5" />
+                      <Progress value={usage} className="h-1.5 bg-slate-200 dark:bg-slate-700 [&>div]:bg-indigo-500" />
                     </div>
                   )
                 })}
                 {adminQuotas.length > 4 && (
-                  <p className="text-sm text-center text-muted-foreground pt-2">
+                  <p className="text-sm text-center text-slate-500 pt-2">
                     +{adminQuotas.length - 4} more admins
                   </p>
                 )}
@@ -342,12 +341,12 @@ export default function BusinessOwnerDashboardPage() {
         </Card>
 
         {/* Pending Leave Requests */}
-        <Card className="transition-all duration-300 hover:shadow-lg">
-          <CardHeader className="pb-3">
+        <Card className="transition-all duration-300 hover:shadow-md border-slate-200">
+          <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-lg font-semibold">Pending Leave Requests</CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">
+                <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">Pending Leave Requests</CardTitle>
+                <p className="text-sm text-slate-500 mt-1">
                   {leaves.pendingCount} request{leaves.pendingCount !== 1 ? 's' : ''} in queue
                 </p>
               </div>
@@ -355,17 +354,17 @@ export default function BusinessOwnerDashboardPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => navigate("/business-owner/leave-requests")}
-                className="text-[var(--purple-mid)]"
+                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 h-8"
               >
                 View All
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6">
             {leaves.pending?.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <FileText className="h-10 w-10 mx-auto mb-2 opacity-50" />
+              <div className="text-center py-8 text-slate-400">
+                <FileText className="h-10 w-10 mx-auto mb-2 opacity-20" />
                 <p>No pending leave requests</p>
               </div>
             ) : (
@@ -373,20 +372,20 @@ export default function BusinessOwnerDashboardPage() {
                 {leaves.pending?.slice(0, 4).map((leave, i) => (
                   <div
                     key={leave.id || i}
-                    className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800/50"
+                    className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 hover:bg-slate-100 transition-colors"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                      <div className="h-9 w-9 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center">
                         <Clock className="h-4 w-4 text-amber-600" />
                       </div>
                       <div>
-                        <p className="font-medium text-sm">{leave.userName || leave.employeeName || 'Employee'}</p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="font-medium text-sm text-slate-900 dark:text-slate-100">{leave.userName || leave.employeeName || 'Employee'}</p>
+                        <p className="text-xs text-slate-500">
                           {leave.leaveType} • {leave.startDate} - {leave.endDate}
                         </p>
                       </div>
                     </div>
-                    <Badge variant="outline" className="text-amber-600 border-amber-200">
+                    <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50">
                       Pending
                     </Badge>
                   </div>
@@ -398,43 +397,51 @@ export default function BusinessOwnerDashboardPage() {
       </div>
 
       {/* Quick Actions */}
-      <Card className="transition-all duration-300 hover:shadow-lg">
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold">Quick Actions</CardTitle>
+      <Card className="transition-all duration-300 hover:shadow-md border-slate-200">
+        <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
+          <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">Quick Actions</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Button
               variant="outline"
-              className="h-auto py-4 flex flex-col gap-2 hover:border-[var(--purple-mid)] hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-all"
+              className="h-auto py-4 flex flex-col gap-3 border-slate-200 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all group"
               onClick={() => navigate("/business-owner/employees")}
             >
-              <Users className="h-5 w-5 text-[var(--purple-mid)]" />
-              <span className="text-sm">View Employees</span>
+              <div className="p-2 rounded-full bg-blue-50 group-hover:bg-blue-100 transition-colors">
+                <Users className="h-5 w-5 text-blue-600" />
+              </div>
+              <span className="text-sm font-medium text-slate-700">View Employees</span>
             </Button>
             <Button
               variant="outline"
-              className="h-auto py-4 flex flex-col gap-2 hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all"
+              className="h-auto py-4 flex flex-col gap-3 border-slate-200 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all group"
               onClick={() => navigate("/business-owner/attendance")}
             >
-              <Eye className="h-5 w-5 text-emerald-600" />
-              <span className="text-sm">View Attendance</span>
+              <div className="p-2 rounded-full bg-blue-50 group-hover:bg-blue-100 transition-colors">
+                <Eye className="h-5 w-5 text-blue-600" />
+              </div>
+              <span className="text-sm font-medium text-slate-700">View Attendance</span>
             </Button>
             <Button
               variant="outline"
-              className="h-auto py-4 flex flex-col gap-2 hover:border-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all"
+              className="h-auto py-4 flex flex-col gap-3 border-slate-200 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all group"
               onClick={() => navigate("/business-owner/leave-requests")}
             >
-              <FileText className="h-5 w-5 text-amber-600" />
-              <span className="text-sm">Leave Requests</span>
+              <div className="p-2 rounded-full bg-blue-50 group-hover:bg-blue-100 transition-colors">
+                <FileText className="h-5 w-5 text-blue-600" />
+              </div>
+              <span className="text-sm font-medium text-slate-700">Leave Requests</span>
             </Button>
             <Button
               variant="outline"
-              className="h-auto py-4 flex flex-col gap-2 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-all"
+              className="h-auto py-4 flex flex-col gap-3 border-slate-200 hover:border-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900/10 transition-all group"
               onClick={() => navigate("/business-owner/profile")}
             >
-              <Settings className="h-5 w-5 text-blue-600" />
-              <span className="text-sm">Settings</span>
+              <div className="p-2 rounded-full bg-slate-100 group-hover:bg-slate-200 transition-colors">
+                <Settings className="h-5 w-5 text-slate-600" />
+              </div>
+              <span className="text-sm font-medium text-slate-700">Settings</span>
             </Button>
           </div>
         </CardContent>

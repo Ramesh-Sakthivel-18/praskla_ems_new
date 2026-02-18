@@ -2,13 +2,18 @@
 
 import { useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { signInWithPopup } from 'firebase/auth';
-import { auth, googleProvider } from '@/app/config/firebase';
+import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { auth } from '@/app/config/firebase';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { getRoleRedirectPath } from '@/lib/auth';
+import { getRoleRedirectPath, storeAuthData } from '@/lib/auth';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+
+const getApiBase = () => {
+    const url = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+    return url.endsWith('/api') ? url : `${url}/api`
+}
 
 export default function GoogleLoginButton({ role = null }) {
     const [loading, setLoading] = useState(false);
@@ -18,15 +23,21 @@ export default function GoogleLoginButton({ role = null }) {
     const handleGoogleLogin = async () => {
         setLoading(true);
         try {
+            // Create a fresh provider with account selection prompt
+            const provider = new GoogleAuthProvider();
+            provider.setCustomParameters({
+                prompt: 'select_account' // Always show account chooser
+            });
+
             // 1. Firebase Client Sign In (Pop-up)
-            const result = await signInWithPopup(auth, googleProvider);
+            const result = await signInWithPopup(auth, provider);
             const idToken = await result.user.getIdToken();
 
             console.log('Got ID Token, sending to backend...');
 
             // 2. Send to Backend for verification and custom token
-            // TODO: Use environment variable for URL
-            const response = await fetch('http://localhost:3000/api/auth/google', {
+            const apiBase = getApiBase();
+            const response = await fetch(`${apiBase}/auth/google`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ idToken })
@@ -46,20 +57,35 @@ export default function GoogleLoginButton({ role = null }) {
                 throw new Error(`Access denied. You are logged in as ${data.user.role}, but this portal is for ${role}s.`);
             }
 
-            // 4. Sign in with Custom Token (switches to EMS App User context)
+            // 4. Store auth data in localStorage (required for layout route guards)
+            storeAuthData({
+                isLoggedIn: true,
+                token: data.token,
+                user: data.user
+            });
+
+            // 5. Sign in with Custom Token (switches to EMS App User context)
             await signInWithToken(data.token);
 
             toast.success(`Welcome back, ${data.user.name}!`);
 
-            // 5. Redirect based on role
+            // 6. Redirect based on role
             const redirectPath = getRoleRedirectPath(data.user.role);
             navigate(redirectPath);
 
         } catch (error) {
             console.error('Google Login Error:', error);
-            toast.error(error.message);
-            // Optional: Sign out from Google session if logical login failed
-            // auth.signOut();
+
+            // User-friendly error messages
+            if (error.code === 'auth/popup-blocked') {
+                toast.error('Popup was blocked. Please allow popups for this site and try again.');
+            } else if (error.code === 'auth/popup-closed-by-user') {
+                toast.info('Login cancelled.');
+            } else if (error.code === 'auth/cancelled-popup-request') {
+                // Ignore — user clicked the button multiple times
+            } else {
+                toast.error(error.message || 'Google login failed. Please try again.');
+            }
         } finally {
             setLoading(false);
         }

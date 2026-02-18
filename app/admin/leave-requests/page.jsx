@@ -147,21 +147,21 @@ export default function AdminLeaveRequestsPage() {
     switch (normalizedStatus) {
       case "pending":
         return (
-          <Badge className="bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 border-0">
+          <Badge className="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-0">
             <Clock className="mr-1 h-3 w-3" />
             Pending
           </Badge>
         )
       case "approved":
         return (
-          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
+          <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 border-0">
             <CheckCircle className="mr-1 h-3 w-3" />
             Approved
           </Badge>
         )
       case "rejected":
         return (
-          <Badge className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-0">
+          <Badge className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-0">
             <XCircle className="mr-1 h-3 w-3" />
             Rejected
           </Badge>
@@ -189,196 +189,185 @@ export default function AdminLeaveRequestsPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in-50 duration-500">
-      {/* Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 p-6 text-white shadow-xl">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNGM0LjQxOCAwIDgtMy41ODIgOC04cy0zLjU4Mi04LTgtOC04IDMuNTgyLTggOCAzLjU4MiA4IDggOHoiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4xIi8+PC9nPjwvc3ZnPg==')] opacity-30" />
-        <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      {/* ── Page Header ─────────────────────────────────── */}
+      <div className="bg-white border border-slate-200 rounded-xl px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="p-2.5 bg-blue-600 rounded-lg shadow-sm">
+            <FileText className="h-5 w-5 text-white" />
+          </div>
           <div>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-white/20 backdrop-blur-sm rounded-xl">
-                <FileText className="h-6 w-6" />
-              </div>
-              <h1 className="text-2xl font-bold tracking-tight">Leave Requests</h1>
-            </div>
-            <p className="text-blue-100">Manage employee leave requests</p>
+            <h1 className="text-lg font-semibold text-slate-900 tracking-tight">Leave Requests</h1>
+            <p className="text-sm text-slate-500 mt-0.5">Manage employee leave requests</p>
           </div>
-          <div className="flex items-center gap-3">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={loadLeaveRequests}
-              disabled={loading}
-              className="bg-white/20 hover:bg-white/30 text-white border-0"
-            >
-              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
-            <Button
-              onClick={() => navigate("/admin/dashboard")}
-              className="bg-white text-blue-700 hover:bg-blue-50"
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Dashboard
-            </Button>
-          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadLeaveRequests}
+            disabled={loading}
+            className="border-slate-200 text-slate-600 hover:bg-slate-50 gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => navigate("/admin/dashboard")}
+            className="bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow-none"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Dashboard
+          </Button>
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* ── Stats Cards ────────────────────────────────── */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Requests</CardTitle>
-            <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-              <FileText className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all duration-200">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Total Requests</span>
+            <div className="p-2 bg-blue-50 border border-blue-100 rounded-lg">
+              <FileText className="h-4 w-4 text-blue-600" />
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
-              {stats.total}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">Pending & Past</p>
-          </CardContent>
-        </Card>
+          </div>
+          <p className="text-3xl font-bold text-blue-600">{stats.total}</p>
+          <p className="text-xs text-slate-400 mt-1">Pending & Past</p>
+        </div>
 
-        <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Pending</CardTitle>
-            <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
-              <Clock className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all duration-200">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Pending</span>
+            <div className="p-2 bg-blue-50 border border-blue-100 rounded-lg">
+              <Clock className="h-4 w-4 text-blue-600" />
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-yellow-600">{stats.pending}</div>
-            <p className="text-xs text-muted-foreground mt-1">Needs action</p>
-          </CardContent>
-        </Card>
+          </div>
+          <p className="text-3xl font-bold text-blue-600">{stats.pending}</p>
+          <p className="text-xs text-slate-400 mt-1">Needs action</p>
+        </div>
 
-        <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Approved</CardTitle>
-            <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-              <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all duration-200">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Approved</span>
+            <div className="p-2 bg-blue-50 border border-blue-100 rounded-lg">
+              <CheckCircle className="h-4 w-4 text-blue-600" />
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-green-600">{stats.approved}</div>
-            <p className="text-xs text-muted-foreground mt-1">Granted</p>
-          </CardContent>
-        </Card>
+          </div>
+          <p className="text-3xl font-bold text-blue-600">{stats.approved}</p>
+          <p className="text-xs text-slate-400 mt-1">Granted</p>
+        </div>
 
-        <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Rejected</CardTitle>
-            <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
-              <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all duration-200">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Rejected</span>
+            <div className="p-2 bg-slate-50 border border-slate-100 rounded-lg">
+              <XCircle className="h-4 w-4 text-slate-500" />
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-red-600">{stats.rejected}</div>
-            <p className="text-xs text-muted-foreground mt-1">Denied</p>
-          </CardContent>
-        </Card>
+          </div>
+          <p className="text-3xl font-bold text-slate-500">{stats.rejected}</p>
+          <p className="text-xs text-slate-400 mt-1">Denied</p>
+        </div>
       </div>
 
-      {/* Leave Requests Table */}
-      <Card className="border-0 shadow-lg overflow-hidden">
-        <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-b">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <div className="p-1.5 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
-                <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              </div>
-              Employee Requests
-            </CardTitle>
-            <Tabs value={statusFilter} onValueChange={setStatusFilter}>
-              <TabsList className="bg-white dark:bg-gray-800 border">
-                <TabsTrigger value="all" className="data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700">All</TabsTrigger>
-                <TabsTrigger value="pending" className="data-[state=active]:bg-yellow-100 data-[state=active]:text-yellow-700">Pending</TabsTrigger>
-                <TabsTrigger value="approved" className="data-[state=active]:bg-green-100 data-[state=active]:text-green-700">Approved</TabsTrigger>
-                <TabsTrigger value="rejected" className="data-[state=active]:bg-red-100 data-[state=active]:text-red-700">Rejected</TabsTrigger>
-              </TabsList>
-            </Tabs>
+      {/* ── Leave Requests Table ───────────────────── */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 px-6 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="p-1.5 bg-blue-50 border border-blue-100 rounded-lg">
+              <Calendar className="h-4 w-4 text-blue-600" />
+            </div>
+            <h2 className="text-sm font-semibold text-slate-800">Employee Requests</h2>
           </div>
-        </CardHeader>
+          <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full md:w-auto">
+            <TabsList className="bg-slate-100 p-1 rounded-lg border border-slate-200 w-full md:w-auto">
+              <TabsTrigger value="all" className="data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm rounded-md px-3 py-1.5 text-xs">All</TabsTrigger>
+              <TabsTrigger value="pending" className="data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm rounded-md px-3 py-1.5 text-xs">Pending</TabsTrigger>
+              <TabsTrigger value="approved" className="data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm rounded-md px-3 py-1.5 text-xs">Approved</TabsTrigger>
+              <TabsTrigger value="rejected" className="data-[state=active]:bg-white data-[state=active]:text-slate-700 data-[state=active]:shadow-sm rounded-md px-3 py-1.5 text-xs">Rejected</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+
         <CardContent className="p-0">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <RefreshCw className="h-6 w-6 animate-spin text-blue-600" />
-              <p className="ml-3 text-sm text-muted-foreground">Loading requests...</p>
+              <p className="ml-3 text-sm text-slate-500">Loading requests...</p>
             </div>
           ) : filteredRequests.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-full mb-4">
-                <FileText className="h-8 w-8 text-gray-400" />
+              <div className="p-4 bg-slate-50 rounded-full mb-4">
+                <FileText className="h-8 w-8 text-slate-400" />
               </div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-slate-500">
                 No requests found
               </p>
             </div>
           ) : (
             <Table>
               <TableHeader>
-                <TableRow className="bg-gray-50 dark:bg-gray-800/50">
-                  <TableHead className="font-semibold">Employee</TableHead>
-                  <TableHead className="font-semibold">Type</TableHead>
-                  <TableHead className="font-semibold">Dates</TableHead>
-                  <TableHead className="text-center font-semibold">Days</TableHead>
-                  <TableHead className="font-semibold">Reason</TableHead>
-                  <TableHead className="font-semibold">Status</TableHead>
-                  <TableHead className="text-right font-semibold">Actions</TableHead>
+                <TableRow className="bg-slate-50 border-b border-slate-100 hover:bg-slate-50">
+                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-6">Employee</TableHead>
+                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Type</TableHead>
+                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Dates</TableHead>
+                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 text-center">Days</TableHead>
+                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Reason</TableHead>
+                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Status</TableHead>
+                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredRequests.map((request) => (
-                  <TableRow key={request.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-bold">
+                  <TableRow key={request.id} className="border-b border-slate-50 hover:bg-slate-50/70 transition-colors">
+                    <TableCell className="py-3.5 px-6 font-medium">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center text-blue-700 text-xs font-bold shadow-sm">
                           {(request.userName || request.employeeName || "U").substring(0, 2).toUpperCase()}
                         </div>
                         <div>
-                          <div className="font-medium">{request.userName || request.employeeName || "Unknown"}</div>
-                          <div className="text-xs text-muted-foreground">{formatDate(request.createdAt)}</div>
+                          <div className="text-sm font-medium text-slate-800">{request.userName || request.employeeName || "Unknown"}</div>
+                          <div className="text-xs text-slate-400">{formatDate(request.createdAt)}</div>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                    <TableCell className="py-3.5">
+                      <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200 shadow-none">
                         {request.leaveType}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-sm">
+                    <TableCell className="py-3.5 text-sm text-slate-600">
                       {formatDate(request.startDate)} - {formatDate(request.endDate)}
                     </TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="secondary" className="font-mono">
+                    <TableCell className="py-3.5 text-center">
+                      <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
                         {request.days}
-                      </Badge>
+                      </span>
                     </TableCell>
-                    <TableCell className="max-w-xs truncate text-gray-600 dark:text-gray-400">
+                    <TableCell className="py-3.5 max-w-xs truncate text-slate-500 text-sm">
                       {request.reason}
                     </TableCell>
-                    <TableCell>{getStatusBadge(request.status)}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="py-3.5">{getStatusBadge(request.status)}</TableCell>
+                    <TableCell className="py-3.5 text-right">
                       {request.status?.toLowerCase() === 'pending' && (
                         <div className="flex justify-end gap-2">
                           <Button
                             size="sm"
-                            className="h-8 bg-green-600 hover:bg-green-700 text-white"
+                            className="h-7 w-7 p-0 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
                             onClick={() => handleUpdateStatus(request.id, 'Approved')}
                             disabled={actionLoading === request.id}
+                            title="Approve"
                           >
-                            {actionLoading === request.id ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                            {actionLoading === request.id ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                           </Button>
                           <Button
                             size="sm"
                             variant="destructive"
-                            className="h-8"
+                            className="h-7 w-7 p-0 rounded-full bg-red-600 hover:bg-red-700 shadow-sm"
                             onClick={() => handleUpdateStatus(request.id, 'Rejected')}
                             disabled={actionLoading === request.id}
+                            title="Reject"
                           >
-                            {actionLoading === request.id ? <RefreshCw className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                            {actionLoading === request.id ? <RefreshCw className="h-3 w-3 animate-spin" /> : <X className="h-3.5 w-3.5" />}
                           </Button>
                         </div>
                       )}
@@ -389,7 +378,7 @@ export default function AdminLeaveRequestsPage() {
             </Table>
           )}
         </CardContent>
-      </Card>
+      </div>
     </div>
   )
 }

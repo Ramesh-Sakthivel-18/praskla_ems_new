@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import {
   Clock, Calendar, FileText, BarChart2, Coffee, LogOut,
-  CheckCircle, RefreshCw, ChevronRight, CalendarDays, AlertCircle
+  CheckCircle, RefreshCw, ChevronRight, CalendarDays, AlertCircle, MapPin
 } from "lucide-react"
 import { format } from "date-fns"
 import { safeRedirect } from "@/lib/redirectUtils"
@@ -61,10 +61,10 @@ export default function EmployeeDashboardPage() {
         const recordsArray = Array.isArray(records) ? records : (records.data || records.records || [])
         const items = recordsArray.slice(0, 5).flatMap(d => {
           const events = []
-          if (d.checkIn) events.push({ label: `Checked in at ${d.checkIn}`, when: d.date, color: 'bg-emerald-500', icon: 'CheckCircle' })
-          if (d.breakIn) events.push({ label: `Started break at ${d.breakIn}`, when: d.date, color: 'bg-amber-500', icon: 'Coffee' })
-          if (d.breakOut) events.push({ label: `Ended break at ${d.breakOut}`, when: d.date, color: 'bg-blue-500', icon: 'Coffee' })
-          if (d.checkOut) events.push({ label: `Checked out at ${d.checkOut}`, when: d.date, color: 'bg-gray-500', icon: 'LogOut' })
+          if (d.checkIn) events.push({ label: `Checked in at ${d.checkIn}`, when: d.date, color: 'bg-blue-600', icon: 'CheckCircle' })
+          if (d.breakIn) events.push({ label: `Started break at ${d.breakIn}`, when: d.date, color: 'bg-slate-400', icon: 'Coffee' })
+          if (d.breakOut) events.push({ label: `Ended break at ${d.breakOut}`, when: d.date, color: 'bg-blue-400', icon: 'Coffee' })
+          if (d.checkOut) events.push({ label: `Checked out at ${d.checkOut}`, when: d.date, color: 'bg-slate-600', icon: 'LogOut' })
           return events
         })
         result.recent = items.slice(0, 5)
@@ -89,7 +89,7 @@ export default function EmployeeDashboardPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-emerald-600" />
+          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-blue-600" />
           <p className="text-muted-foreground">Loading dashboard...</p>
         </div>
       </div>
@@ -106,14 +106,14 @@ export default function EmployeeDashboardPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-emerald-700 to-teal-700 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
             Welcome back, {currentUser.name.split(' ')[0]}! 👋
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-slate-500 mt-1">
             {format(new Date(), "EEEE, MMMM do, yyyy")} • Here's your daily overview
           </p>
         </div>
-        <Button onClick={loadDashboardData} variant="outline" size="sm" className="gap-2">
+        <Button onClick={loadDashboardData} variant="outline" size="sm" className="gap-2 border-slate-200 hover:bg-slate-50 text-slate-700">
           <RefreshCw className="h-4 w-4" />
           Refresh
         </Button>
@@ -137,53 +137,55 @@ export default function EmployeeDashboardPage() {
       {/* Main Grid */}
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Time Tracker Card - Takes 2 columns */}
-        <Card className="lg:col-span-2 transition-all duration-300 hover:shadow-lg border-2 border-emerald-500/20">
-          <CardHeader className="pb-4">
+        <Card className="lg:col-span-2 transition-all duration-300 hover:shadow-md border border-blue-100 dark:border-blue-900 shadow-sm">
+          <CardHeader className="pb-4 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-3 rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
-                  <Clock className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                <div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-900/30">
+                  <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
-                  <CardTitle className="text-xl font-semibold">Time Tracker</CardTitle>
+                  <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">Time Tracker</CardTitle>
                   <CardDescription>Track your work hours</CardDescription>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className={`animate-pulse h-3 w-3 rounded-full ${isWorking ? 'bg-emerald-500' : 'bg-gray-300'}`} />
-                <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+                <span className={`animate-pulse h-2.5 w-2.5 rounded-full ${isWorking ? 'bg-blue-600' : 'bg-slate-400'}`} />
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
                   {isWorking ? (isOnBreak ? 'On Break' : 'Working') : 'Not Working'}
                 </span>
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">Check In</p>
-                <p className="text-2xl font-mono font-bold tracking-tight">{attendance?.checkIn || '--:--'}</p>
+          <CardContent className="space-y-0 p-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Check In</p>
+                <p className="text-2xl font-mono font-bold tracking-tight text-slate-900 dark:text-slate-100">{attendance?.checkIn || '--:--'}</p>
               </div>
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">Check Out</p>
-                <p className="text-2xl font-mono font-bold tracking-tight">{attendance?.checkOut || '--:--'}</p>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Check Out</p>
+                <p className="text-2xl font-mono font-bold tracking-tight text-slate-900 dark:text-slate-100">{attendance?.checkOut || '--:--'}</p>
               </div>
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">Break Duration</p>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Break</p>
                 <div className="flex items-center gap-2">
-                  <Coffee className="h-4 w-4 text-amber-500" />
-                  <p className="text-lg font-mono">{attendance?.breakIn && attendance?.breakOut ? 'Completed' : (attendance?.breakIn ? 'In Progress' : '--')}</p>
+                  <Coffee className="h-4 w-4 text-slate-400" />
+                  <p className="text-lg font-mono font-medium text-slate-700 dark:text-slate-300">
+                    {attendance?.breakIn && attendance?.breakOut ? 'Done' : (attendance?.breakIn ? 'Active' : '--')}
+                  </p>
                 </div>
               </div>
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">Total Hours</p>
-                <Badge variant="outline" className="text-lg px-3 py-1 border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total</p>
+                <Badge variant="outline" className="text-lg px-2.5 py-0.5 border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400 font-mono">
                   {attendance?.totalHours || '0h 0m'}
                 </Badge>
               </div>
             </div>
 
-            <div className="pt-4 border-t">
-              <Button className="w-full" onClick={() => navigate('/employee/attendance')}>
+            <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
+              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" onClick={() => navigate('/employee/attendance')}>
                 Go to Attendance Page <ChevronRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
@@ -192,19 +194,20 @@ export default function EmployeeDashboardPage() {
 
         {/* Stats Column */}
         <div className="space-y-6">
-          <Card>
+          <Card className="shadow-sm border-slate-200">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Weekly Overview</CardTitle>
+              <CardTitle className="text-sm font-medium text-slate-500">Weekly Overview</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-2xl font-bold">{stats.totalHours} hrs</span>
-                    <BarChart2 className="h-4 w-4 text-emerald-500" />
+                    <span className="text-3xl font-bold text-slate-900 dark:text-slate-100">{stats.totalHours} <span className="text-lg font-normal text-slate-500">hrs</span></span>
+                    <BarChart2 className="h-5 w-5 text-blue-500" />
                   </div>
-                  <Progress value={Math.min((parseFloat(stats.totalHours) / 40) * 100, 100)} className="h-2" />
-                  <p className="text-xs text-muted-foreground mt-2">
+                  <Progress value={Math.min((parseFloat(stats.totalHours) / 40) * 100, 100)} className="h-2 bg-slate-100 dark:bg-slate-800 [&>div]:bg-blue-600" />
+                  <p className="text-xs text-slate-500 mt-3 flex items-center gap-1">
+                    <CheckCircle className="h-3 w-3 text-blue-600" />
                     {stats.daysPresent} days present this week
                   </p>
                 </div>
@@ -212,20 +215,20 @@ export default function EmployeeDashboardPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="shadow-sm border-slate-200">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Leave Balance</CardTitle>
+              <CardTitle className="text-sm font-medium text-slate-500">Annual Leave</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-2xl font-bold">{leaveBalance?.annual?.remaining || 0}</span>
-                    <span className="text-sm text-muted-foreground ml-1">/ {leaveBalance?.annual?.total || 0}</span>
+                    <span className="text-3xl font-bold text-slate-900 dark:text-slate-100">{leaveBalance?.annual?.remaining || 0}</span>
+                    <span className="text-sm text-slate-400 ml-1">/ {leaveBalance?.annual?.total || 0}</span>
                   </div>
-                  <FileText className="h-4 w-4 text-blue-500" />
+                  <FileText className="h-5 w-5 text-blue-400" />
                 </div>
-                <p className="text-xs text-muted-foreground">Annual leaves remaining</p>
+                <p className="text-xs text-slate-500">Days remaining this year</p>
               </div>
             </CardContent>
           </Card>
@@ -235,29 +238,26 @@ export default function EmployeeDashboardPage() {
       {/* Leave Balance and Recent Activity Row */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Leave Balance */}
-        <Card className="transition-all duration-300 hover:shadow-lg">
-          <CardHeader className="pb-3">
+        <Card className="transition-all duration-300 hover:shadow-md border-slate-200">
+          <CardHeader className="pb-3 border-b border-slate-50 dark:border-slate-800">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-lg font-semibold">Leave Balance</CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Your available leave days
-                </p>
+                <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">Leave Balance</CardTitle>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => navigate("/employee/leave-requests")}
-                className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 h-8"
               >
                 Apply
-                <ChevronRight className="h-4 w-4 ml-1" />
+                <ChevronRight className="h-3.5 w-3.5 ml-1" />
               </Button>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6">
             {leaveBalance && leaveBalance.allocated ? (
-              <div className="space-y-4">
+              <div className="space-y-5">
                 {Object.entries(leaveBalance.allocated).map(([type, total]) => {
                   const used = leaveBalance.used?.[type] || 0
                   const remaining = leaveBalance.remaining?.[type] || (total - used)
@@ -265,20 +265,20 @@ export default function EmployeeDashboardPage() {
                   return (
                     <div key={type} className="space-y-2">
                       <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium capitalize">{type}</span>
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300 capitalize">{type}</span>
                         <span className="text-sm">
-                          <span className="font-bold">{remaining}</span>
-                          <span className="text-muted-foreground"> / {total} days left</span>
+                          <span className="font-bold text-slate-900 dark:text-white">{remaining}</span>
+                          <span className="text-slate-400 text-xs ml-1">left</span>
                         </span>
                       </div>
-                      <Progress value={percentage} className="h-2" />
+                      <Progress value={percentage} className="h-1.5 bg-slate-100 dark:bg-slate-800 [&>div]:bg-blue-500" />
                     </div>
                   )
                 })}
               </div>
             ) : (
-              <div className="text-center py-6 text-muted-foreground">
-                <CalendarDays className="h-10 w-10 mx-auto mb-2 opacity-50" />
+              <div className="text-center py-6 text-slate-400">
+                <CalendarDays className="h-10 w-10 mx-auto mb-2 opacity-20" />
                 <p>Leave balance not available</p>
               </div>
             )}
@@ -286,44 +286,41 @@ export default function EmployeeDashboardPage() {
         </Card>
 
         {/* Recent Activity */}
-        <Card className="transition-all duration-300 hover:shadow-lg">
-          <CardHeader className="pb-3">
+        <Card className="transition-all duration-300 hover:shadow-md border-slate-200">
+          <CardHeader className="pb-3 border-b border-slate-50 dark:border-slate-800">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-lg font-semibold">Recent Activity</CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Your latest actions
-                </p>
+                <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">Recent Activity</CardTitle>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => navigate("/employee/attendance")}
-                className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 h-8"
               >
                 View All
-                <ChevronRight className="h-4 w-4 ml-1" />
+                <ChevronRight className="h-3.5 w-3.5 ml-1" />
               </Button>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6">
             {recent.length === 0 ? (
-              <div className="text-center py-6 text-muted-foreground">
-                <Clock className="h-10 w-10 mx-auto mb-2 opacity-50" />
+              <div className="text-center py-6 text-slate-400">
+                <Clock className="h-10 w-10 mx-auto mb-2 opacity-20" />
                 <p>No recent activity</p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="relative pl-2 border-l border-slate-100 dark:border-slate-800 space-y-0">
                 {recent.map((item, i) => {
                   const Icon = item.icon
                   return (
-                    <div key={i} className="flex items-center gap-4 p-3 rounded-lg bg-gray-50 dark:bg-gray-900/50">
-                      <div className={`h-2.5 w-2.5 rounded-full ${item.color}`} />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{item.label}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {format(new Date(item.when), "MMM d, yyyy")}
-                        </p>
+                    <div key={i} className="mb-6 last:mb-0 relative pl-6 group">
+                      <span className={`absolute -left-[9px] top-1 h-4 w-4 rounded-full border-2 border-white dark:border-slate-900 ${item.color.replace('bg-', 'bg-')}`} />
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{item.label}</span>
+                        <span className="text-xs text-slate-500">
+                          {format(new Date(item.when), "MMM d, h:mm a")}
+                        </span>
                       </div>
                     </div>
                   )
@@ -336,34 +333,33 @@ export default function EmployeeDashboardPage() {
 
       {/* Upcoming Leaves */}
       {upcomingLeaves.length > 0 && (
-        <Card className="transition-all duration-300 hover:shadow-lg">
-          <CardHeader className="pb-3">
+        <Card className="transition-all duration-300 hover:shadow-md border-slate-200">
+          <CardHeader className="pb-3 border-b border-slate-50 dark:border-slate-800">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-lg font-semibold">Upcoming Leaves</CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Your approved upcoming leaves
-                </p>
+                <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">Upcoming Leaves</CardTitle>
               </div>
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <CardContent className="pt-6">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {upcomingLeaves.slice(0, 3).map((leave, i) => (
                 <div
                   key={leave.id || i}
-                  className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800"
+                  className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm hover:border-blue-200 transition-colors"
                 >
-                  <div className="flex items-center gap-2 mb-2">
-                    <CalendarDays className="h-4 w-4 text-emerald-600" />
-                    <Badge variant="outline" className="text-emerald-600 border-emerald-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-1.5 bg-blue-50 rounded-md text-blue-600">
+                      <CalendarDays className="h-4 w-4" />
+                    </div>
+                    <Badge variant="outline" className="text-blue-700 bg-blue-50 border-blue-100">
                       {leave.leaveType}
                     </Badge>
                   </div>
-                  <p className="font-medium text-sm">
+                  <p className="font-semibold text-sm text-slate-900">
                     {format(new Date(leave.startDate), "MMM d")} - {format(new Date(leave.endDate), "MMM d, yyyy")}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1">{leave.reason || 'No reason provided'}</p>
+                  <p className="text-xs text-slate-500 mt-2 line-clamp-2">{leave.reason || 'No reason provided'}</p>
                 </div>
               ))}
             </div>

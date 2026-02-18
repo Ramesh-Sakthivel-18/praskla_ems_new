@@ -146,15 +146,36 @@ class AttendanceRepository extends BaseRepository {
         query = query.limit(options.limit);
       }
 
-      const snapshot = await query.get();
+      let snapshot;
+      try {
+        snapshot = await query.get();
+      } catch (indexError) {
+        // Firestore composite index may not exist — fallback to userId-only query + client-side filter
+        console.log('⚠️ [AttendanceRepository] Composite index not available, using fallback filter');
+        const fallbackQuery = this.getCollection(orgId).where('userId', '==', userId);
+        snapshot = await fallbackQuery.get();
+      }
 
-      const records = snapshot.docs.map(doc => ({
+      let records = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
 
+      // Client-side date filtering (needed when composite index fallback is used)
+      if (options.startDate) {
+        records = records.filter(r => r.date >= options.startDate);
+      }
+      if (options.endDate) {
+        records = records.filter(r => r.date <= options.endDate);
+      }
+
       // Sort by date descending (most recent first)
       records.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      // Apply limit after filtering
+      if (options.limit && records.length > options.limit) {
+        records = records.slice(0, options.limit);
+      }
 
       console.log(`✅ [AttendanceRepository] Found ${records.length} records for user ${userId}`);
       return records;

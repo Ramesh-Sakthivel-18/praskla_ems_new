@@ -1,206 +1,239 @@
-import { useState } from "react"
-import { Link } from "react-router-dom"
+import { useState, useEffect } from "react"
+import { useNavigate, Link } from "react-router-dom"
+import {
+  Building2,
+  Mail,
+  Lock,
+  AlertCircle,
+  Loader2,
+  CheckCircle2
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Checkbox } from "@/components/ui/checkbox"
-import { User, ArrowLeft, Loader2, AlertCircle, Eye, EyeOff, Mail, Lock } from "lucide-react"
-import { useNavigate } from "react-router-dom"
-import { loginUser, getRoleRedirectPath } from "@/lib/auth"
-import GoogleLoginButton from "@/app/components/auth/GoogleLoginButton"
+import { loginUser, loginWithGoogle, getRoleRedirectPath, isAuthenticated, getCurrentUser } from "@/lib/auth"
+import AuthLayout from "@/components/layout/AuthLayout"
 
 export default function EmployeeLoginPage() {
   const navigate = useNavigate()
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [loading, setLoading] = useState(false)
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+  })
   const [error, setError] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (isAuthenticated()) {
+      const user = getCurrentUser()
+      if (user && user.role === 'employee') {
+        navigate(getRoleRedirectPath(user.role))
+      }
+    }
+  }, [navigate])
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value })
+    // Clear error when user types
+    if (error) setError("")
+  }
 
   const handleLogin = async (e) => {
     e.preventDefault()
     setError("")
-
-    if (!email || !password) {
-      setError("Please enter both email and password")
-      return
-    }
-
     setLoading(true)
 
     try {
-      const result = await loginUser(email, password)
-
-      if (result.success) {
-        if (result.user.role === "employee") {
-          const redirectPath = getRoleRedirectPath(result.user.role)
-          navigate(redirectPath)
-        } else {
-          setError("Access denied. Only employees can login here.")
-          setLoading(false)
-        }
-      } else {
-        setError(result.error || "Login failed. Please check your credentials.")
-        setLoading(false)
+      if (!formData.email || !formData.password) {
+        throw new Error("Please enter both email and password")
       }
-    } catch (error) {
-      console.error("Login error:", error)
-      setError("Network error. Please check if the server is running.")
+
+
+      const result = await loginUser(formData.email, formData.password, null)
+      if (!result.success) {
+        throw new Error(result.error || "Login failed")
+      }
+      // Verify user has employee role
+      if (result.user && result.user.role !== 'employee') {
+        throw new Error("This login page is for employees only. Please use the correct login portal for your role.")
+      }
+      navigate("/employee/dashboard")
+    } catch (err) {
+      console.error("Login Error:", err)
+      if (err.code === 'auth/invalid-credential' || err.message.includes('invalid-credential')) {
+        setError("Invalid email or password. Please check your credentials.")
+      } else if (err.code === 'auth/user-not-found') {
+        setError("No employee account found with this email.")
+      } else if (err.code === 'auth/wrong-password') {
+        setError("Incorrect password.")
+      } else {
+        setError(err.message || "Failed to login. Please try again.")
+      }
+    } finally {
       setLoading(false)
     }
   }
 
+  const handleGoogleLogin = async () => {
+    setError("")
+    setGoogleLoading(true)
+    try {
+      await loginWithGoogle("employee")
+      navigate("/employee/dashboard")
+    } catch (err) {
+      console.error("Google Login Error:", err)
+      setError(err.message || "Failed to login with Google")
+    } finally {
+      setGoogleLoading(false)
+    }
+  }
+
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
-      {/* Animated Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-gray-950 dark:via-emerald-950/20 dark:to-gray-900">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-emerald-200/40 via-transparent to-transparent dark:from-emerald-900/20" />
-        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent" />
-      </div>
+    <AuthLayout
+      title="Welcome Back"
+      subtitle="Sign in to your employee account"
+      role="employee"
+    >
+      {error && (
+        <Alert variant="destructive" className="mb-6 bg-red-50 text-red-900 border-red-200">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-      {/* Floating Shapes */}
-      <div className="absolute top-20 left-20 w-72 h-72 bg-emerald-300/30 dark:bg-emerald-700/20 rounded-full blur-3xl animate-pulse" />
-      <div className="absolute bottom-20 right-20 w-96 h-96 bg-teal-300/30 dark:bg-teal-700/20 rounded-full blur-3xl animate-pulse delay-1000" />
-
-      <div className="w-full max-w-md space-y-6 px-4 relative z-10">
-        {/* Back Button */}
-        <Link to="/" className="inline-block">
-          <Button variant="ghost" className="gap-2 hover:bg-white/50 dark:hover:bg-gray-800/50 transition-all">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Home
+      <div className="space-y-6">
+        <div className="grid gap-2">
+          <Button
+            variant="outline"
+            type="button"
+            onClick={handleGoogleLogin}
+            disabled={loading || googleLoading}
+            className="w-full h-12 text-slate-700 font-medium hover:bg-slate-50 transition-all border-slate-200"
+          >
+            {googleLoading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
+                <path
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                  fill="#4285F4"
+                />
+                <path
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  fill="#34A853"
+                />
+                <path
+                  d="M5.84 14.17c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.54z"
+                  fill="#FBBC05"
+                />
+                <path
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                  fill="#EA4335"
+                />
+              </svg>
+            )}
+            Sign in with Google
           </Button>
-        </Link>
+        </div>
 
-        {/* Main Login Card */}
-        <Card className="shadow-2xl border-0 backdrop-blur-xl bg-white/80 dark:bg-gray-900/80 overflow-hidden">
-          {/* Header */}
-          <CardHeader className="space-y-4 pb-8 bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-600 text-white relative overflow-hidden">
-            <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNGM0LjQxOCAwIDgtMy41ODIgOC04cy0zLjU4Mi04LTgtOC04IDMuNTgyLTggOCAzLjU4MiA4IDggOHoiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4xIi8+PC9nPjwvc3ZnPg==')] opacity-30" />
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t border-slate-200" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-white dark:bg-slate-800 px-2 text-slate-500">
+              Or continue with email
+            </span>
+          </div>
+        </div>
 
-            <div className="flex items-center justify-center relative">
-              <div className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl shadow-lg transform hover:scale-105 transition-transform duration-300">
-                <User className="h-10 w-10" />
-              </div>
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="email">Email Address</Label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                placeholder="name@company.com"
+                value={formData.email}
+                onChange={handleChange}
+                required
+                className="pl-10 h-11 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
+              />
             </div>
-            <div className="text-center relative">
-              <CardTitle className="text-2xl font-bold tracking-tight">Employee Portal</CardTitle>
-              <CardDescription className="text-white/80 mt-2">
-                Access your employee dashboard
-              </CardDescription>
-            </div>
-          </CardHeader>
-
-          <CardContent className="pt-8 pb-6 px-6">
-            <form onSubmit={handleLogin} className="space-y-5">
-              {/* Error Alert */}
-              {error && (
-                <Alert variant="destructive" className="animate-in slide-in-from-top-2 duration-300 border-red-200 bg-red-50 dark:bg-red-950/30">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-
-              {/* Email Field */}
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium">Email Address</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="employee@company.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    disabled={loading}
-                    required
-                    className="h-12 pl-11 bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 focus:border-emerald-500 focus:ring-emerald-500/20 transition-all"
-                  />
-                </div>
-              </div>
-
-              {/* Password Field */}
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-sm font-medium">Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Enter your password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    disabled={loading}
-                    required
-                    className="h-12 pl-11 pr-11 bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 focus:border-emerald-500 focus:ring-emerald-500/20 transition-all"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                  >
-                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Remember Me */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="remember"
-                    checked={rememberMe}
-                    onCheckedChange={setRememberMe}
-                    className="border-gray-300 data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600"
-                  />
-                  <Label htmlFor="remember" className="text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
-                    Remember me
-                  </Label>
-                </div>
-                <Link to="/forgot-password" className="text-sm text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 hover:underline">
-                  Forgot password?
-                </Link>
-              </div>
-
-              {/* Login Button */}
-              <Button
-                type="submit"
-                className="w-full h-12 bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 text-white font-semibold shadow-lg shadow-emerald-500/25 hover:shadow-xl hover:shadow-emerald-500/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
-                disabled={loading}
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">Password</Label>
+              <Link
+                to="/forgot-password"
+                className="text-xs font-medium text-blue-600 hover:text-blue-500 hover:underline"
               >
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  "Sign In"
-                )}
-              </Button>
-
-              <div className="relative my-4">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-gray-300 dark:border-gray-700" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-white dark:bg-gray-900 px-2 text-gray-500">
-                    Or continue with
-                  </span>
-                </div>
-              </div>
-
-              <GoogleLoginButton role="employee" />
-            </form>
-
-            {/* Footer */}
-            <div className="mt-8 text-center">
-              <p className="text-sm text-gray-500 dark:text-gray-400">Need access?</p>
-              <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Contact your organization&apos;s administrator</p>
+                Forgot password?
+              </Link>
             </div>
-          </CardContent>
-        </Card>
+            <div className="relative">
+              <Lock className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                placeholder="••••••••"
+                value={formData.password}
+                onChange={handleChange}
+                required
+                className="pl-10 h-11 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
+              />
+              <Label htmlFor="remember" className="text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
+                Remember me
+              </Label>
+            </div>
+            <Link to="/forgot-password" className="text-sm text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 hover:underline">
+              Forgot password?
+            </Link>
+          </div>
+
+          {/* Login Button */}
+          <Button
+            type="submit"
+            className="w-full h-12 bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 text-white font-semibold shadow-lg shadow-emerald-500/25 hover:shadow-xl hover:shadow-emerald-500/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Signing in...
+              </>
+            ) : (
+              "Sign In"
+            )}
+          </Button>
+
+          <div className="relative my-4">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-gray-300 dark:border-gray-700" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-white dark:bg-gray-900 px-2 text-gray-500">
+                Or continue with
+              </span>
+            </div>
+          </div>
+
+
+        </form>
+
+        {/* Footer */}
+        <div className="mt-8 text-center">
+          <p className="text-sm text-gray-500 dark:text-gray-400">Need access?</p>
+          <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Contact your organization&apos;s administrator</p>
+        </div>
 
         {/* Info Card */}
         <Card className="backdrop-blur-xl bg-gradient-to-r from-emerald-50/80 to-teal-50/80 dark:from-emerald-950/30 dark:to-teal-950/30 border-emerald-200/50 dark:border-emerald-800/50 shadow-lg">
@@ -215,6 +248,6 @@ export default function EmployeeLoginPage() {
           </CardContent>
         </Card>
       </div>
-    </div >
+    </AuthLayout>
   )
 }
