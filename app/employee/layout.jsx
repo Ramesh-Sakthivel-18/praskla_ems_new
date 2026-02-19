@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { useNavigate, useLocation, Outlet } from "react-router-dom"
 import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
@@ -52,8 +53,11 @@ export default function EmployeeLayout({ children }) {
         return <>{children}</>
     }
 
+    const queryClient = useQueryClient()
+
     const handleLogout = () => {
         if (window.confirm("Are you sure you want to logout?")) {
+            queryClient.clear()
             logoutUser()
             navigate("/employee/login")
         }

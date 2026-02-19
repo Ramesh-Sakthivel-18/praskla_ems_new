@@ -380,7 +380,8 @@ class AttendanceService {
             status: record.status,
             totalHours: record.totalHours,
             isPresent: !!record.checkIn,
-            isOnline: !record.checkOut && !!record.checkIn
+            isOnline: !record.checkOut && !!record.checkIn,
+            events: record.events || [] // Include events for location data
           } : null
         };
       }));

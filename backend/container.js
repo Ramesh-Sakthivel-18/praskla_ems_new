@@ -241,6 +241,11 @@ class Container {
       this.notificationService.setIo(io);
       console.log('✅ Socket.io initialized in Container');
     }
+
+    // Initialize real-time Firestore listeners
+    const RealtimeListeners = require('./services/RealtimeListeners');
+    this.realtimeListeners = new RealtimeListeners(this.db, io);
+    console.log('✅ RealtimeListeners initialized in Container');
   }
 
   /**

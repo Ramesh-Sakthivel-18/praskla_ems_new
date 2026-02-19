@@ -1,9 +1,0 @@
-=== ALL org docs in organizations collection ===
-Organization documents count: 1
-  DocID: YOpVt8lf14LcliQwjxlF | name: Hikvision Test Corp | active: true | ownerEmail: owner@hikvision.com
-
-=== Checking org_demo_001 doc specifically ===
-org_demo_001 exists: false
-
-=== Checking org_test_002 doc specifically ===
-org_test_002 exists: false

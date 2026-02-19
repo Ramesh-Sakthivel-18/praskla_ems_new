@@ -610,24 +610,19 @@ router.get('/dashboard/stats', authenticateToken, requireAdminOrBusinessOwner, a
   console.log('📊 GET /api/admin/dashboard/stats');
   try {
     const { organizationId, role, uid } = req.user;
-
-    // Get employee counts
-    const employeeCounts = await employeeService.getEmployeeCount(organizationId);
-
-    // Get today's attendance summary
     const today = new Date().toISOString().split('T')[0];
-    const attendanceSummary = await attendanceService.getSummary(organizationId, today);
 
-    // Get pending leaves
-    const pendingLeaves = await leaveService.getPendingLeaves(organizationId);
-
-    // Get quota info (admin-specific)
-    let quotaInfo = null;
-    if (role === 'admin') {
-      quotaInfo = await quotaService.getMyQuotaInfo(organizationId, uid, role);
-    } else if (role === 'business_owner') {
-      quotaInfo = await quotaService.getOrgQuotaSummary(organizationId);
-    }
+    // Run all queries in parallel for maximum performance
+    const [employeeCounts, attendanceSummary, pendingLeaves, quotaInfo] = await Promise.all([
+      employeeService.getEmployeeCount(organizationId),
+      attendanceService.getSummary(organizationId, today),
+      leaveService.getPendingLeaves(organizationId),
+      role === 'admin'
+        ? quotaService.getMyQuotaInfo(organizationId, uid, role)
+        : role === 'business_owner'
+          ? quotaService.getOrgQuotaSummary(organizationId)
+          : Promise.resolve(null)
+    ]);
 
     res.json({
       employees: employeeCounts,

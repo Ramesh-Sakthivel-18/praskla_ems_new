@@ -1,29 +1,64 @@
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, Clock, UserCheck, UserX, Coffee, LogOut, ArrowLeft, RefreshCw, Users, AlertCircle, MapPin } from "lucide-react"
-import { format } from "date-fns"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle, DialogTrigger
+} from "@/components/ui/dialog"
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
+  AlertDialogTitle, AlertDialogTrigger
+} from "@/components/ui/alert-dialog"
+import {
+  Users, UserCheck, UserX, Search, Filter, ArrowLeft, RefreshCw,
+  AlertCircle, Edit, Trash2, UserPlus, Building2, ChevronDown,
+  ChevronRight, Mail, Phone, Shield, Eye, X, Save, LayoutGrid, List
+} from "lucide-react"
 import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 import { getValidIdToken } from "@/lib/firebaseClient"
+
+const getApiBase = () => import.meta.env.VITE_API_URL || "http://localhost:3000"
 
 export default function AdminEmployeesPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
   const [currentUser, setCurrentUser] = useState(null)
-  const [dateFilter, setDateFilter] = useState(format(new Date(), "yyyy-MM-dd"))
 
-  const [stats, setStats] = useState({
-    totalEmployees: 0,
-    presentEmployees: 0,
-    absentEmployees: 0,
-    checkedOut: 0,
-    onBreak: 0,
+  // Search & Filters
+  const [searchTerm, setSearchTerm] = useState("")
+  const [deptFilter, setDeptFilter] = useState("all")
+  const [roleFilter, setRoleFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [managerFilter, setManagerFilter] = useState("all")
+  const [groupByDept, setGroupByDept] = useState(false)
+
+  // Edit Dialog
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [editingEmployee, setEditingEmployee] = useState(null)
+  const [editForm, setEditForm] = useState({})
+
+  // Detail View Dialog
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false)
+  const [viewingEmployee, setViewingEmployee] = useState(null)
+
+  // Manager Assignment Dialog
+  const [managerDialogOpen, setManagerDialogOpen] = useState(false)
+  const [assigningEmployee, setAssigningEmployee] = useState(null)
+  const [selectedManagerId, setSelectedManagerId] = useState("")
+
+  // Create Employee Dialog
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    name: "", email: "", password: "", department: "", phone: "", position: "", role: "employee"
   })
 
   // Auth Check
@@ -40,105 +75,481 @@ export default function AdminEmployeesPage() {
     setCurrentUser(user)
   }, [navigate])
 
-  const { data: attendanceRecords = [], isLoading: loading, error: queryError } = useQuery({
-    queryKey: ['admin-attendance', dateFilter],
+  // ── Fetch All Employees ──────────────────────────
+  const { data: employees = [], isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['admin-employees'],
     queryFn: async () => {
       const token = await getValidIdToken()
       if (!token) throw new Error("Authentication failed.")
-      const base = import.meta.env.VITE_API_URL || "http://localhost:3000"
-      const response = await fetch(`${base}/api/admin/attendance?date=${dateFilter}`, {
+      const base = getApiBase()
+      const response = await fetch(`${base}/api/admin/employees`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (!response.ok) throw new Error(`Failed to load attendance: ${response.status}`)
+      if (!response.ok) throw new Error(`Failed to load employees: ${response.status}`)
       const data = await response.json()
-      return Array.isArray(data) ? data : (data.records || data.data || [])
+      return data.employees || []
     },
     enabled: !!currentUser,
+    staleTime: 30000, // Cache for 30 seconds
   })
 
   const error = queryError?.message || null
-  const loadAttendance = () => queryClient.invalidateQueries({ queryKey: ['admin-attendance', dateFilter] })
+  const refreshEmployees = () => queryClient.invalidateQueries({ queryKey: ['admin-employees'] })
 
-  const getStatusBadge = (record) => {
-    if (record.checkOut) {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
-          <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-          Checked Out
-        </span>
+  // ── Update Employee Mutation ────────────────────
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }) => {
+      const token = await getValidIdToken()
+      const base = getApiBase()
+      const response = await fetch(`${base}/api/admin/employees/${id}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      })
+      if (!response.ok) {
+        const errData = await response.json()
+        throw new Error(errData.error || 'Failed to update employee')
+      }
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-employees'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] })
+      setEditDialogOpen(false)
+      setEditingEmployee(null)
+    },
+  })
+
+  // ── Delete Employee Mutation ────────────────────
+  const deleteMutation = useMutation({
+    mutationFn: async (id) => {
+      const token = await getValidIdToken()
+      const base = getApiBase()
+      const response = await fetch(`${base}/api/admin/employees/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) {
+        const errData = await response.json()
+        throw new Error(errData.error || 'Failed to delete employee')
+      }
+      return response.json()
+    },
+    onMutate: async (id) => {
+      // Optimistic update
+      await queryClient.cancelQueries({ queryKey: ['admin-employees'] })
+      const previousEmployees = queryClient.getQueryData(['admin-employees'])
+      queryClient.setQueryData(['admin-employees'], (old) =>
+        old?.filter((emp) => emp.id !== id && emp.uid !== id)
       )
-    }
-    if (record.breakIn && !record.breakOut) {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-          <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-          On Break
-        </span>
-      )
-    }
-    if (record.checkIn) {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-          <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-          Present
-        </span>
-      )
-    }
-    return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-slate-50 text-slate-600 border border-slate-200">
-        <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
-        Absent
-      </span>
+      return { previousEmployees }
+    },
+    onError: (err, id, context) => {
+      queryClient.setQueryData(['admin-employees'], context.previousEmployees)
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-employees'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] })
+    },
+  })
+
+  // ── Assign Manager Mutation ─────────────────────
+  const assignManagerMutation = useMutation({
+    mutationFn: async ({ employeeId, managerId }) => {
+      const token = await getValidIdToken()
+      const base = getApiBase()
+      const response = await fetch(`${base}/api/admin/employees/${employeeId}/assign-manager`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ managerId: managerId || null }),
+      })
+      if (!response.ok) {
+        const errData = await response.json()
+        throw new Error(errData.error || 'Failed to assign manager')
+      }
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-employees'] })
+      setManagerDialogOpen(false)
+      setAssigningEmployee(null)
+    },
+  })
+
+  // ── Create Employee Mutation ────────────────────
+  const createMutation = useMutation({
+    mutationFn: async (formData) => {
+      const token = await getValidIdToken()
+      const base = getApiBase()
+      const response = await fetch(`${base}/api/admin/employees`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      })
+      if (!response.ok) {
+        const errData = await response.json()
+        throw new Error(errData.error || 'Failed to create employee')
+      }
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-employees'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] })
+      setCreateDialogOpen(false)
+      setCreateForm({ name: "", email: "", password: "", department: "", phone: "", position: "", role: "employee" })
+    },
+  })
+
+  const handleCreateEmployee = () => {
+    if (!createForm.name || !createForm.email || !createForm.password) return
+    createMutation.mutate(createForm)
+  }
+
+  // ── Computed Values ─────────────────────────────
+  const departments = useMemo(() => {
+    const depts = new Set()
+    employees.forEach((emp) => {
+      if (emp.department) depts.add(emp.department)
+    })
+    return Array.from(depts).sort()
+  }, [employees])
+
+  const managers = useMemo(() => {
+    return employees.filter(
+      (emp) => emp.role === 'team_lead' || emp.role === 'manager' || emp.role === 'business_owner'
     )
+  }, [employees])
+
+  // Non-admin employees available for manager assignment (including BO)
+  const assignableManagers = useMemo(() => {
+    return employees.filter(
+      (emp) => emp.role !== 'admin' && emp.isActive !== false
+    )
+  }, [employees])
+
+  // ── Client-Side Filtering with useMemo ──────────
+  const filteredEmployees = useMemo(() => {
+    let filtered = employees
+
+    // Search
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase()
+      filtered = filtered.filter(
+        (emp) =>
+          emp.name?.toLowerCase().includes(term) ||
+          emp.email?.toLowerCase().includes(term) ||
+          emp.department?.toLowerCase().includes(term) ||
+          emp.phone?.toLowerCase().includes(term)
+      )
+    }
+
+    // Department filter
+    if (deptFilter !== "all") {
+      filtered = filtered.filter((emp) => emp.department === deptFilter)
+    }
+
+    // Role filter
+    if (roleFilter !== "all") {
+      filtered = filtered.filter((emp) => emp.role === roleFilter)
+    }
+
+    // Status filter
+    if (statusFilter !== "all") {
+      if (statusFilter === "active") {
+        filtered = filtered.filter((emp) => emp.isActive !== false)
+      } else {
+        filtered = filtered.filter((emp) => emp.isActive === false)
+      }
+    }
+
+    // Manager filter
+    if (managerFilter !== "all") {
+      if (managerFilter === "unassigned") {
+        filtered = filtered.filter((emp) => !emp.managerId)
+      } else {
+        filtered = filtered.filter((emp) => emp.managerId === managerFilter)
+      }
+    }
+
+    return filtered
+  }, [employees, searchTerm, deptFilter, roleFilter, statusFilter, managerFilter])
+
+  // ── Grouped by Department ───────────────────────
+  const groupedEmployees = useMemo(() => {
+    if (!groupByDept) return null
+    const groups = {}
+    filteredEmployees.forEach((emp) => {
+      const dept = emp.department || "Unassigned"
+      if (!groups[dept]) groups[dept] = []
+      groups[dept].push(emp)
+    })
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b))
+  }, [filteredEmployees, groupByDept])
+
+  // ── Stats ───────────────────────────────────────
+  const stats = useMemo(() => {
+    const total = employees.length
+    const active = employees.filter((e) => e.isActive !== false).length
+    const inactive = total - active
+    const withManagers = employees.filter((e) => e.managerId).length
+    return { total, active, inactive, withManagers }
+  }, [employees])
+
+  // ── Helpers ─────────────────────────────────────
+  const getManagerName = useCallback(
+    (managerId) => {
+      if (!managerId) return null
+      const mgr = employees.find((e) => e.uid === managerId || e.id === managerId)
+      return mgr?.name || "Unknown"
+    },
+    [employees]
+  )
+
+  const getRoleBadge = (role) => {
+    switch (role) {
+      case "admin":
+        return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Admin</Badge>
+      case "business_owner":
+        return <Badge className="bg-blue-600 text-white border-0">Owner</Badge>
+      case "team_lead":
+        return <Badge className="bg-blue-50 text-blue-700 border-blue-200">Team Lead</Badge>
+      case "manager":
+        return <Badge className="bg-blue-50 text-blue-700 border-blue-200">Manager</Badge>
+      default:
+        return <Badge className="bg-slate-100 text-slate-600 border-slate-200">Employee</Badge>
+    }
+  }
+
+  const openEditDialog = (emp) => {
+    setEditingEmployee(emp)
+    setEditForm({
+      name: emp.name || "",
+      email: emp.email || "",
+      department: emp.department || "",
+      phone: emp.phone || "",
+      position: emp.position || "",
+      role: emp.role || "employee",
+    })
+    setEditDialogOpen(true)
+  }
+
+  const openManagerDialog = (emp) => {
+    setAssigningEmployee(emp)
+    setSelectedManagerId(emp.managerId || "")
+    setManagerDialogOpen(true)
+  }
+
+  const handleSaveEdit = () => {
+    if (!editingEmployee) return
+    const id = editingEmployee.uid || editingEmployee.id
+    updateMutation.mutate({ id, data: editForm })
+  }
+
+  const handleAssignManager = () => {
+    if (!assigningEmployee) return
+    const employeeId = assigningEmployee.uid || assigningEmployee.id
+    assignManagerMutation.mutate({ employeeId, managerId: selectedManagerId || null })
   }
 
   if (!currentUser) return null
 
   const statCards = [
-    { label: "Total", value: stats.totalEmployees, sub: "Employees", icon: Users, accent: "text-blue-600", iconBg: "bg-blue-50 border-blue-100" },
-    { label: "Present", value: stats.presentEmployees, sub: "Working now", icon: UserCheck, accent: "text-blue-600", iconBg: "bg-blue-50 border-blue-100" },
-    { label: "Absent", value: stats.absentEmployees, sub: "Not in", icon: UserX, accent: "text-slate-500", iconBg: "bg-slate-50 border-slate-100" },
-    { label: "On Break", value: stats.onBreak, sub: "Paused", icon: Coffee, accent: "text-blue-600", iconBg: "bg-blue-50 border-blue-100" },
-    { label: "Checked Out", value: stats.checkedOut, sub: "Finished", icon: LogOut, accent: "text-slate-600", iconBg: "bg-slate-50 border-slate-200" },
+    { label: "Total", value: stats.total, sub: "All staff", icon: Users, accent: "text-blue-600", iconBg: "bg-blue-50 border-blue-100" },
+    { label: "Active", value: stats.active, sub: "Currently active", icon: UserCheck, accent: "text-blue-600", iconBg: "bg-blue-50 border-blue-100" },
+    { label: "Inactive", value: stats.inactive, sub: "Deactivated", icon: UserX, accent: "text-slate-500", iconBg: "bg-slate-50 border-slate-100" },
+    { label: "Has Manager", value: stats.withManagers, sub: "Assigned", icon: UserPlus, accent: "text-blue-600", iconBg: "bg-blue-50 border-blue-100" },
   ]
 
-  return (
-    <div className="min-h-screen bg-slate-50 p-6 space-y-6">
+  // ── Render Employee Row ─────────────────────────
+  const renderEmployeeRow = (emp) => {
+    const id = emp.uid || emp.id
+    const isAdmin = emp.role === "admin"
+    const isOwner = emp.role === "business_owner"
 
+    return (
+      <TableRow key={id} className="border-b border-slate-50 hover:bg-slate-50/70 transition-colors">
+        {/* Name + Email */}
+        <TableCell className="py-3.5 px-6">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center text-blue-700 text-xs font-bold shadow-sm">
+              {(emp.name || "U").substring(0, 2).toUpperCase()}
+            </div>
+            <div>
+              <div className="text-sm font-medium text-slate-800">{emp.name || "—"}</div>
+              <div className="text-xs text-slate-400">{emp.email || "—"}</div>
+            </div>
+          </div>
+        </TableCell>
+
+        {/* Role */}
+        <TableCell className="py-3.5">{getRoleBadge(emp.role)}</TableCell>
+
+        {/* Position */}
+        <TableCell className="py-3.5">
+          {emp.position ? (
+            <span className="text-sm text-slate-700">{emp.position}</span>
+          ) : (
+            <span className="text-xs text-slate-300 italic">No position</span>
+          )}
+        </TableCell>
+
+        {/* Department */}
+        <TableCell className="py-3.5">
+          {emp.department ? (
+            <span className="text-sm text-slate-700">{emp.department}</span>
+          ) : (
+            <span className="text-xs text-slate-300 italic">No dept</span>
+          )}
+        </TableCell>
+
+        {/* Manager */}
+        <TableCell className="py-3.5">
+          {emp.managerId ? (
+            <span className="text-sm text-slate-700">{getManagerName(emp.managerId)}</span>
+          ) : (
+            <span className="text-xs text-slate-300 italic">Unassigned</span>
+          )}
+        </TableCell>
+
+        {/* Status */}
+        <TableCell className="py-3.5">
+          {emp.isActive !== false ? (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+              Active
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+              Inactive
+            </span>
+          )}
+        </TableCell>
+
+        {/* Actions */}
+        <TableCell className="py-3.5 text-right">
+          <div className="flex justify-end gap-1.5">
+            {/* View */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+              onClick={() => { setViewingEmployee(emp); setDetailDialogOpen(true) }}
+              title="View Details"
+            >
+              <Eye className="h-4 w-4" />
+            </Button>
+
+            {/* Edit (not for BO or self) */}
+            {!isOwner && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                onClick={() => openEditDialog(emp)}
+                title="Edit"
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+            )}
+
+            {/* Assign Manager (not for admins or BO) */}
+            {!isAdmin && !isOwner && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                onClick={() => openManagerDialog(emp)}
+                title="Assign Manager"
+              >
+                <UserPlus className="h-4 w-4" />
+              </Button>
+            )}
+
+            {/* Delete (not for self, BO, or admins) */}
+            {!isOwner && !isAdmin && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                    title="Delete"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Employee</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to delete <strong>{emp.name}</strong>? This will deactivate their account.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel className="border-slate-200">Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-red-600 hover:bg-red-700 text-white"
+                      onClick={() => deleteMutation.mutate(id)}
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
+        </TableCell>
+      </TableRow>
+    )
+  }
+
+  return (
+    <div className="space-y-6 animate-in fade-in-50 duration-500">
       {/* ── Page Header ─────────────────────────────────── */}
       <div className="bg-white border border-slate-200 rounded-xl px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-sm">
         <div className="flex items-center gap-4">
-          <div className="p-2.5 bg-blue-600 rounded-lg">
-            <Clock className="h-5 w-5 text-white" />
+          <div className="p-2.5 bg-blue-600 rounded-lg shadow-sm">
+            <Users className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-slate-900 tracking-tight">Organisation Attendance</h1>
-            <p className="text-sm text-slate-500 mt-0.5">View attendance records for all employees</p>
+            <h1 className="text-lg font-semibold text-slate-900 tracking-tight">Employee Management</h1>
+            <p className="text-sm text-slate-500 mt-0.5">View, edit, and manage all organization employees</p>
           </div>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-2 bg-white">
-            <Calendar className="h-4 w-4 text-slate-400" />
-            <Input
-              type="date"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="w-auto border-0 p-0 h-auto text-sm text-slate-700 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
-            />
-          </div>
+        <div className="flex items-center gap-3">
           <Button
             variant="outline"
             size="sm"
-            onClick={loadAttendance}
-            className="border-slate-200 text-slate-600 hover:bg-slate-50 gap-2"
+            onClick={refreshEmployees}
+            disabled={loading}
+            className="gap-2 border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
           <Button
             size="sm"
+            onClick={() => setCreateDialogOpen(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow-sm"
+          >
+            <UserPlus className="h-4 w-4" />
+            Add Employee
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => navigate("/admin/dashboard")}
-            className="bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow-none"
+            className="gap-2 border-slate-200 text-slate-600 hover:bg-slate-50"
           >
             <ArrowLeft className="h-4 w-4" />
             Dashboard
@@ -146,22 +557,22 @@ export default function AdminEmployeesPage() {
         </div>
       </div>
 
-      {/* ── Error ─────────────────────────────────────── */}
+      {/* ── Error ────────────────────────────────────── */}
       {error && (
         <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl">
           <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
           <div className="flex-1">
-            <p className="text-sm font-semibold text-red-800">Error Loading Attendance</p>
+            <p className="text-sm font-semibold text-red-800">Error Loading Employees</p>
             <p className="text-xs text-red-600 mt-0.5">{error}</p>
-            <Button variant="outline" size="sm" onClick={loadAttendance} className="mt-3 border-red-200 text-red-700 hover:bg-red-100">
+            <Button variant="outline" size="sm" onClick={refreshEmployees} className="mt-3 border-red-200 text-red-700 hover:bg-red-100">
               <RefreshCw className="mr-2 h-3.5 w-3.5" /> Retry
             </Button>
           </div>
         </div>
       )}
 
-      {/* ── Stat Cards ────────────────────────────────── */}
-      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+      {/* ── Stat Cards ───────────────────────────────── */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         {statCards.map(({ label, value, sub, icon: Icon, accent, iconBg }) => (
           <div key={label} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow duration-200">
             <div className="flex items-center justify-between mb-4">
@@ -176,113 +587,503 @@ export default function AdminEmployeesPage() {
         ))}
       </div>
 
-      {/* ── Attendance Table ──────────────────────────── */}
+      {/* ── Search & Filters ──────────────────────────── */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="p-1.5 bg-blue-50 border border-blue-100 rounded-lg">
-              <Clock className="h-4 w-4 text-blue-600" />
+        <div className="px-6 py-4 border-b border-slate-100">
+          <div className="flex flex-col lg:flex-row gap-4">
+            {/* Search */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                type="text"
+                placeholder="Search by name, email, department, phone..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 border-slate-200 focus-visible:ring-blue-500 bg-slate-50 hover:bg-white transition-colors"
+              />
             </div>
-            <div>
-              <h2 className="text-sm font-semibold text-slate-800">
-                Attendance Records
-                <span className="ml-2 text-slate-400 font-normal">
-                  {format(new Date(dateFilter), "MMMM dd, yyyy")}
-                </span>
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">View-only. Employees manage their own attendance.</p>
+
+            {/* Filter Dropdowns */}
+            <div className="flex gap-2 flex-wrap">
+              <Select value={deptFilter} onValueChange={setDeptFilter}>
+                <SelectTrigger className="w-[150px] border-slate-200 text-sm">
+                  <Building2 className="h-3.5 w-3.5 mr-1.5 text-slate-400" />
+                  <SelectValue placeholder="Department" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Depts</SelectItem>
+                  {departments.map((dept) => (
+                    <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger className="w-[140px] border-slate-200 text-sm">
+                  <Shield className="h-3.5 w-3.5 mr-1.5 text-slate-400" />
+                  <SelectValue placeholder="Role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Roles</SelectItem>
+                  <SelectItem value="employee">Employee</SelectItem>
+                  <SelectItem value="team_lead">Team Lead</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="business_owner">Owner</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[130px] border-slate-200 text-sm">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={managerFilter} onValueChange={setManagerFilter}>
+                <SelectTrigger className="w-[160px] border-slate-200 text-sm">
+                  <UserPlus className="h-3.5 w-3.5 mr-1.5 text-slate-400" />
+                  <SelectValue placeholder="Manager" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Managers</SelectItem>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                  {managers.map((mgr) => (
+                    <SelectItem key={mgr.uid || mgr.id} value={mgr.uid || mgr.id}>
+                      {mgr.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Group By Dept Toggle */}
+              <Button
+                variant={groupByDept ? "default" : "outline"}
+                size="sm"
+                className={groupByDept
+                  ? "bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
+                  : "border-slate-200 text-slate-600 hover:bg-blue-50 hover:text-blue-600 gap-1.5"
+                }
+                onClick={() => setGroupByDept(!groupByDept)}
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                Group
+              </Button>
+
+              {/* Clear Filters */}
+              {(searchTerm || deptFilter !== "all" || roleFilter !== "all" || statusFilter !== "all" || managerFilter !== "all") && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-slate-400 hover:text-red-500 gap-1"
+                  onClick={() => {
+                    setSearchTerm("")
+                    setDeptFilter("all")
+                    setRoleFilter("all")
+                    setStatusFilter("all")
+                    setManagerFilter("all")
+                  }}
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Clear
+                </Button>
+              )}
             </div>
+          </div>
+
+          {/* Active Filter Count */}
+          <div className="flex items-center gap-2 mt-3">
+            <span className="text-xs text-slate-400">
+              Showing <span className="font-semibold text-slate-700">{filteredEmployees.length}</span> of{" "}
+              <span className="font-semibold text-slate-700">{employees.length}</span> employees
+            </span>
           </div>
         </div>
 
+        {/* ── Table ──────────────────────────────────── */}
         {loading ? (
           <div className="flex items-center justify-center py-16 gap-3">
             <RefreshCw className="h-5 w-5 animate-spin text-blue-600" />
-            <span className="text-sm text-slate-500">Loading attendance records…</span>
+            <span className="text-sm text-slate-500">Loading employees…</span>
           </div>
-        ) : attendanceRecords.length === 0 ? (
+        ) : filteredEmployees.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="p-4 bg-slate-100 rounded-full mb-3">
-              <UserX className="h-7 w-7 text-slate-400" />
+              <Users className="h-7 w-7 text-slate-400" />
             </div>
-            <p className="text-sm font-medium text-slate-600">No records found</p>
-            <p className="text-xs text-slate-400 mt-1">No attendance for this date.</p>
+            <p className="text-sm font-medium text-slate-600">No employees found</p>
+            <p className="text-xs text-slate-400 mt-1">
+              {searchTerm || deptFilter !== "all" || roleFilter !== "all"
+                ? "Try adjusting your search or filters."
+                : "No employees in this organization yet."}
+            </p>
+          </div>
+        ) : groupByDept && groupedEmployees ? (
+          // ── Grouped View ──────────────────────────
+          <div className="divide-y divide-slate-100">
+            {groupedEmployees.map(([dept, emps]) => (
+              <div key={dept}>
+                <div className="px-6 py-3 bg-slate-50/80 border-b border-slate-100 flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-blue-600" />
+                  <span className="text-sm font-semibold text-slate-700">{dept}</span>
+                  <Badge className="ml-2 bg-blue-50 text-blue-700 border-blue-200 text-xs">{emps.length}</Badge>
+                </div>
+                <Table>
+                  <TableBody>
+                    {emps.map((emp) => renderEmployeeRow(emp))}
+                  </TableBody>
+                </Table>
+              </div>
+            ))}
           </div>
         ) : (
+          // ── Flat Table View ───────────────────────
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50 border-b border-slate-100 hover:bg-slate-50">
                   <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-6">Employee</TableHead>
+                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Role</TableHead>
+                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Position</TableHead>
+                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Department</TableHead>
+                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Manager</TableHead>
                   <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Status</TableHead>
-                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Check In</TableHead>
-                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Check Out</TableHead>
-                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Break In</TableHead>
-                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Break Out</TableHead>
-                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Total Hours</TableHead>
-                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Location</TableHead>
+                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {attendanceRecords.map((record) => (
-                  <TableRow key={record.id} className="border-b border-slate-50 hover:bg-slate-50/70 transition-colors">
-                    <TableCell className="py-3.5 px-6">
-                      <span className="text-sm font-medium text-slate-800">{record.userName || record.employeeName}</span>
-                    </TableCell>
-                    <TableCell className="py-3.5">{getStatusBadge(record)}</TableCell>
-                    <TableCell className="py-3.5">
-                      {record.checkIn
-                        ? <code className="text-xs bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded">{record.checkIn}</code>
-                        : <span className="text-slate-300 text-sm">—</span>}
-                    </TableCell>
-                    <TableCell className="py-3.5">
-                      {record.checkOut
-                        ? <code className="text-xs bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded">{record.checkOut}</code>
-                        : <span className="text-slate-300 text-sm">—</span>}
-                    </TableCell>
-                    <TableCell className="py-3.5">
-                      {record.breakIn
-                        ? <code className="text-xs bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded">{record.breakIn}</code>
-                        : <span className="text-slate-300 text-sm">—</span>}
-                    </TableCell>
-                    <TableCell className="py-3.5">
-                      {record.breakOut
-                        ? <code className="text-xs bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded">{record.breakOut}</code>
-                        : <span className="text-slate-300 text-sm">—</span>}
-                    </TableCell>
-                    <TableCell className="py-3.5">
-                      {record.totalHours
-                        ? <span className="inline-flex items-center px-2.5 py-1 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100 font-mono">{record.totalHours}</span>
-                        : <span className="text-slate-300 text-sm">—</span>}
-                    </TableCell>
-                    <TableCell className="py-3.5">
-                      {(() => {
-                        const checkInEvent = record.events?.find(e => e.type === 'checkIn' && e.location)
-                        if (checkInEvent?.location) {
-                          const { lat, lng } = checkInEvent.location
-                          return (
-                            <a
-                              href={`https://www.google.com/maps?q=${lat},${lng}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline"
-                              title={`Lat: ${lat}, Lng: ${lng}`}
-                            >
-                              <MapPin className="h-3 w-3" />
-                              View Map
-                            </a>
-                          )
-                        }
-                        return <span className="text-slate-300 text-sm">—</span>
-                      })()}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {filteredEmployees.map((emp) => renderEmployeeRow(emp))}
               </TableBody>
             </Table>
           </div>
         )}
       </div>
+
+      {/* ── Edit Employee Dialog ──────────────────────── */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="h-5 w-5 text-blue-600" />
+              Edit Employee
+            </DialogTitle>
+            <DialogDescription>
+              Update details for {editingEmployee?.name || "employee"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name" className="text-sm font-medium text-slate-700">Name</Label>
+              <Input
+                id="edit-name"
+                value={editForm.name || ""}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                className="border-slate-200 focus-visible:ring-blue-500"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-email" className="text-sm font-medium text-slate-700">Email</Label>
+              <Input
+                id="edit-email"
+                value={editForm.email || ""}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                className="border-slate-200 focus-visible:ring-blue-500"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-dept" className="text-sm font-medium text-slate-700">Department</Label>
+              <Input
+                id="edit-dept"
+                value={editForm.department || ""}
+                onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}
+                className="border-slate-200 focus-visible:ring-blue-500"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-phone" className="text-sm font-medium text-slate-700">Phone</Label>
+              <Input
+                id="edit-phone"
+                value={editForm.phone || ""}
+                onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                className="border-slate-200 focus-visible:ring-blue-500"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-position" className="text-sm font-medium text-slate-700">Position</Label>
+              <Input
+                id="edit-position"
+                placeholder="e.g. Designer, Developer"
+                value={editForm.position || ""}
+                onChange={(e) => setEditForm({ ...editForm, position: e.target.value })}
+                className="border-slate-200 focus-visible:ring-blue-500"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)} className="border-slate-200">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveEdit}
+              disabled={updateMutation.isPending}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {updateMutation.isPending ? (
+                <><RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
+              ) : (
+                <><Save className="mr-2 h-4 w-4" /> Save Changes</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── View Details Dialog ──────────────────────── */}
+      <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="h-5 w-5 text-blue-600" />
+              Employee Details
+            </DialogTitle>
+          </DialogHeader>
+          {viewingEmployee && (
+            <div className="space-y-4 py-2">
+              <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
+                <div className="h-14 w-14 rounded-full bg-blue-100 border-2 border-blue-200 flex items-center justify-center text-blue-700 text-lg font-bold">
+                  {(viewingEmployee.name || "U").substring(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">{viewingEmployee.name}</h3>
+                  <p className="text-sm text-slate-500">{viewingEmployee.email}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="text-xs font-medium text-slate-400 uppercase">Role</span>
+                  <div className="mt-1">{getRoleBadge(viewingEmployee.role)}</div>
+                </div>
+                <div>
+                  <span className="text-xs font-medium text-slate-400 uppercase">Position</span>
+                  <p className="mt-1 text-sm text-slate-700">{viewingEmployee.position || "—"}</p>
+                </div>
+                <div>
+                  <span className="text-xs font-medium text-slate-400 uppercase">Status</span>
+                  <div className="mt-1">
+                    {viewingEmployee.isActive !== false ? (
+                      <Badge className="bg-blue-50 text-blue-700 border-blue-200">Active</Badge>
+                    ) : (
+                      <Badge className="bg-slate-100 text-slate-500 border-slate-200">Inactive</Badge>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-xs font-medium text-slate-400 uppercase">Department</span>
+                  <p className="mt-1 text-sm text-slate-700">{viewingEmployee.department || "—"}</p>
+                </div>
+                <div>
+                  <span className="text-xs font-medium text-slate-400 uppercase">Phone</span>
+                  <p className="mt-1 text-sm text-slate-700">{viewingEmployee.phone || "—"}</p>
+                </div>
+                <div>
+                  <span className="text-xs font-medium text-slate-400 uppercase">Manager</span>
+                  <p className="mt-1 text-sm text-slate-700">{getManagerName(viewingEmployee.managerId) || "Unassigned"}</p>
+                </div>
+                <div>
+                  <span className="text-xs font-medium text-slate-400 uppercase">Employee ID</span>
+                  <p className="mt-1 text-xs font-mono text-slate-500 break-all">{viewingEmployee.uid || viewingEmployee.id || "—"}</p>
+                </div>
+                {viewingEmployee.hikvisionEmployeeId && (
+                  <div>
+                    <span className="text-xs font-medium text-slate-400 uppercase">Hikvision ID</span>
+                    <p className="mt-1 text-sm text-slate-700">{viewingEmployee.hikvisionEmployeeId}</p>
+                  </div>
+                )}
+                {viewingEmployee.createdAt && (
+                  <div>
+                    <span className="text-xs font-medium text-slate-400 uppercase">Created</span>
+                    <p className="mt-1 text-sm text-slate-700">
+                      {viewingEmployee.createdAt?._seconds
+                        ? new Date(viewingEmployee.createdAt._seconds * 1000).toLocaleDateString()
+                        : new Date(viewingEmployee.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Assign Manager Dialog ────────────────────── */}
+      <Dialog open={managerDialogOpen} onOpenChange={setManagerDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-blue-600" />
+              Assign Manager
+            </DialogTitle>
+            <DialogDescription>
+              Assign a manager for <strong>{assigningEmployee?.name}</strong>. Only non-admin employees and the business owner can be assigned as managers.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Select value={selectedManagerId || "__none__"} onValueChange={(val) => setSelectedManagerId(val === "__none__" ? "" : val)}>
+              <SelectTrigger className="border-slate-200">
+                <SelectValue placeholder="Select a manager..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">
+                  <span className="text-slate-400 italic">Unassign Manager</span>
+                </SelectItem>
+                {assignableManagers
+                  .filter((m) => (m.uid || m.id) !== (assigningEmployee?.uid || assigningEmployee?.id))
+                  .map((mgr) => (
+                    <SelectItem key={mgr.uid || mgr.id} value={mgr.uid || mgr.id}>
+                      <div className="flex items-center gap-2">
+                        <span>{mgr.name}</span>
+                        <span className="text-xs text-slate-400">({mgr.role})</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setManagerDialogOpen(false)} className="border-slate-200">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAssignManager}
+              disabled={assignManagerMutation.isPending}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {assignManagerMutation.isPending ? (
+                <><RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Assigning...</>
+              ) : (
+                <><UserPlus className="mr-2 h-4 w-4" /> Assign</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Create Employee Dialog ───────────────────── */}
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-blue-600" />
+              Add New Employee
+            </DialogTitle>
+            <DialogDescription>
+              Create a new employee account. They will receive login credentials.
+            </DialogDescription>
+          </DialogHeader>
+
+          {createMutation.isError && (
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-red-700">{createMutation.error?.message}</p>
+            </div>
+          )}
+
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="create-name" className="text-sm font-medium text-slate-700">
+                  Name <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="create-name"
+                  placeholder="Full name"
+                  value={createForm.name}
+                  onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                  className="border-slate-200 focus-visible:ring-blue-500"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="create-email" className="text-sm font-medium text-slate-700">
+                  Email <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="create-email"
+                  type="email"
+                  placeholder="email@company.com"
+                  value={createForm.email}
+                  onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                  className="border-slate-200 focus-visible:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-password" className="text-sm font-medium text-slate-700">
+                Password <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="create-password"
+                type="password"
+                placeholder="Minimum 6 characters"
+                value={createForm.password}
+                onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                className="border-slate-200 focus-visible:ring-blue-500"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="create-dept" className="text-sm font-medium text-slate-700">Department</Label>
+                <Input
+                  id="create-dept"
+                  placeholder="e.g. Engineering"
+                  value={createForm.department}
+                  onChange={(e) => setCreateForm({ ...createForm, department: e.target.value })}
+                  className="border-slate-200 focus-visible:ring-blue-500"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="create-phone" className="text-sm font-medium text-slate-700">Phone</Label>
+                <Input
+                  id="create-phone"
+                  placeholder="+91 ..."
+                  value={createForm.phone}
+                  onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
+                  className="border-slate-200 focus-visible:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-position" className="text-sm font-medium text-slate-700">Position / Designation</Label>
+              <Input
+                id="create-position"
+                placeholder="e.g. Designer, Developer, Manager"
+                value={createForm.position}
+                onChange={(e) => setCreateForm({ ...createForm, position: e.target.value })}
+                className="border-slate-200 focus-visible:ring-blue-500"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateDialogOpen(false)} className="border-slate-200">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateEmployee}
+              disabled={createMutation.isPending || !createForm.name || !createForm.email || !createForm.password}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {createMutation.isPending ? (
+                <><RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Creating...</>
+              ) : (
+                <><UserPlus className="mr-2 h-4 w-4" /> Create Employee</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

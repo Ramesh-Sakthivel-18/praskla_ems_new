@@ -101,7 +101,7 @@ const getAccurateLocation = async (onStatusUpdate) => {
   updateStatus('Acquiring GPS location...')
   const gpsResult = await getPositionWithOptions({
     enableHighAccuracy: true,
-    timeout: 10000,
+    timeout: 5000,
     maximumAge: 0
   })
 
@@ -114,7 +114,7 @@ const getAccurateLocation = async (onStatusUpdate) => {
   updateStatus('GPS unavailable, trying network location...')
   const networkResult = await getPositionWithOptions({
     enableHighAccuracy: false,
-    timeout: 8000,
+    timeout: 4000,
     maximumAge: 60000 // accept cached position up to 1 min old
   })
 
@@ -202,7 +202,7 @@ export default function EmployeeAttendancePage() {
     }
   }, [])
 
-  const { data, isLoading: loading } = useQuery({
+  const { data, isLoading: loading, isFetching } = useQuery({
     queryKey: ['emp-attendance'],
     queryFn: fetchAttendanceData,
   })
@@ -218,17 +218,25 @@ export default function EmployeeAttendancePage() {
     setLocationError(null)
 
     try {
-      // Get location with real-time status updates
-      const freshLocation = await getAccurateLocation((statusMsg) => {
-        setLocationMessage(statusMsg)
-      })
+      let freshLocation = null
 
-      if (!freshLocation) {
-        setLocationStatus('error')
-        setLocationError('Could not get location via any method. The action will proceed without location data.')
+      // Only fetch location for Check In and Check Out
+      if (action === 'checkIn' || action === 'checkOut') {
+        // Get location with real-time status updates
+        freshLocation = await getAccurateLocation((statusMsg) => {
+          setLocationMessage(statusMsg)
+        })
+
+        if (!freshLocation) {
+          setLocationStatus('error')
+          setLocationError('Could not get location via any method. The action will proceed without location data.')
+        } else {
+          setLocationStatus('success')
+          setLocationSource(freshLocation.source || 'unknown')
+        }
       } else {
-        setLocationStatus('success')
-        setLocationSource(freshLocation.source || 'unknown')
+        // For Break actions, just show a loading state without location
+        setLocationMessage('Processing...')
       }
 
       const token = await getValidIdToken()
@@ -309,7 +317,7 @@ export default function EmployeeAttendancePage() {
               <Clock className="h-5 w-5 text-blue-600" />
               Today's Status
             </CardTitle>
-            <Badge variant={isWorking ? "default" : "secondary"} className={isWorking ? "bg-emerald-600" : "bg-slate-200 text-slate-700"}>
+            <Badge variant={isWorking ? "default" : "secondary"} className={isWorking ? "bg-blue-600" : "bg-slate-200 text-slate-700"}>
               {todayRecord?.checkOut ? "Completed" : isWorking ? (isOnBreak ? "On Break" : "Checked In") : "Not Started"}
             </Badge>
           </div>
@@ -320,7 +328,7 @@ export default function EmployeeAttendancePage() {
             <div className="flex flex-col gap-1 p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50">
               <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Check In</span>
               <div className="flex items-center gap-2">
-                <CheckCircle className={`h-4 w-4 ${todayRecord?.checkIn ? 'text-emerald-500' : 'text-slate-300'}`} />
+                <CheckCircle className={`h-4 w-4 ${todayRecord?.checkIn ? 'text-blue-500' : 'text-slate-300'}`} />
                 <span className="text-lg font-mono font-medium">{todayRecord?.checkIn || "--:--"}</span>
               </div>
             </div>
@@ -355,11 +363,11 @@ export default function EmployeeAttendancePage() {
               </p>
             )}
             {locationStatus === 'success' && (
-              <div className="text-sm text-emerald-600 flex items-center gap-2">
+              <div className="text-sm text-blue-600 flex items-center gap-2">
                 <MapPin className="h-3 w-3" />
                 <span>Location captured</span>
                 {locationSource && (
-                  <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${locationSource === 'gps' ? 'border-emerald-400 text-emerald-700 bg-emerald-50' :
+                  <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${locationSource === 'gps' ? 'border-blue-400 text-blue-700 bg-blue-50' :
                     locationSource === 'network' ? 'border-blue-400 text-blue-700 bg-blue-50' :
                       'border-amber-400 text-amber-700 bg-amber-50'
                     }`}>
@@ -376,7 +384,7 @@ export default function EmployeeAttendancePage() {
 
             <div className="flex flex-wrap gap-4">
               {!todayRecord?.checkIn ? (
-                <Button onClick={() => handleAction('checkIn')} disabled={actionLoading} className="bg-emerald-600 hover:bg-emerald-700 min-w-[150px]">
+                <Button onClick={() => handleAction('checkIn')} disabled={actionLoading || isFetching} className="bg-blue-600 hover:bg-blue-700 min-w-[150px]">
                   {actionLoading ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
                   Check In
                 </Button>
@@ -384,7 +392,7 @@ export default function EmployeeAttendancePage() {
                 <>
                   <Button
                     onClick={() => handleAction(isOnBreak ? 'breakOut' : 'breakIn')}
-                    disabled={actionLoading}
+                    disabled={actionLoading || isFetching}
                     variant="outline"
                     className={`min-w-[150px] ${isOnBreak ? 'border-amber-500 text-amber-700' : 'border-blue-500 text-blue-700'}`}
                   >
@@ -393,7 +401,7 @@ export default function EmployeeAttendancePage() {
                   </Button>
                   <Button
                     onClick={() => handleAction('checkOut')}
-                    disabled={actionLoading}
+                    disabled={actionLoading || isFetching}
                     variant="destructive"
                     className="min-w-[150px]"
                   >
@@ -403,7 +411,7 @@ export default function EmployeeAttendancePage() {
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-emerald-500" />
+                  <CheckCircle className="h-4 w-4 text-blue-500" />
                   Shift completed for today
                 </p>
               )}
@@ -489,7 +497,7 @@ export default function EmployeeAttendancePage() {
                         })()}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={record.checkOut ? "default" : "secondary"} className={record.checkOut ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : "bg-blue-100 text-blue-800 hover:bg-blue-100"}>
+                        <Badge variant={record.checkOut ? "default" : "secondary"} className={record.checkOut ? "bg-blue-100 text-blue-800 hover:bg-blue-100" : "bg-slate-100 text-slate-800 hover:bg-slate-100"}>
                           {record.checkOut ? "Present" : "In Progress"}
                         </Badge>
                       </TableCell>

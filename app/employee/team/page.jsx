@@ -277,7 +277,7 @@ export default function TeamDashboard() {
                                                 </div>
                                             </div>
                                             <div className="mt-4 pt-4 border-t flex justify-end">
-                                                <Button variant="ghost" size="sm" className="h-8" onClick={() => navigate(`/employee/attendance?userId=${member.id}`)}>
+                                                <Button variant="ghost" size="sm" className="h-8" onClick={() => navigate('/employee/team/attendance')}>
                                                     View History
                                                     <ArrowRight className="ml-1 h-3 w-3" />
                                                 </Button>

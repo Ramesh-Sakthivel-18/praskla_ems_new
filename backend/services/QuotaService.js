@@ -168,8 +168,8 @@ class QuotaService {
         return orgCheck;
       }
 
-      // 4. If admin creating employee, check admin quota
-      if (creatorRole === 'admin' && role === 'employee') {
+      // 4. If admin creating users, check admin quota
+      if (creatorRole === 'admin') {
         const adminCheck = await this.canAdminCreateEmployee(orgId, creatorId);
         if (!adminCheck.allowed) {
           return adminCheck;
@@ -193,10 +193,23 @@ class QuotaService {
   validateCreatorPermissions(creatorRole, targetRole) {
     console.log(`🔍 QuotaService.validateCreatorPermissions() - ${creatorRole} creating ${targetRole}`);
 
+    // Admin can create any role EXCEPT admin and business_owner
+    if (creatorRole === 'admin') {
+      const blockedRoles = ['admin', 'business_owner', 'system_admin'];
+      if (blockedRoles.includes(targetRole)) {
+        console.log(`⛔ ${creatorRole} cannot create ${targetRole}`);
+        return {
+          allowed: false,
+          reason: `Admin is not authorized to create ${targetRole} accounts`
+        };
+      }
+      console.log(`✅ ${creatorRole} can create ${targetRole}`);
+      return { allowed: true, reason: null };
+    }
+
     const permissions = {
       system_admin: ['business_owner'], // System Admin can create business owners
-      business_owner: ['admin', 'business_owner'], // Business owner can create admins and other business owners
-      admin: ['employee'] // Admin can only create employees
+      business_owner: ['admin', 'business_owner', 'employee', 'team_lead', 'manager'], // Business owner can create most roles
     };
 
     const allowedRoles = permissions[creatorRole] || [];

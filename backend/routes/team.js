@@ -181,4 +181,26 @@ router.post('/leaves/:id/reject', async (req, res) => {
     }
 });
 
+
+
+/**
+ * GET /api/team/leaves/history
+ * Get approved/rejected leave requests
+ */
+router.get('/leaves/history', async (req, res) => {
+    try {
+        const { organizationId, uid } = req.user;
+
+        const history = await leaveService.getTeamLeaveHistory(organizationId, uid);
+
+        res.json({
+            count: history.length,
+            leaves: history
+        });
+    } catch (error) {
+        console.error('❌ Error getting team leave history:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 module.exports = router;

@@ -705,7 +705,55 @@ class LeaveService {
    * @returns {Promise<Array>} Pending leaves
    */
   async getTeamPendingLeaves(orgId, leaderId) {
-    return await this.leaveRepo.findByApprover(orgId, leaderId, { status: 'pending' });
+    const leaves = await this.leaveRepo.findByApprover(orgId, leaderId, { status: 'pending' });
+    return await this.attachUserDetails(orgId, leaves);
+  }
+
+  /**
+   * Get leave history (approved/rejected) for a team lead
+   * @param {string} orgId - Organization ID
+   * @param {string} leaderId - Team lead user ID
+   * @returns {Promise<Array>} Leave history
+   */
+  async getTeamLeaveHistory(orgId, leaderId) {
+    const [approved, rejected] = await Promise.all([
+      this.leaveRepo.findByApprover(orgId, leaderId, { status: 'approved' }),
+      this.leaveRepo.findByApprover(orgId, leaderId, { status: 'rejected' })
+    ]);
+
+    const leaves = [...approved, ...rejected];
+
+    // Sort by updated at (most recent action first)
+    leaves.sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+
+    return await this.attachUserDetails(orgId, leaves);
+  }
+
+  /**
+   * Attach user details (email, avatar) to leaves
+   * @private
+   */
+  async attachUserDetails(orgId, leaves) {
+    if (!leaves.length) return [];
+
+    // Get unique user IDs
+    const userIds = [...new Set(leaves.map(l => l.userId))];
+
+    // Fetch users in parallel
+    const users = await Promise.all(
+      userIds.map(uid => this.userRepo.findById(orgId, uid).catch(() => null))
+    );
+
+    const userMap = new Map(users.filter(u => u).map(u => [u.id, u]));
+
+    return leaves.map(leave => {
+      const user = userMap.get(leave.userId);
+      return {
+        ...leave,
+        userEmail: user?.email || '',
+        userAvatar: user?.avatar || null
+      };
+    });
   }
 }
 

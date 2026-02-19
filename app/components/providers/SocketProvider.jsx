@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
@@ -13,7 +14,8 @@ export function useSocket() {
 
 export function SocketProvider({ children }) {
     const [socket, setSocket] = useState(null);
-    const { user } = useAuth(); // AuthContext provides user with organizationId
+    const { user } = useAuth();
+    const queryClient = useQueryClient();
 
     useEffect(() => {
         // Only connect if user is authenticated
@@ -26,9 +28,7 @@ export function SocketProvider({ children }) {
             return;
         }
 
-        // Connect to backend (port 3000)
-        // TODO: Use environment variable for URL
-        const SOCKET_URL = 'http://localhost:3000';
+        const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
         console.log(`🔌 Connecting to socket server at ${SOCKET_URL}...`);
         const newSocket = io(SOCKET_URL);
@@ -49,31 +49,66 @@ export function SocketProvider({ children }) {
         });
 
         // ========================================
-        // GLOBAL LISTENERS (Toasts)
+        // 🔴 REAL-TIME: Global Query Invalidation
+        // These run regardless of which page is active
         // ========================================
 
-        // Attendance Updates
+        newSocket.on('realtime:attendance', (data) => {
+            console.log('📡 Real-time attendance update received');
+            queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['admin-attendance'] });
+            queryClient.invalidateQueries({ queryKey: ['bo-dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['bo-attendance'] });
+            queryClient.invalidateQueries({ queryKey: ['emp-dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['emp-attendance'] });
+            queryClient.invalidateQueries({ queryKey: ['emp-weekly-hours'] });
+            queryClient.invalidateQueries({ queryKey: ['team-dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['team-attendance'] });
+        });
+
+        newSocket.on('realtime:leaves', (data) => {
+            console.log('📡 Real-time leaves update received');
+            queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['admin-leave-requests'] });
+            queryClient.invalidateQueries({ queryKey: ['bo-dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['bo-leave-requests'] });
+            queryClient.invalidateQueries({ queryKey: ['emp-dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['emp-my-leaves'] });
+            queryClient.invalidateQueries({ queryKey: ['team-dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['team-leaves'] });
+        });
+
+        newSocket.on('realtime:employees', (data) => {
+            console.log('📡 Real-time employees update received');
+            queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['admin-employees'] });
+            queryClient.invalidateQueries({ queryKey: ['bo-dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['bo-employees'] });
+            queryClient.invalidateQueries({ queryKey: ['sa-dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['sa-organizations'] });
+        });
+
+        // ========================================
+        // TOAST NOTIFICATIONS (user-facing)
+        // ========================================
+
         newSocket.on('attendance:update', (data) => {
             console.log('📨 Attendance update:', data);
-            // Only show toast if it's someone else (optional, or always show)
             if (data.userId !== user.uid) {
                 toast.info(`Attendance: ${data.userName} ${data.action} at ${data.time}`);
             }
         });
 
-        // Leave Created
         newSocket.on('leave:created', (data) => {
             console.log('📨 Leave created:', data);
             toast.info(`New Leave Request: ${data.userName} applied for ${data.type}`);
         });
 
-        // Leave Approved
         newSocket.on('leave:approved', (data) => {
             console.log('📨 Leave approved:', data);
             toast.success(`Your leave request was APPROVED by ${data.reviewerName}`);
         });
 
-        // Leave Rejected
         newSocket.on('leave:rejected', (data) => {
             console.log('📨 Leave rejected:', data);
             toast.error(`Your leave request was REJECTED by ${data.reviewerName}`);
@@ -86,7 +121,7 @@ export function SocketProvider({ children }) {
             console.log('🔌 Cleaning up socket connection');
             newSocket.disconnect();
         };
-    }, [user]); // Re-run if user changes (login/logout)
+    }, [user]);
 
     return (
         <SocketContext.Provider value={socket}>

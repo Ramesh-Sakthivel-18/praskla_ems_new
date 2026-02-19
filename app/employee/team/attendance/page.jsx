@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
     Calendar as CalendarIcon,
     Search,
@@ -7,7 +8,9 @@ import {
     Filter,
     Clock,
     User,
-    ArrowLeft
+    ArrowLeft,
+    RefreshCw,
+    MapPin
 } from "lucide-react"
 import {
     Card,
@@ -27,42 +30,31 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 import { getValidIdToken } from "@/lib/firebaseClient"
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
 
 export default function TeamAttendancePage() {
     const navigate = useNavigate()
-    const [loading, setLoading] = useState(true)
-    const [attendanceData, setAttendanceData] = useState([])
+    const queryClient = useQueryClient()
     const [date, setDate] = useState(new Date().toISOString().split('T')[0])
     const [searchTerm, setSearchTerm] = useState('')
 
-    useEffect(() => {
-        const fetchAttendance = async () => {
-            setLoading(true)
-            try {
-                const token = await getValidIdToken()
-                const headers = {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-
-                const response = await fetch(`${API_URL}/team/attendance?date=${date}`, { headers })
-                if (response.ok) {
-                    const data = await response.json()
-                    setAttendanceData(data.attendance || [])
-                }
-            } catch (error) {
-                console.error("Failed to fetch team attendance:", error)
-            } finally {
-                setLoading(false)
+    // React Query for team attendance data
+    const { data: attendanceData = [], isLoading: loading } = useQuery({
+        queryKey: ['team-attendance', date],
+        queryFn: async () => {
+            const token = await getValidIdToken()
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
             }
+            const response = await fetch(`${API_URL}/team/attendance?date=${date}`, { headers })
+            if (!response.ok) throw new Error('Failed to fetch team attendance')
+            const data = await response.json()
+            return data.attendance || []
         }
-
-        fetchAttendance()
-    }, [date])
+    })
 
     const getInitials = (name) => {
         if (!name) return "EM"
@@ -112,6 +104,14 @@ export default function TeamAttendancePage() {
                         onChange={(e) => setDate(e.target.value)}
                         className="w-auto"
                     />
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => queryClient.invalidateQueries({ queryKey: ['team-attendance', date] })}
+                        disabled={loading}
+                    >
+                        <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                    </Button>
                     <Button variant="outline">
                         <Download className="mr-2 h-4 w-4" />
                         Export
@@ -144,15 +144,16 @@ export default function TeamAttendancePage() {
                                     <TableHead>Check In</TableHead>
                                     <TableHead>Check Out</TableHead>
                                     <TableHead>Total Hours</TableHead>
+                                    <TableHead>Location</TableHead>
                                     <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {loading ? (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="h-24 text-center">
+                                        <TableCell colSpan={7} className="h-24 text-center">
                                             <div className="flex justify-center">
-                                                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600"></div>
+                                                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                                             </div>
                                         </TableCell>
                                     </TableRow>
@@ -194,6 +195,66 @@ export default function TeamAttendancePage() {
                                             </TableCell>
                                             <TableCell>
                                                 {record.attendance?.totalHours ? `${record.attendance.totalHours.toFixed(2)} hrs` : '--'}
+                                            </TableCell>
+                                            <TableCell>
+                                                {(() => {
+                                                    const events = record.attendance?.events || [];
+                                                    const checkInEvent = events.find(e => e.type === 'checkIn' && e.location);
+                                                    const checkOutEvent = events.find(e => e.type === 'checkOut' && e.location);
+
+                                                    const hasCheckIn = !!record.attendance?.checkIn;
+                                                    const hasCheckOut = !!record.attendance?.checkOut;
+
+                                                    if (!hasCheckIn) return <span className="text-muted-foreground text-xs">-</span>;
+
+                                                    return (
+                                                        <div className="flex flex-col gap-1 items-start">
+                                                            {hasCheckIn && (
+                                                                <div className="flex items-center gap-1 text-xs">
+                                                                    {checkInEvent?.location ? (
+                                                                        <a
+                                                                            href={`https://www.google.com/maps?q=${checkInEvent.location.lat},${checkInEvent.location.lng}`}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            className="inline-flex items-center gap-1 text-green-600 hover:underline"
+                                                                            title="Check In Location"
+                                                                        >
+                                                                            <MapPin className="h-3 w-3" />
+                                                                            In
+                                                                        </a>
+                                                                    ) : (
+                                                                        <span className="text-muted-foreground flex items-center gap-1" title="Location not captured">
+                                                                            <MapPin className="h-3 w-3 opacity-50" />
+                                                                            In (No Loc)
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            )}
+
+                                                            {hasCheckOut && (
+                                                                <div className="flex items-center gap-1 text-xs">
+                                                                    {checkOutEvent?.location ? (
+                                                                        <a
+                                                                            href={`https://www.google.com/maps?q=${checkOutEvent.location.lat},${checkOutEvent.location.lng}`}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            className="inline-flex items-center gap-1 text-red-600 hover:underline"
+                                                                            title="Check Out Location"
+                                                                        >
+                                                                            <MapPin className="h-3 w-3" />
+                                                                            Out
+                                                                        </a>
+                                                                    ) : (
+                                                                        <span className="text-muted-foreground flex items-center gap-1" title="Location not captured">
+                                                                            <MapPin className="h-3 w-3 opacity-50" />
+                                                                            Out (No Loc)
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })()}
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <Button variant="ghost" size="sm">

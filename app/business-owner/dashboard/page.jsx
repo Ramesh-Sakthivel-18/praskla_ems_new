@@ -108,34 +108,34 @@ export default function BusinessOwnerDashboardPage() {
       icon: Users,
       color: "text-blue-600",
       bgColor: "bg-blue-50 dark:bg-blue-900/30",
-      borderColor: "border-blue-100 dark:border-blue-900"
+      borderColor: "border-slate-200 dark:border-slate-800"
     },
     {
       title: "Admins",
       value: adminQuotas.length,
       subtitle: "Managing employees",
       icon: Shield,
-      color: "text-indigo-600",
-      bgColor: "bg-indigo-50 dark:bg-indigo-900/30",
-      borderColor: "border-indigo-100 dark:border-indigo-900"
+      color: "text-slate-600",
+      bgColor: "bg-slate-100 dark:bg-slate-800",
+      borderColor: "border-slate-200 dark:border-slate-800"
     },
     {
       title: "Present Today",
       value: attendance.present || 0,
       subtitle: "Checked in",
       icon: UserCheck,
-      color: "text-blue-500",
+      color: "text-blue-600",
       bgColor: "bg-blue-50 dark:bg-blue-900/30",
-      borderColor: "border-blue-100 dark:border-blue-900"
+      borderColor: "border-slate-200 dark:border-slate-800"
     },
     {
       title: "Pending Leaves",
       value: leaves.pendingCount || 0,
       subtitle: "Awaiting approval",
       icon: FileText,
-      color: "text-amber-600",
-      bgColor: "bg-amber-50 dark:bg-amber-900/30",
-      borderColor: "border-amber-100 dark:border-amber-900"
+      color: "text-blue-600",
+      bgColor: "bg-blue-50 dark:bg-blue-900/30",
+      borderColor: "border-slate-200 dark:border-slate-800"
     },
   ]
 
@@ -144,15 +144,15 @@ export default function BusinessOwnerDashboardPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-            Business Owner Dashboard
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+            Overview
           </h1>
           <p className="text-slate-500 mt-1">
             Manage your organization and oversee operations
           </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={loadDashboard} variant="outline" size="sm" className="gap-2 border-slate-200 hover:bg-slate-50">
+          <Button onClick={loadDashboard} variant="outline" size="sm" className="gap-2 border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700">
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
@@ -247,7 +247,7 @@ export default function BusinessOwnerDashboardPage() {
               </div>
               <Progress
                 value={quota.organization?.maxAdmins ? (adminQuotas.length / quota.organization.maxAdmins) * 100 : 0}
-                className="h-2 bg-slate-100 dark:bg-slate-800 [&>div]:bg-indigo-600"
+                className="h-2 bg-slate-100 dark:bg-slate-800 [&>div]:bg-slate-600"
               />
               <p className="text-xs text-slate-400">
                 {(quota.organization?.maxAdmins || 0) - adminQuotas.length} admin slots available
@@ -289,7 +289,7 @@ export default function BusinessOwnerDashboardPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => navigate("/business-owner/employees")}
-                className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 h-8"
+                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 h-8"
               >
                 Manage
                 <ChevronRight className="h-4 w-4 ml-1" />
@@ -315,18 +315,18 @@ export default function BusinessOwnerDashboardPage() {
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
                           <div className="h-9 w-9 rounded-full bg-white border border-slate-200 dark:border-slate-700 flex items-center justify-center shadow-sm">
-                            <Shield className="h-4 w-4 text-indigo-600" />
+                            <Shield className="h-4 w-4 text-slate-600" />
                           </div>
                           <div>
                             <p className="font-medium text-sm text-slate-900 dark:text-slate-100">{admin.name}</p>
                             <p className="text-xs text-slate-500">{admin.email}</p>
                           </div>
                         </div>
-                        <Badge variant={usage >= 90 ? "destructive" : "secondary"} className="bg-white border-slate-200 text-slate-700">
+                        <Badge variant="secondary" className="bg-white border-slate-200 text-slate-700 hover:bg-slate-50">
                           {admin.quota?.created || 0} / {admin.quota?.limit || 0}
                         </Badge>
                       </div>
-                      <Progress value={usage} className="h-1.5 bg-slate-200 dark:bg-slate-700 [&>div]:bg-indigo-500" />
+                      <Progress value={usage} className="h-1.5 bg-slate-200 dark:bg-slate-700 [&>div]:bg-blue-500" />
                     </div>
                   )
                 })}
@@ -375,8 +375,8 @@ export default function BusinessOwnerDashboardPage() {
                     className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 hover:bg-slate-100 transition-colors"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center">
-                        <Clock className="h-4 w-4 text-amber-600" />
+                      <div className="h-9 w-9 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center">
+                        <Clock className="h-4 w-4 text-blue-600" />
                       </div>
                       <div>
                         <p className="font-medium text-sm text-slate-900 dark:text-slate-100">{leave.userName || leave.employeeName || 'Employee'}</p>
@@ -385,7 +385,7 @@ export default function BusinessOwnerDashboardPage() {
                         </p>
                       </div>
                     </div>
-                    <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50">
+                    <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50">
                       Pending
                     </Badge>
                   </div>
@@ -405,43 +405,43 @@ export default function BusinessOwnerDashboardPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Button
               variant="outline"
-              className="h-auto py-4 flex flex-col gap-3 border-slate-200 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all group"
+              className="h-auto py-4 flex flex-col gap-3 border-blue-100 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all group shadow-sm hover:shadow-md"
               onClick={() => navigate("/business-owner/employees")}
             >
-              <div className="p-2 rounded-full bg-blue-50 group-hover:bg-blue-100 transition-colors">
-                <Users className="h-5 w-5 text-blue-600" />
+              <div className="p-3 rounded-full bg-blue-100/50 group-hover:bg-blue-200/50 transition-colors">
+                <Users className="h-6 w-6 text-blue-600" />
               </div>
-              <span className="text-sm font-medium text-slate-700">View Employees</span>
+              <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">View Employees</span>
             </Button>
             <Button
               variant="outline"
-              className="h-auto py-4 flex flex-col gap-3 border-slate-200 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all group"
+              className="h-auto py-4 flex flex-col gap-3 border-blue-100 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all group shadow-sm hover:shadow-md"
               onClick={() => navigate("/business-owner/attendance")}
             >
-              <div className="p-2 rounded-full bg-blue-50 group-hover:bg-blue-100 transition-colors">
-                <Eye className="h-5 w-5 text-blue-600" />
+              <div className="p-3 rounded-full bg-blue-100/50 group-hover:bg-blue-200/50 transition-colors">
+                <Eye className="h-6 w-6 text-blue-600" />
               </div>
-              <span className="text-sm font-medium text-slate-700">View Attendance</span>
+              <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">View Attendance</span>
             </Button>
             <Button
               variant="outline"
-              className="h-auto py-4 flex flex-col gap-3 border-slate-200 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all group"
+              className="h-auto py-4 flex flex-col gap-3 border-blue-100 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all group shadow-sm hover:shadow-md"
               onClick={() => navigate("/business-owner/leave-requests")}
             >
-              <div className="p-2 rounded-full bg-blue-50 group-hover:bg-blue-100 transition-colors">
-                <FileText className="h-5 w-5 text-blue-600" />
+              <div className="p-3 rounded-full bg-blue-100/50 group-hover:bg-blue-200/50 transition-colors">
+                <FileText className="h-6 w-6 text-blue-600" />
               </div>
-              <span className="text-sm font-medium text-slate-700">Leave Requests</span>
+              <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">Leave Requests</span>
             </Button>
             <Button
               variant="outline"
-              className="h-auto py-4 flex flex-col gap-3 border-slate-200 hover:border-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900/10 transition-all group"
+              className="h-auto py-4 flex flex-col gap-3 border-blue-100 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all group shadow-sm hover:shadow-md"
               onClick={() => navigate("/business-owner/profile")}
             >
-              <div className="p-2 rounded-full bg-slate-100 group-hover:bg-slate-200 transition-colors">
-                <Settings className="h-5 w-5 text-slate-600" />
+              <div className="p-3 rounded-full bg-blue-100/50 group-hover:bg-blue-200/50 transition-colors">
+                <Settings className="h-6 w-6 text-blue-600" />
               </div>
-              <span className="text-sm font-medium text-slate-700">Settings</span>
+              <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">Settings</span>
             </Button>
           </div>
         </CardContent>
