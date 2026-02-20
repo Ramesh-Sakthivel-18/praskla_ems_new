@@ -12,7 +12,8 @@ import {
   ArrowLeft,
   RefreshCw,
   Briefcase,
-  Crown
+  Crown,
+  ArrowUpDown
 } from "lucide-react"
 import {
   Card,
@@ -58,6 +59,7 @@ export default function BusinessOwnerLeaveRequestsPage() {
   const [activeTab, setActiveTab] = useState("approvals")
   const [actionDialog, setActionDialog] = useState({ open: false, type: null, leave: null })
   const [comments, setComments] = useState("")
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' })
 
   // ─── Queries ────────────────────────────────────────────────
 
@@ -123,6 +125,38 @@ export default function BusinessOwnerLeaveRequestsPage() {
     }
   })
 
+  // ─── Sorting Logic ──────────────────────────────────────────
+
+  const requestSort = (key) => {
+    let direction = 'asc'
+    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc'
+    setSortConfig({ key, direction })
+  }
+
+  const sortedAllLeaves = useMemo(() => {
+    let sortable = [...allLeaves]
+    if (sortConfig.key) {
+      sortable.sort((a, b) => {
+        let aVal = a[sortConfig.key] || ''
+        let bVal = b[sortConfig.key] || ''
+
+        // Special handling for dates
+        if (sortConfig.key === 'startDate' || sortConfig.key === 'createdAt') {
+          aVal = new Date(aVal).getTime()
+          bVal = new Date(bVal).getTime()
+        } else {
+          aVal = aVal.toString().toLowerCase()
+          bVal = bVal.toString().toLowerCase()
+        }
+
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1
+        return 0
+      })
+    }
+    return sortable
+  }, [allLeaves, sortConfig])
+
   // ─── Helpers ────────────────────────────────────────────────
 
   const getInitials = (name) => name ? name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : '??'
@@ -140,7 +174,7 @@ export default function BusinessOwnerLeaveRequestsPage() {
     switch (status?.toLowerCase()) {
       case 'approved': return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-0"><CheckCircle2 className="w-3 h-3 mr-1" /> Approved</Badge>
       case 'rejected': return <Badge className="bg-red-100 text-red-700 hover:bg-red-200 border-0"><XCircle className="w-3 h-3 mr-1" /> Rejected</Badge>
-      case 'pending': return <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-200 border-0"><Clock className="w-3 h-3 mr-1" /> Pending</Badge>
+      case 'pending': return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-200 border-0"><Clock className="w-3 h-3 mr-1" /> Pending</Badge>
       default: return <Badge variant="outline">{status}</Badge>
     }
   }
@@ -152,7 +186,7 @@ export default function BusinessOwnerLeaveRequestsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50 flex items-center gap-2">
-            <Crown className="h-6 w-6 text-amber-500" /> Leave Management
+            <Crown className="h-6 w-6 text-blue-500" /> Leave Management
           </h1>
           <p className="text-slate-500 mt-1">Approve Department Head leaves and monitor organization status</p>
         </div>
@@ -191,17 +225,17 @@ export default function BusinessOwnerLeaveRequestsPage() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {pendingLeaves.map(leave => (
-                <Card key={leave.id} className="overflow-hidden border-l-4 border-l-amber-500 shadow-sm hover:shadow-md transition-all">
+                <Card key={leave.id} className="overflow-hidden border-l-4 border-l-blue-500 shadow-sm hover:shadow-md transition-all">
                   <CardHeader className="pb-3 bg-slate-50/50">
                     <div className="flex justify-between items-start">
                       <div className="flex items-center gap-3">
                         <Avatar>
-                          <AvatarFallback className="bg-amber-100 text-amber-700">{getInitials(leave.userName)}</AvatarFallback>
+                          <AvatarFallback className="bg-blue-100 text-blue-700">{getInitials(leave.userName)}</AvatarFallback>
                         </Avatar>
                         <div>
                           <CardTitle className="text-base">{leave.userName}</CardTitle>
                           <CardDescription className="flex items-center gap-1 text-xs">
-                            <Crown className="w-3 h-3 text-amber-500" /> Department Head
+                            <Crown className="w-3 h-3 text-blue-500" /> Department Head
                           </CardDescription>
                         </div>
                       </div>
@@ -256,13 +290,13 @@ export default function BusinessOwnerLeaveRequestsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Employee</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Dates</TableHead>
-                      <TableHead>Days</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Applied On</TableHead>
+                      <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("userName")}><div className="flex items-center gap-1">Employee <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
+                      <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("userRole")}><div className="flex items-center gap-1">Role <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
+                      <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("leaveType")}><div className="flex items-center gap-1">Type <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
+                      <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("startDate")}><div className="flex items-center gap-1">Dates <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
+                      <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("days")}><div className="flex items-center gap-1">Days <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
+                      <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("status")}><div className="flex items-center gap-1">Status <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
+                      <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("createdAt")}><div className="flex items-center gap-1">Applied On <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -275,12 +309,12 @@ export default function BusinessOwnerLeaveRequestsPage() {
                         <TableCell colSpan={7} className="h-24 text-center">No records found</TableCell>
                       </TableRow>
                     ) : (
-                      allLeaves.map(leave => (
+                      sortedAllLeaves.map(leave => (
                         <TableRow key={leave.id}>
                           <TableCell className="font-medium">{leave.userName}</TableCell>
                           <TableCell>
                             {leave.userRole === 'dept_head' ?
-                              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px]">HOD</Badge> :
+                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px]">HOD</Badge> :
                               <Badge variant="outline" className="text-[10px]">Employee</Badge>
                             }
                           </TableCell>

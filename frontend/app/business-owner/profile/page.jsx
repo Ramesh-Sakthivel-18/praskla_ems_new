@@ -421,7 +421,7 @@ export default function BusinessOwnerProfilePage() {
                   </div>
                   <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                     <span className="text-sm text-slate-500">Status</span>
-                    <Badge className={organization.isActive ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-amber-100 text-amber-700"}>
+                    <Badge className={organization.isActive ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-blue-100 text-blue-700"}>
                       {organization.isActive ? "Active" : "Pending"}
                     </Badge>
                   </div>

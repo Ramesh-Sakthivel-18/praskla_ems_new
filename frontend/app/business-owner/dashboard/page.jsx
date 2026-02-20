@@ -81,10 +81,10 @@ export default function BusinessOwnerDashboardPage() {
 
   // Calculate organization quota percentage
   const getOrgQuotaPercentage = () => {
-    if (!dashboardData?.quota?.organization) return 0
-    const { totalEmployees, maxEmployees } = dashboardData.quota.organization
-    if (!maxEmployees) return 0
-    return Math.min(Math.round((totalEmployees / maxEmployees) * 100), 100)
+    if (!dashboardData?.quota?.utilization?.employees) return 0
+    const { current, max } = dashboardData.quota.utilization.employees
+    if (!max) return 0
+    return Math.min(Math.round((current / max) * 100), 100)
   }
 
   if (loading) {
@@ -229,7 +229,7 @@ export default function BusinessOwnerDashboardPage() {
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Employees</span>
                 <span className="text-sm text-slate-500">
-                  <span className="font-semibold text-slate-900 dark:text-slate-100">{quota.organization?.totalEmployees || 0}</span> / {quota.organization?.maxEmployees || 0}
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{quota?.utilization?.employees?.current || 0}</span> / {quota?.utilization?.employees?.max || 0}
                 </span>
               </div>
               <Progress
@@ -237,7 +237,7 @@ export default function BusinessOwnerDashboardPage() {
                 className="h-2 bg-slate-100 dark:bg-slate-800 [&>div]:bg-blue-600"
               />
               <p className="text-xs text-slate-400">
-                {quota.organization?.maxEmployees - (quota.organization?.totalEmployees || 0)} slots available
+                {quota?.utilization?.employees?.remaining || 0} slots available
               </p>
             </div>
             {/* Admins Quota */}
@@ -245,15 +245,15 @@ export default function BusinessOwnerDashboardPage() {
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Admins</span>
                 <span className="text-sm text-slate-500">
-                  <span className="font-semibold text-slate-900 dark:text-slate-100">{adminQuotas.length}</span> / {quota.organization?.maxAdmins || 0}
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{adminQuotas.length}</span> / {quota?.utilization?.admins?.max || 0}
                 </span>
               </div>
               <Progress
-                value={quota.organization?.maxAdmins ? (adminQuotas.length / quota.organization.maxAdmins) * 100 : 0}
+                value={quota?.utilization?.admins?.max ? (adminQuotas.length / quota.utilization.admins.max) * 100 : 0}
                 className="h-2 bg-slate-100 dark:bg-slate-800 [&>div]:bg-slate-600"
               />
               <p className="text-xs text-slate-400">
-                {(quota.organization?.maxAdmins || 0) - adminQuotas.length} admin slots available
+                {Math.max(0, (quota?.utilization?.admins?.max || 0) - adminQuotas.length)} admin slots available
               </p>
             </div>
             {/* Business Owners Quota */}
@@ -261,15 +261,15 @@ export default function BusinessOwnerDashboardPage() {
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Business Owners</span>
                 <span className="text-sm text-slate-500">
-                  <span className="font-semibold text-slate-900 dark:text-slate-100">{quota.organization?.totalBusinessOwners || 1}</span> / {quota.organization?.maxBusinessOwners || 5}
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{quota?.utilization?.businessOwners?.current || 1}</span> / {quota?.utilization?.businessOwners?.max || 5}
                 </span>
               </div>
               <Progress
-                value={quota.organization?.maxBusinessOwners ? ((quota.organization?.totalBusinessOwners || 1) / quota.organization.maxBusinessOwners) * 100 : 20}
+                value={quota?.utilization?.businessOwners?.max ? ((quota?.utilization?.businessOwners?.current || 1) / quota.utilization.businessOwners.max) * 100 : 20}
                 className="h-2 bg-slate-100 dark:bg-slate-800 [&>div]:bg-slate-600"
               />
               <p className="text-xs text-slate-400">
-                {(quota.organization?.maxBusinessOwners || 5) - (quota.organization?.totalBusinessOwners || 1)} slots available
+                {quota?.utilization?.businessOwners?.remaining || 0} slots available
               </p>
             </div>
           </div>

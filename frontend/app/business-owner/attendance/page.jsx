@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, Clock, UserCheck, UserX, Coffee, LogOut, ArrowLeft, RefreshCw, Users, MapPin } from "lucide-react"
+import { Calendar, Clock, UserCheck, UserX, Coffee, LogOut, ArrowLeft, RefreshCw, Users, MapPin, ArrowUpDown } from "lucide-react"
 import { format } from "date-fns"
 import { safeRedirect } from "@/lib/redirectUtils"
 
@@ -51,6 +51,7 @@ export default function BusinessOwnerAttendancePage() {
 
   const [currentUser, setCurrentUser] = useState(null)
   const [dateFilter, setDateFilter] = useState(format(new Date(), "yyyy-MM-dd"))
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' })
 
   useEffect(() => {
     const current = localStorage.getItem("currentUser")
@@ -89,13 +90,43 @@ export default function BusinessOwnerAttendancePage() {
       return <Badge className="bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 border-0">Checked Out</Badge>
     }
     if (record.breakIn && !record.breakOut) {
-      return <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-0">On Break</Badge>
+      return <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-0">On Break</Badge>
     }
     if (record.checkIn) {
       return <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">Present</Badge>
     }
     return <Badge className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-0">Absent</Badge>
   }
+
+  const requestSort = (key) => {
+    let direction = 'asc'
+    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc'
+    setSortConfig({ key, direction })
+  }
+
+  const sortedAttendance = useMemo(() => {
+    if (!attendanceRecords) return []
+    let sortable = [...attendanceRecords]
+    if (sortConfig.key) {
+      sortable.sort((a, b) => {
+        let aVal = a[sortConfig.key] || ''
+        let bVal = b[sortConfig.key] || ''
+
+        if (sortConfig.key === 'userName') {
+          aVal = (a.userName || a.employeeName || '').toLowerCase()
+          bVal = (b.userName || b.employeeName || '').toLowerCase()
+        } else {
+          aVal = aVal.toString().toLowerCase()
+          bVal = bVal.toString().toLowerCase()
+        }
+
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1
+        return 0
+      })
+    }
+    return sortable
+  }, [attendanceRecords, sortConfig])
 
   if (!currentUser) {
     return (
@@ -185,8 +216,8 @@ export default function BusinessOwnerAttendancePage() {
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-slate-500">On Break</CardTitle>
-            <div className="p-2 bg-amber-50 dark:bg-amber-900/30 rounded-lg">
-              <Coffee className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
+              <Coffee className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             </div>
           </CardHeader>
           <CardContent>
@@ -241,18 +272,18 @@ export default function BusinessOwnerAttendancePage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50/50 hover:bg-slate-50/50">
-                  <TableHead className="font-semibold text-slate-600">Employee</TableHead>
-                  <TableHead className="font-semibold text-slate-600">Status</TableHead>
-                  <TableHead className="font-semibold text-slate-600">Check In</TableHead>
-                  <TableHead className="font-semibold text-slate-600">Check Out</TableHead>
-                  <TableHead className="font-semibold text-slate-600">Break In</TableHead>
-                  <TableHead className="font-semibold text-slate-600">Break Out</TableHead>
-                  <TableHead className="font-semibold text-slate-600">Total Hours</TableHead>
+                  <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("userName")}><div className="flex items-center gap-1">Employee <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("checkIn")}><div className="flex items-center gap-1">Check In <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
+                  <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("checkOut")}><div className="flex items-center gap-1">Check Out <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
+                  <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("breakIn")}><div className="flex items-center gap-1">Break In <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
+                  <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("breakOut")}><div className="flex items-center gap-1">Break Out <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
+                  <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("totalHours")}><div className="flex items-center gap-1">Total Hours <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
                   <TableHead className="font-semibold text-slate-600">Location</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {attendanceRecords.map((record) => (
+                {sortedAttendance.map((record) => (
                   <TableRow key={record.id} className="hover:bg-slate-50/50 transition-colors">
                     <TableCell className="font-medium text-slate-900">{record.userName || record.employeeName}</TableCell>
                     <TableCell>{getStatusBadge(record)}</TableCell>

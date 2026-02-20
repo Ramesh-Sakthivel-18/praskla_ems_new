@@ -24,7 +24,8 @@ import {
   ArrowLeft,
   Mail,
   User,
-  Briefcase
+  Briefcase,
+  ArrowUpDown
 } from "lucide-react"
 import { safeRedirect } from "@/lib/redirectUtils"
 
@@ -53,6 +54,7 @@ export default function BusinessOwnerEmployeesPage() {
 
   const [currentUser, setCurrentUser] = useState(null)
   const [searchQuery, setSearchQuery] = useState("")
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" })
 
   const [showCreateAdmin, setShowCreateAdmin] = useState(false)
   const [createLoading, setCreateLoading] = useState(false)
@@ -100,6 +102,12 @@ export default function BusinessOwnerEmployeesPage() {
       emp.position?.toLowerCase().includes(query)
     )
   }, [searchQuery, employees])
+
+  const requestSort = (key) => {
+    let direction = 'asc'
+    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc'
+    setSortConfig({ key, direction })
+  }
 
   const loadEmployees = () => queryClient.invalidateQueries({ queryKey: ['bo-employees'] })
 
@@ -220,6 +228,21 @@ export default function BusinessOwnerEmployeesPage() {
 
   const admins = Array.isArray(filteredEmployees) ? filteredEmployees.filter((e) => e.role === "admin") : []
   const regularEmployees = Array.isArray(filteredEmployees) ? filteredEmployees.filter((e) => e.role === "employee") : []
+
+  const sortedRegularEmployees = useMemo(() => {
+    if (!Array.isArray(regularEmployees)) return []
+    let sortable = [...regularEmployees]
+    if (sortConfig.key) {
+      sortable.sort((a, b) => {
+        const aVal = a[sortConfig.key]?.toString().toLowerCase() || ''
+        const bVal = b[sortConfig.key]?.toString().toLowerCase() || ''
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1
+        return 0
+      })
+    }
+    return sortable
+  }, [regularEmployees, sortConfig])
 
   // Debug: Log roles
   console.log("🔍 All employees roles:", filteredEmployees?.map?.(e => ({ name: e.name, role: e.role })))
@@ -554,16 +577,28 @@ export default function BusinessOwnerEmployeesPage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50/50 hover:bg-slate-50/50">
-                  <TableHead className="font-semibold text-slate-600">Name</TableHead>
-                  <TableHead className="font-semibold text-slate-600">Email</TableHead>
-                  <TableHead className="font-semibold text-slate-600">Department</TableHead>
-                  <TableHead className="font-semibold text-slate-600">Position</TableHead>
-                  <TableHead className="font-semibold text-slate-600">Type</TableHead>
-                  <TableHead className="font-semibold text-slate-600">Status</TableHead>
+                  <TableHead className="font-semibold text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("name")}>
+                    <div className="flex items-center gap-1">Name <ArrowUpDown className="h-3 w-3 text-slate-400" /></div>
+                  </TableHead>
+                  <TableHead className="font-semibold text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("email")}>
+                    <div className="flex items-center gap-1">Email <ArrowUpDown className="h-3 w-3 text-slate-400" /></div>
+                  </TableHead>
+                  <TableHead className="font-semibold text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("department")}>
+                    <div className="flex items-center gap-1">Department <ArrowUpDown className="h-3 w-3 text-slate-400" /></div>
+                  </TableHead>
+                  <TableHead className="font-semibold text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("position")}>
+                    <div className="flex items-center gap-1">Position <ArrowUpDown className="h-3 w-3 text-slate-400" /></div>
+                  </TableHead>
+                  <TableHead className="font-semibold text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("workingType")}>
+                    <div className="flex items-center gap-1">Type <ArrowUpDown className="h-3 w-3 text-slate-400" /></div>
+                  </TableHead>
+                  <TableHead className="font-semibold text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("isActive")}>
+                    <div className="flex items-center gap-1">Status <ArrowUpDown className="h-3 w-3 text-slate-400" /></div>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {regularEmployees.map((emp) => (
+                {sortedRegularEmployees.map((emp) => (
                   <TableRow key={emp.id} className="hover:bg-slate-50/50 transition-colors">
                     <TableCell className="font-medium text-slate-900">{emp.name}</TableCell>
                     <TableCell className="text-slate-600">{emp.email}</TableCell>
@@ -576,7 +611,7 @@ export default function BusinessOwnerEmployeesPage() {
                         className={
                           emp.isActive === false
                             ? "bg-red-50 text-red-700 border-red-200"
-                            : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            : "bg-blue-50 text-blue-700 border-blue-200"
                         }
                       >
                         {emp.isActive === false ? 'Inactive' : 'Active'}
