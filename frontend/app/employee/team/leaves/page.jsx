@@ -34,6 +34,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getValidIdToken } from "@/lib/firebaseClient"
 import { toast } from "sonner"
 import { format } from "date-fns"
@@ -284,7 +285,7 @@ export default function TeamLeavesPage() {
                                                     </TableCell>
                                                     <TableCell>{leave.days}</TableCell>
                                                     <TableCell>
-                                                        {leave.status === 'Approved' ?
+                                                        {leave.status?.toLowerCase() === 'approved' ?
                                                             <Badge className="bg-emerald-100 text-emerald-700 border-0">Approved</Badge> :
                                                             <Badge className="bg-red-100 text-red-700 border-0">Rejected</Badge>
                                                         }

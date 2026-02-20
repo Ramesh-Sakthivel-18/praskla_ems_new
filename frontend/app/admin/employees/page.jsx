@@ -1145,7 +1145,7 @@ export default function AdminEmployeesPage() {
                 </div>
                 {viewingEmployee.hikvisionEmployeeId && (
                   <div>
-                    <span className="text-xs font-medium text-slate-400 uppercase">Hikvision ID</span>
+                    <span className="text-xs font-medium text-slate-400 uppercase">Employee ID</span>
                     <p className="mt-1 text-sm text-slate-700">{viewingEmployee.hikvisionEmployeeId}</p>
                   </div>
                 )}

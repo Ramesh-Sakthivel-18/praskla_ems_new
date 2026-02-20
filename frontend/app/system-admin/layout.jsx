@@ -96,10 +96,10 @@ export default function SystemAdminLayout({ children }) {
             {/* Mobile Header */}
             <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white dark:bg-slate-800 border-b px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <div className="p-1 bg-orange-500 rounded-md">
+                    <div className="p-1 bg-blue-500 rounded-md">
                         <Shield className="h-5 w-5 text-white" />
                     </div>
-                    <span className="font-semibold text-orange-950 dark:text-orange-50">System Admin</span>
+                    <span className="font-semibold text-blue-950 dark:text-blue-50">System Admin</span>
                 </div>
                 <Button
                     variant="ghost"
@@ -130,7 +130,7 @@ export default function SystemAdminLayout({ children }) {
                     {/* Logo */}
                     <div className="p-6 border-b">
                         <Link to="/system-admin/dashboard" className="flex items-center gap-3">
-                            <div className="p-2 bg-gradient-to-r from-orange-500 to-amber-500 rounded-lg shadow-md">
+                            <div className="p-2 bg-gradient-to-r from-blue-500 to-blue-500 rounded-lg shadow-md">
                                 <Shield className="h-6 w-6 text-white" />
                             </div>
                             <div>
@@ -153,13 +153,13 @@ export default function SystemAdminLayout({ children }) {
                                     onClick={() => setSidebarOpen(false)}
                                     className={cn(
                                         "flex items-center gap-3 px-4 py-3 rounded-lg transition-all group",
-                                        "hover:bg-orange-50 dark:hover:bg-orange-950/30",
+                                        "hover:bg-blue-50 dark:hover:bg-blue-950/30",
                                         active
-                                            ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md hover:shadow-lg hover:from-orange-600 hover:to-amber-600"
-                                            : "text-slate-600 dark:text-slate-300 hover:text-orange-700 dark:hover:text-orange-400"
+                                            ? "bg-gradient-to-r from-blue-500 to-blue-500 text-white shadow-md hover:shadow-lg hover:from-blue-600 hover:to-blue-600"
+                                            : "text-slate-600 dark:text-slate-300 hover:text-blue-700 dark:hover:text-blue-400"
                                     )}
                                 >
-                                    <Icon className={cn("h-5 w-5", active ? "text-white" : "text-slate-500 group-hover:text-orange-600 dark:text-slate-400 dark:group-hover:text-orange-400")} />
+                                    <Icon className={cn("h-5 w-5", active ? "text-white" : "text-slate-500 group-hover:text-blue-600 dark:text-slate-400 dark:group-hover:text-blue-400")} />
                                     <span className="font-medium">{link.label}</span>
                                 </Link>
                             )
@@ -171,8 +171,8 @@ export default function SystemAdminLayout({ children }) {
                     {/* User Profile */}
                     <div className="p-4 space-y-3">
                         <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-100 dark:border-slate-700">
-                            <Avatar className="h-10 w-10 border-2 border-orange-100">
-                                <AvatarFallback className="bg-orange-100 text-orange-700 font-bold">
+                            <Avatar className="h-10 w-10 border-2 border-blue-100">
+                                <AvatarFallback className="bg-blue-100 text-blue-700 font-bold">
                                     {getInitials(currentUser?.name)}
                                 </AvatarFallback>
                             </Avatar>

@@ -78,11 +78,11 @@ export default function TeamDashboard() {
     const getInitials = (name) => name ? name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : '??'
 
     const getStatusColor = (status) => {
-        switch (status) {
-            case 'Present': return 'text-green-600 bg-green-100 border-green-200'
-            case 'Absent': return 'text-red-600 bg-red-100 border-red-200'
-            case 'Late': return 'text-amber-600 bg-amber-100 border-amber-200'
-            case 'Half Day': return 'text-blue-600 bg-blue-100 border-blue-200'
+        switch (status?.toLowerCase()) {
+            case 'present': return 'text-green-600 bg-green-100 border-green-200'
+            case 'absent': return 'text-red-600 bg-red-100 border-red-200'
+            case 'late': return 'text-amber-600 bg-amber-100 border-amber-200'
+            case 'half day': case 'half-day': return 'text-blue-600 bg-blue-100 border-blue-200'
             default: return 'text-slate-600 bg-slate-100 border-slate-200'
         }
     }
@@ -95,8 +95,8 @@ export default function TeamDashboard() {
 
     // ─── Render ─────────────────────────────────────────────────
 
-    const presentCount = teamData.attendance.filter(r => r.status === 'Present').length
-    const lateCount = teamData.attendance.filter(r => r.status === 'Late').length
+    const presentCount = teamData.attendance.filter(r => r.attendance?.status === 'Present' || r.attendance?.status === 'present').length
+    const lateCount = teamData.attendance.filter(r => r.attendance?.status === 'Late' || r.attendance?.status === 'late').length
     const absentCount = teamData.members.length - (presentCount + lateCount)
 
     return (
@@ -215,26 +215,56 @@ export default function TeamDashboard() {
                             <CardDescription>{new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-4">
+                            <div className="space-y-3">
                                 {teamData.attendance.length === 0 ? (
                                     <div className="text-center py-8 text-muted-foreground">No attendance records for today yet.</div>
                                 ) : (
-                                    teamData.attendance.map(record => (
-                                        <div key={record.id} className="flex items-center justify-between p-3 rounded-lg border bg-slate-50/50">
-                                            <div className="flex items-center gap-3">
-                                                <Avatar className="h-9 w-9">
-                                                    <AvatarFallback>{getInitials(record.userName)}</AvatarFallback>
-                                                </Avatar>
-                                                <div>
-                                                    <p className="font-medium text-sm">{record.userName}</p>
-                                                    <p className="text-xs text-muted-foreground">Check-in: {record.checkInTime || '--:--'}</p>
+                                    teamData.attendance.map(record => {
+                                        const att = record.attendance
+                                        const status = att?.status || 'absent'
+                                        const checkIn = att?.checkIn
+                                            ? new Date(att.checkIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                            : att?.checkInTimeStr || '--:--'
+                                        const checkOut = att?.checkOut
+                                            ? new Date(att.checkOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                            : att?.checkOutTimeStr || '--:--'
+                                        const totalHours = att?.totalHours || '--'
+                                        const isOnline = att?.isOnline || false
+
+                                        return (
+                                            <div key={record.user?.id || record.id} className="flex items-center justify-between p-4 rounded-lg border bg-slate-50/50 hover:shadow-sm transition-shadow">
+                                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                    <Avatar className="h-10 w-10">
+                                                        <AvatarFallback className="bg-slate-100 text-slate-700 font-bold">{getInitials(record.user?.name || record.userName)}</AvatarFallback>
+                                                    </Avatar>
+                                                    <div className="min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="font-semibold text-sm truncate">{record.user?.name || record.userName}</p>
+                                                            {isOnline && <span className="flex h-2 w-2 rounded-full bg-green-500" title="Currently online" />}
+                                                        </div>
+                                                        <p className="text-xs text-muted-foreground truncate">{record.user?.email}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-4 text-sm">
+                                                    <div className="text-center min-w-[60px]">
+                                                        <p className="text-[10px] text-muted-foreground uppercase">In</p>
+                                                        <p className="font-medium text-green-600">{att ? checkIn : '--:--'}</p>
+                                                    </div>
+                                                    <div className="text-center min-w-[60px]">
+                                                        <p className="text-[10px] text-muted-foreground uppercase">Out</p>
+                                                        <p className="font-medium text-red-600">{att ? checkOut : '--:--'}</p>
+                                                    </div>
+                                                    <div className="text-center min-w-[60px]">
+                                                        <p className="text-[10px] text-muted-foreground uppercase">Hours</p>
+                                                        <p className="font-bold">{att ? totalHours : '--'}</p>
+                                                    </div>
+                                                    <Badge variant="outline" className={`min-w-[70px] justify-center capitalize ${getStatusColor(status)}`}>
+                                                        {status}
+                                                    </Badge>
                                                 </div>
                                             </div>
-                                            <Badge variant="outline" className={getStatusColor(record.status)}>
-                                                {record.status}
-                                            </Badge>
-                                        </div>
-                                    ))
+                                        )
+                                    })
                                 )}
                             </div>
                         </CardContent>

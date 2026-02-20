@@ -5,7 +5,8 @@
 
 import { getValidIdToken } from './firebaseClient';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const getApiBase = () => API_BASE_URL.endsWith('/api') ? API_BASE_URL : `${API_BASE_URL}/api`;
 
 /**
  * Make authenticated API request
@@ -30,7 +31,7 @@ export async function apiRequest(endpoint, options = {}) {
     }
 
     // Build full URL
-    const url = `${API_BASE_URL}${endpoint}`;
+    const url = `${getApiBase()}${endpoint}`;
     console.log(`🌐 API Request: ${options.method || 'GET'} ${url}`);
 
     // Make request
@@ -64,7 +65,7 @@ export async function apiRequest(endpoint, options = {}) {
  * @returns {Promise<Object>} User data
  */
 export async function getCurrentUser(token) {
-  const url = `${API_BASE_URL}/auth/me`;
+  const url = `${getApiBase()}/auth/me`;
   console.log('🔐 Fetching current user from:', url);
 
   const response = await fetch(url, {

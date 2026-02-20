@@ -24,7 +24,10 @@ import {
 import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 import { getValidIdToken } from "@/lib/firebaseClient"
 
-const getApiBase = () => import.meta.env.VITE_API_URL || "http://localhost:3000/api"
+const getApiBase = () => {
+    const url = import.meta.env.VITE_API_URL || "http://localhost:3000"
+    return url.endsWith('/api') ? url : `${url}/api`
+}
 
 const EMPTY_ARRAY = []
 
@@ -67,7 +70,7 @@ export default function SystemAdminOrganizationsPage() {
         queryFn: async () => {
             const token = await getValidIdToken()
             if (!token) throw new Error("Authentication failed.")
-            const base = import.meta.env.VITE_API_URL || "http://localhost:3000/api"
+            const base = getApiBase()
             const response = await fetch(`${base}/system-admin/organizations`, {
                 headers: { Authorization: `Bearer ${token}` },
             })
@@ -225,7 +228,7 @@ export default function SystemAdminOrganizationsPage() {
         return (
             <div className="flex items-center justify-center min-h-[400px]">
                 <div className="text-center">
-                    <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-orange-500" />
+                    <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-blue-500" />
                     <p className="text-muted-foreground">Loading organizations...</p>
                 </div>
             </div>
@@ -241,7 +244,7 @@ export default function SystemAdminOrganizationsPage() {
                             <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
                             <h3 className="text-lg font-semibold text-red-600 mb-2">Error</h3>
                             <p className="text-muted-foreground mb-4">{error}</p>
-                            <Button onClick={loadOrganizations} className="bg-orange-500 hover:bg-orange-600">
+                            <Button onClick={loadOrganizations} className="bg-blue-500 hover:bg-blue-600">
                                 <RefreshCw className="mr-2 h-4 w-4" />
                                 Retry
                             </Button>
@@ -267,7 +270,7 @@ export default function SystemAdminOrganizationsPage() {
                 <Button
                     onClick={loadOrganizations}
                     variant="outline"
-                    className="border-orange-200 hover:bg-orange-50 hover:border-orange-300"
+                    className="border-blue-200 hover:bg-blue-50 hover:border-blue-300"
                 >
                     <RefreshCw className="mr-2 h-4 w-4" />
                     Refresh
@@ -276,7 +279,7 @@ export default function SystemAdminOrganizationsPage() {
 
             {/* Stats Summary */}
             <div className="grid gap-4 md:grid-cols-3">
-                <Card className="border-l-4 border-l-orange-500">
+                <Card className="border-l-4 border-l-blue-500">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-muted-foreground">Total</CardTitle>
                     </CardHeader>
@@ -346,7 +349,7 @@ export default function SystemAdminOrganizationsPage() {
                             {filteredOrgs.map((org) => (
                                 <div
                                     key={org.id}
-                                    className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border hover:border-orange-200 transition-all gap-4"
+                                    className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border hover:border-blue-200 transition-all gap-4"
                                 >
                                     {/* Org Info */}
                                     <div className="flex items-center gap-4">
@@ -401,7 +404,7 @@ export default function SystemAdminOrganizationsPage() {
                                             variant="ghost"
                                             size="sm"
                                             onClick={() => handleViewDetails(org)}
-                                            className="hover:bg-orange-50"
+                                            className="hover:bg-blue-50"
                                         >
                                             <Eye className="h-4 w-4 mr-1" />
                                             View
@@ -437,7 +440,7 @@ export default function SystemAdminOrganizationsPage() {
                 <DialogContent className="max-w-2xl">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
-                            <Building2 className="h-5 w-5 text-orange-500" />
+                            <Building2 className="h-5 w-5 text-blue-500" />
                             {selectedOrg?.name}
                         </DialogTitle>
                         <DialogDescription>
@@ -566,7 +569,7 @@ export default function SystemAdminOrganizationsPage() {
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setShowLimitsModal(false)}>Cancel</Button>
-                        <Button onClick={saveLimits} disabled={actionLoading} className="bg-orange-500 hover:bg-orange-600">
+                        <Button onClick={saveLimits} disabled={actionLoading} className="bg-blue-500 hover:bg-blue-600">
                             {actionLoading ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
                             Save Limits
                         </Button>

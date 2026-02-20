@@ -39,7 +39,8 @@ export default function SystemAdminDashboardPage() {
         queryFn: async () => {
             const token = await getValidIdToken()
             if (!token) throw new Error("Authentication token not found. Please login again.")
-            const base = import.meta.env.VITE_API_URL || "http://localhost:3000/api"
+            const u = import.meta.env.VITE_API_URL || "http://localhost:3000"
+            const base = u.endsWith('/api') ? u : `${u}/api`
             const response = await fetch(`${base}/system-admin/dashboard/stats`, {
                 headers: { Authorization: `Bearer ${token}` },
             })
@@ -71,7 +72,7 @@ export default function SystemAdminDashboardPage() {
         return (
             <div className="flex items-center justify-center min-h-[400px]">
                 <div className="text-center">
-                    <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-orange-500" />
+                    <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-blue-500" />
                     <p className="text-muted-foreground">Loading dashboard...</p>
                 </div>
             </div>
@@ -87,7 +88,7 @@ export default function SystemAdminDashboardPage() {
                             <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
                             <h3 className="text-lg font-semibold text-red-600 mb-2">Error</h3>
                             <p className="text-muted-foreground mb-4">{error}</p>
-                            <Button onClick={loadDashboard} className="bg-orange-500 hover:bg-orange-600">
+                            <Button onClick={loadDashboard} className="bg-blue-500 hover:bg-blue-600">
                                 <RefreshCw className="mr-2 h-4 w-4" />
                                 Retry
                             </Button>
@@ -120,7 +121,7 @@ export default function SystemAdminDashboardPage() {
                 <Button
                     onClick={loadDashboard}
                     variant="outline"
-                    className="border-orange-200 hover:bg-orange-50 hover:border-orange-300"
+                    className="border-blue-200 hover:bg-blue-50 hover:border-blue-300"
                 >
                     <RefreshCw className="mr-2 h-4 w-4" />
                     Refresh
@@ -130,13 +131,13 @@ export default function SystemAdminDashboardPage() {
             {/* Stats Cards */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 {/* Total Organizations */}
-                <Card className="transition-all duration-300 hover:shadow-lg border-l-4 border-l-orange-500">
+                <Card className="transition-all duration-300 hover:shadow-lg border-l-4 border-l-blue-500">
                     <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-sm font-medium text-muted-foreground">
                             Total Organizations
                         </CardTitle>
-                        <div className="p-2 rounded-lg bg-orange-50 dark:bg-orange-950/30">
-                            <Building2 className="h-4 w-4 text-orange-600" />
+                        <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/30">
+                            <Building2 className="h-4 w-4 text-blue-600" />
                         </div>
                     </CardHeader>
                     <CardContent>
@@ -255,7 +256,7 @@ export default function SystemAdminDashboardPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() => navigate("/system-admin/organizations")}
-                            className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                         >
                             View All
                             <ChevronRight className="h-4 w-4 ml-1" />
@@ -273,7 +274,7 @@ export default function SystemAdminDashboardPage() {
                             {organizations.slice(0, 5).map((org) => (
                                 <div
                                     key={org.id}
-                                    className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border hover:border-orange-200 transition-all"
+                                    className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border hover:border-blue-200 transition-all"
                                 >
                                     <div className="flex items-center gap-4">
                                         <div className={`p-2 rounded-lg ${org.isActive ? 'bg-green-100 dark:bg-green-950/30' : 'bg-gray-100 dark:bg-gray-800'}`}>
@@ -301,9 +302,9 @@ export default function SystemAdminDashboardPage() {
                                             variant="ghost"
                                             size="icon"
                                             onClick={() => navigate(`/system-admin/organizations?id=${org.id}`)}
-                                            className="hover:bg-orange-50"
+                                            className="hover:bg-blue-50"
                                         >
-                                            <Eye className="h-4 w-4 text-orange-600" />
+                                            <Eye className="h-4 w-4 text-blue-600" />
                                         </Button>
                                     </div>
                                 </div>
@@ -316,7 +317,7 @@ export default function SystemAdminDashboardPage() {
             {/* Quick Actions */}
             <div className="grid gap-4 md:grid-cols-2">
                 <Button
-                    className="h-16 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-md"
+                    className="h-16 bg-gradient-to-r from-blue-500 to-blue-500 hover:from-blue-600 hover:to-blue-600 text-white shadow-md"
                     onClick={() => navigate("/system-admin/organizations")}
                 >
                     <Building2 className="mr-2 h-5 w-5" />
@@ -324,10 +325,10 @@ export default function SystemAdminDashboardPage() {
                 </Button>
                 <Button
                     variant="outline"
-                    className="h-16 border-orange-200 hover:bg-orange-50 hover:border-orange-300"
+                    className="h-16 border-blue-200 hover:bg-blue-50 hover:border-blue-300"
                     onClick={() => navigate("/system-admin/profile")}
                 >
-                    <BarChart3 className="mr-2 h-5 w-5 text-orange-600" />
+                    <BarChart3 className="mr-2 h-5 w-5 text-blue-600" />
                     View System Reports
                 </Button>
             </div>

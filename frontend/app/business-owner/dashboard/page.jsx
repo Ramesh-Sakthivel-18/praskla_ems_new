@@ -13,7 +13,10 @@ import {
 import { getCurrentUser, isAuthenticated } from "@/lib/auth"
 import { getValidIdToken } from "@/lib/firebaseClient"
 
-const getApiBase = () => import.meta.env.VITE_API_URL || "http://localhost:3000/api"
+const getApiBase = () => {
+  const url = import.meta.env.VITE_API_URL || "http://localhost:3000"
+  return url.endsWith('/api') ? url : `${url}/api`
+}
 
 // Fetcher function (extracted so useQuery can call it)
 const fetchDashboardData = async () => {

@@ -13,7 +13,10 @@ import { format } from "date-fns"
 import { safeRedirect } from "@/lib/redirectUtils"
 import { getValidIdToken } from "@/lib/firebaseClient"
 
-const getApiBase = () => import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+const getApiBase = () => {
+    const url = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+    return url.endsWith('/api') ? url : `${url}/api`
+}
 
 const fetchMyLeaves = async () => {
     const token = await getValidIdToken()

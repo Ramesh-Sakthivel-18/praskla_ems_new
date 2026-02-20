@@ -16,7 +16,7 @@ export default function LandingPage() {
             <div className="bg-blue-600 p-1.5 rounded-lg">
               <Building2 className="h-6 w-6 text-white" />
             </div>
-            <span className="font-bold text-xl tracking-tight text-slate-900">Hikvision EMS</span>
+            <span className="font-bold text-xl tracking-tight text-slate-900">Employee Management System</span>
           </div>
           <div className="flex items-center gap-4">
             <Button variant="ghost" className="text-slate-600 hover:text-blue-600" onClick={() => safeRedirect(navigate, "/role-selection")}>
@@ -56,7 +56,7 @@ export default function LandingPage() {
             <Button size="lg" className="h-14 px-8 text-lg bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/20" onClick={() => safeRedirect(navigate, "/role-selection")}>
               Start for Free
             </Button>
-            <Button size="lg" variant="outline" className="h-14 px-8 text-lg border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900" onClick={() => window.open('https://www.hikvision.com', '_blank')}>
+            <Button size="lg" variant="outline" className="h-14 px-8 text-lg border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900">
               Learn More
             </Button>
           </div>
@@ -114,7 +114,7 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="bg-slate-50 border-t border-slate-200 py-12">
         <div className="container mx-auto px-4 text-center text-slate-500">
-          <p>© 2024 Hikvision EMS. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Employee Management System. All rights reserved.</p>
         </div>
       </footer>
     </div>

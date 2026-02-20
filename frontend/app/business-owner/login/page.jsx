@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react"
 import { useNavigate, Link } from "react-router-dom"
 import {
-  Building2,
   Mail,
   Lock,
   AlertCircle,
@@ -12,8 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Checkbox } from "@/components/ui/checkbox"
-import { loginUser, loginWithGoogle, getRoleRedirectPath, isAuthenticated, getCurrentUser } from "@/lib/auth"
+import { loginUser, getRoleRedirectPath, isAuthenticated, getCurrentUser } from "@/lib/auth"
 import AuthLayout from "@/components/layout/AuthLayout"
 import GoogleLoginButton from "@/app/components/auth/GoogleLoginButton"
 
@@ -77,14 +75,14 @@ export default function BusinessOwnerLoginPage() {
       role="business_owner"
     >
       {error && (
-        <Alert variant="destructive" className="mb-6 bg-red-50 text-red-900 border-red-200">
+        <Alert variant="destructive" className="mb-4 bg-red-50 text-red-900 border-red-200">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
-      <div className="space-y-6">
-        <div className="grid gap-2">
+      <div className="space-y-5">
+        <div>
           <GoogleLoginButton role="business_owner" />
         </div>
 
@@ -93,17 +91,17 @@ export default function BusinessOwnerLoginPage() {
             <span className="w-full border-t border-slate-200" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white dark:bg-slate-800 px-2 text-slate-500">
+            <span className="bg-white px-2 text-slate-400">
               Or continue with email
             </span>
           </div>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label htmlFor="email">Email Address</Label>
             <div className="relative">
-              <Mail className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+              <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
               <Input
                 id="email"
                 name="email"
@@ -112,22 +110,14 @@ export default function BusinessOwnerLoginPage() {
                 value={formData.email}
                 onChange={handleChange}
                 required
-                className="pl-10 h-11 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
+                className="pl-10 h-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
               />
             </div>
           </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="password">Password</Label>
-              <Link
-                to="/forgot-password"
-                className="text-xs font-medium text-blue-600 hover:text-blue-500 hover:underline"
-              >
-                Forgot password?
-              </Link>
-            </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="password">Password</Label>
             <div className="relative">
-              <Lock className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+              <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
               <Input
                 id="password"
                 name="password"
@@ -136,7 +126,7 @@ export default function BusinessOwnerLoginPage() {
                 value={formData.password}
                 onChange={handleChange}
                 required
-                className="pl-10 h-11 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
+                className="pl-10 h-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -156,14 +146,14 @@ export default function BusinessOwnerLoginPage() {
           </Button>
         </form>
 
-        <div className="mt-8 space-y-4">
-          <div className="relative">
+        <div className="pt-2">
+          <div className="relative mb-4">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t border-slate-200" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white px-2 text-slate-500">
-                New to the platform?
+              <span className="bg-white px-2 text-slate-400">
+                New Organization?
               </span>
             </div>
           </div>

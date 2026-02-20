@@ -350,19 +350,44 @@ class AttendanceService {
    */
   async getTeamAttendance(orgId, leaderId, date) {
     try {
-      // 1. Get all direct reports
+      // 1. Get team members (dept members for HOD, direct reports for managers)
       if (!this.userRepo) throw new Error('UserRepository not injected');
-      const teamMembers = await this.userRepo.getDirectReports(orgId, leaderId);
+      const leader = await this.userRepo.findById(orgId, leaderId);
+      let teamMembers;
+      if (leader && leader.isDeptHead && leader.departmentId) {
+        // HOD: get all department members (excluding self)
+        teamMembers = await this.userRepo.findByDepartment(orgId, leader.departmentId);
+        teamMembers = teamMembers.filter(m => m.id !== leaderId);
+      } else {
+        // Manager: get direct reports only
+        teamMembers = await this.userRepo.getDirectReports(orgId, leaderId);
+      }
 
       // 2. Get attendance for each member
       const teamAttendance = await Promise.all(teamMembers.map(async (member) => {
         // Try to find record for this date
-        const records = await this.attendanceRepo.findByUser(orgId, member.id, {
+        const records = await this.attendanceRepo.getUserRecords(orgId, member.id, {
           startDate: date,
           endDate: date
         });
 
         const record = records.length > 0 ? records[0] : null;
+
+        // Derive timestamps from events (events store full ISO timestamps)
+        let checkInTime = null;
+        let checkOutTime = null;
+        if (record && record.events) {
+          const checkInEvent = record.events.find(e => e.type === 'checkIn');
+          const checkOutEvent = [...(record.events || [])].reverse().find(e => e.type === 'checkOut');
+          checkInTime = checkInEvent?.time || null;
+          checkOutTime = checkOutEvent?.time || null;
+        }
+
+        // Derive status
+        let status = 'absent';
+        if (record && record.checkIn) {
+          status = record.checkOut ? 'present' : 'present';
+        }
 
         return {
           user: {
@@ -375,13 +400,15 @@ class AttendanceService {
           },
           attendance: record ? {
             id: record.id,
-            checkIn: record.checkIn,
-            checkOut: record.checkOut,
-            status: record.status,
+            checkIn: checkInTime,
+            checkOut: checkOutTime,
+            checkInTimeStr: record.checkIn || null,
+            checkOutTimeStr: record.checkOut || null,
+            status: status,
             totalHours: record.totalHours,
             isPresent: !!record.checkIn,
             isOnline: !record.checkOut && !!record.checkIn,
-            events: record.events || [] // Include events for location data
+            events: record.events || []
           } : null
         };
       }));

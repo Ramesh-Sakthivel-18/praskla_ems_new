@@ -5,8 +5,9 @@
 
 import { auth, signInWithCustomToken } from './firebaseClient';
 
-// ✅ Consistent API URL
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+// ✅ Consistent API URL (base server URL, /api appended by getApiBase)
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const getApiBase = () => API_URL.endsWith('/api') ? API_URL : `${API_URL}/api`;
 
 /**
  * Login helper - calls backend and handles auth
@@ -25,7 +26,7 @@ export async function loginUser(email, password, organizationId = null, expected
       body.organizationId = organizationId;
     }
 
-    const response = await fetch(`${API_URL}/auth/login`, {
+    const response = await fetch(`${getApiBase()}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -106,7 +107,7 @@ export async function loginWithGoogle(role = 'employee') {
     console.log('✅ Google Login successful. Token obtained.');
     console.log('📤 Sending token to backend for verification...');
 
-    const response = await fetch(`${API_URL}/auth/google-login`, {
+    const response = await fetch(`${getApiBase()}/auth/google-login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: idToken, role }),
@@ -142,7 +143,7 @@ export async function registerOrganization(data) {
   try {
     console.log('📝 Auth: Registering organization:', data.organizationName);
 
-    const response = await fetch(`${API_URL}/auth/register/organization`, {
+    const response = await fetch(`${getApiBase()}/auth/register/organization`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),

@@ -37,7 +37,8 @@ export default function SystemAdminProfilePage() {
     }, [navigate])
 
     const getApiBase = () => {
-        return import.meta.env.VITE_API_URL || "http://localhost:3000/api"
+        const url = import.meta.env.VITE_API_URL || "http://localhost:3000"
+        return url.endsWith('/api') ? url : `${url}/api`
     }
 
     const loadProfile = async () => {
@@ -92,7 +93,7 @@ export default function SystemAdminProfilePage() {
     }
 
     // Profile info item component
-    const ProfileItem = ({ icon: Icon, label, value, iconColor = "text-orange-500" }) => (
+    const ProfileItem = ({ icon: Icon, label, value, iconColor = "text-blue-500" }) => (
         <div className="flex items-start gap-3 py-2">
             <div className={`mt-0.5 ${iconColor}`}>
                 <Icon className="h-5 w-5" />
@@ -110,7 +111,7 @@ export default function SystemAdminProfilePage() {
         return (
             <div className="flex items-center justify-center min-h-[400px]">
                 <div className="text-center">
-                    <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-orange-500" />
+                    <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-blue-500" />
                     <p className="text-muted-foreground">Loading profile...</p>
                 </div>
             </div>
@@ -132,10 +133,10 @@ export default function SystemAdminProfilePage() {
             {/* Profile Card */}
             <Card className="overflow-hidden">
                 {/* Header with gradient */}
-                <div className="h-32 bg-gradient-to-r from-orange-500 to-amber-500 relative">
+                <div className="h-32 bg-gradient-to-r from-blue-500 to-blue-500 relative">
                     <div className="absolute -bottom-16 left-6">
                         <Avatar className="h-32 w-32 border-4 border-white shadow-lg">
-                            <AvatarFallback className="bg-orange-100 text-orange-700 text-3xl font-bold">
+                            <AvatarFallback className="bg-blue-100 text-blue-700 text-3xl font-bold">
                                 {getInitials(profileData?.name)}
                             </AvatarFallback>
                         </Avatar>
@@ -148,7 +149,7 @@ export default function SystemAdminProfilePage() {
                             {profileData?.name || "System Admin"}
                         </h2>
                         <div className="flex flex-wrap items-center gap-2">
-                            <Badge className="bg-gradient-to-r from-orange-500 to-amber-500">
+                            <Badge className="bg-gradient-to-r from-blue-500 to-blue-500">
                                 <Shield className="h-3 w-3 mr-1" />
                                 System Admin
                             </Badge>
@@ -168,7 +169,7 @@ export default function SystemAdminProfilePage() {
                 <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
-                            <User className="h-5 w-5 text-orange-500" />
+                            <User className="h-5 w-5 text-blue-500" />
                             Personal Information
                         </CardTitle>
                     </CardHeader>
@@ -197,7 +198,7 @@ export default function SystemAdminProfilePage() {
                 <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
-                            <Shield className="h-5 w-5 text-orange-500" />
+                            <Shield className="h-5 w-5 text-blue-500" />
                             Account Information
                         </CardTitle>
                     </CardHeader>
@@ -212,7 +213,7 @@ export default function SystemAdminProfilePage() {
                             icon={Shield}
                             label="Role"
                             value={
-                                <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400">
+                                <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400">
                                     {profileData?.role?.replace("_", " ").toUpperCase() || "SYSTEM ADMIN"}
                                 </Badge>
                             }
@@ -228,15 +229,15 @@ export default function SystemAdminProfilePage() {
             </div>
 
             {/* Additional Info Note */}
-            <Card className="border-orange-200 bg-orange-50/50 dark:bg-orange-950/10 dark:border-orange-800">
+            <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/10 dark:border-blue-800">
                 <CardContent className="py-4">
                     <div className="flex items-start gap-3">
-                        <Shield className="h-5 w-5 text-orange-500 mt-0.5" />
+                        <Shield className="h-5 w-5 text-blue-500 mt-0.5" />
                         <div>
-                            <p className="font-medium text-orange-800 dark:text-orange-300">
+                            <p className="font-medium text-blue-800 dark:text-blue-300">
                                 System Admin Account
                             </p>
-                            <p className="text-sm text-orange-600 dark:text-orange-400">
+                            <p className="text-sm text-blue-600 dark:text-blue-400">
                                 As a system admin, your profile is managed at the system level.
                                 Changes made here affect your global system access.
                             </p>

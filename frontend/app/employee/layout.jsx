@@ -147,7 +147,7 @@ export default function EmployeeLayout({ children }) {
                                 <Building2 className="h-5 w-5 text-white" />
                             </div>
                             <div>
-                                <h2 className="font-bold text-lg text-slate-900 dark:text-slate-100 tracking-tight">HIKVISION</h2>
+                                <h2 className="font-bold text-lg text-slate-900 dark:text-slate-100 tracking-tight">EMS PORTAL</h2>
                                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Employee</p>
                             </div>
                         </Link>

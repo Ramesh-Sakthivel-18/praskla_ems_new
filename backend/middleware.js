@@ -133,8 +133,11 @@ async function authenticateToken(req, res, next) {
       role: employee.role,
       name: employee.name,
       department: employee.department,
+      departmentId: employee.departmentId || null,
       organizationId: organizationId || employee.organizationId,
       isTeamLead: employee.isTeamLead || false,
+      isManager: employee.isManager || false,
+      isDeptHead: employee.isDeptHead || false,
       managerId: employee.managerId || null,
       managerName: employee.managerName || null,
       directReports: employee.directReports || []

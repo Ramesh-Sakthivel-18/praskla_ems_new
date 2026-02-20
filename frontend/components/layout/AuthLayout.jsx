@@ -1,20 +1,25 @@
-import { Building2 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Building2, ArrowLeft } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 
 export default function AuthLayout({ children, title, subtitle, role = "employee" }) {
+    const navigate = useNavigate();
+
     const getRoleBadge = () => {
         switch (role) {
             case "admin":
-                return <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full font-semibold uppercase tracking-wide">Admin Portal</span>;
+                return <span className="bg-blue-100 text-blue-700 text-xs px-3 py-1 rounded-full font-semibold uppercase tracking-wide">Admin Portal</span>;
             case "business_owner":
-                return <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full font-semibold uppercase tracking-wide">Business Owner</span>;
+                return <span className="bg-blue-100 text-blue-700 text-xs px-3 py-1 rounded-full font-semibold uppercase tracking-wide">Business Owner</span>;
+            case "system_admin":
+                return <span className="bg-blue-100 text-blue-700 text-xs px-3 py-1 rounded-full font-semibold uppercase tracking-wide">System Admin</span>;
             default:
-                return <span className="bg-slate-100 text-slate-800 text-xs px-2 py-1 rounded-full font-semibold uppercase tracking-wide">Employee Portal</span>;
+                return <span className="bg-blue-100 text-blue-700 text-xs px-3 py-1 rounded-full font-semibold uppercase tracking-wide">Employee Portal</span>;
         }
     };
 
     return (
-        <div className="min-h-screen grid lg:grid-cols-2 bg-slate-50 dark:bg-slate-900">
+        <div className="h-screen overflow-hidden grid lg:grid-cols-2 bg-white">
             {/* Left Column - Branding (Hidden on Mobile) */}
             <div className="hidden lg:flex flex-col justify-between bg-blue-600 p-12 text-white relative overflow-hidden">
                 {/* Abstract Background Pattern */}
@@ -32,51 +37,60 @@ export default function AuthLayout({ children, title, subtitle, role = "employee
                         <div className="p-2 bg-white/20 backdrop-blur-sm rounded-lg">
                             <Building2 className="h-8 w-8 text-white" />
                         </div>
-                        <span className="text-2xl font-bold tracking-tight">HIKVISION EMS</span>
+                        <span className="text-2xl font-bold tracking-tight">Employee Management System</span>
                     </div>
-                    <h1 className="text-5xl font-bold leading-tight mb-6">
+                    <h1 className="text-4xl font-bold leading-tight mb-6">
                         Manage your workforce with precision.
                     </h1>
                     <p className="text-blue-100 text-lg max-w-md leading-relaxed">
-                        Streamline attendance, leave requests, and team management in one unified platform. Designed for modern enterprises.
+                        Streamline attendance, leave requests, and team management in one unified platform.
                     </p>
                 </div>
 
                 <div className="relative z-10 text-sm text-blue-200">
-                    &copy; {new Date().getFullYear()} Hikvision EMS. All rights reserved.
+                    &copy; {new Date().getFullYear()} Employee Management System. All rights reserved.
                 </div>
             </div>
 
             {/* Right Column - Auth Form */}
-            <div className="flex items-center justify-center p-6 sm:p-12 lg:p-24 relative">
-                <div className="w-full max-w-md space-y-8 bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-                    {/* Mobile Logo (Visible only on mobile) */}
-                    <div className="lg:hidden flex justify-center mb-6">
-                        <div className="p-3 bg-blue-600 rounded-xl shadow-lg">
-                            <Building2 className="h-8 w-8 text-white" />
+            <div className="flex flex-col h-full overflow-hidden">
+                {/* Back Button */}
+                <div className="p-4 flex-shrink-0">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                        onClick={() => navigate("/role-selection")}
+                    >
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        Back to Role Selection
+                    </Button>
+                </div>
+
+                <div className="flex-1 flex items-center justify-center px-6 sm:px-12 lg:px-16 overflow-auto">
+                    <div className="w-full max-w-md space-y-6">
+                        {/* Mobile Logo (Visible only on mobile) */}
+                        <div className="lg:hidden flex justify-center">
+                            <div className="p-3 bg-blue-600 rounded-xl shadow-lg">
+                                <Building2 className="h-8 w-8 text-white" />
+                            </div>
                         </div>
-                    </div>
 
-                    <div className="text-center space-y-2">
-                        <div className="flex justify-center mb-4">
-                            {getRoleBadge()}
+                        <div className="text-center space-y-2">
+                            <div className="flex justify-center mb-3">
+                                {getRoleBadge()}
+                            </div>
+                            <h2 className="text-2xl font-bold tracking-tight text-slate-900">
+                                {title}
+                            </h2>
+                            <p className="text-slate-500 text-sm">
+                                {subtitle}
+                            </p>
                         </div>
-                        <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
-                            {title}
-                        </h2>
-                        <p className="text-slate-500 dark:text-slate-400">
-                            {subtitle}
-                        </p>
-                    </div>
 
-                    <div className="mt-8">
-                        {children}
-                    </div>
-
-                    <div className="mt-6 text-center text-sm">
-                        <Link to="/role-selection" className="font-medium text-blue-600 hover:text-blue-500 hover:underline transition-all">
-                            Change Role
-                        </Link>
+                        <div>
+                            {children}
+                        </div>
                     </div>
                 </div>
             </div>

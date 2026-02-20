@@ -7,120 +7,96 @@ import { safeRedirect } from "@/lib/redirectUtils"
 export default function RoleSelectionPage() {
   const navigate = useNavigate()
 
+  const roles = [
+    {
+      icon: Shield,
+      title: "Admin",
+      description: "Manage employees, track attendance, and handle leave requests",
+      path: "/admin/login",
+      label: "Continue as Admin"
+    },
+    {
+      icon: User,
+      title: "Employee",
+      description: "Track your attendance, view hours, and apply for leave",
+      path: "/employee/login",
+      label: "Continue as Employee"
+    },
+    {
+      icon: Building2,
+      title: "Business Owner",
+      description: "Configure your organization, admins, and employees",
+      path: "/business-owner/login",
+      label: "Continue as Owner"
+    }
+  ]
+
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 animate-in fade-in-50 duration-500">
-      <div className="w-full max-w-5xl space-y-12">
-        <div className="text-center space-y-4">
-          <h1 className="text-4xl font-bold text-slate-900 tracking-tight">Select Your Role</h1>
-          <p className="text-lg text-slate-500">Choose how you want to access the Hikvision EMS</p>
-        </div>
+    <div className="h-screen overflow-hidden bg-white flex flex-col">
+      {/* System Admin - Top Right Corner */}
+      <div className="flex justify-end p-4 flex-shrink-0">
+        <button
+          onClick={() => safeRedirect(navigate, "/system-admin/login")}
+          className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-blue-600 transition-colors px-3 py-1.5 rounded-md hover:bg-blue-50"
+        >
+          <Lock className="w-3 h-3" />
+          <span>System Admin</span>
+        </button>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Admin */}
-          <Card
-            className="group relative overflow-hidden bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer h-full flex flex-col"
-            onClick={() => safeRedirect(navigate, "/admin/login")}
-          >
-            <div className="absolute inset-0 bg-blue-50/0 group-hover:bg-blue-50/50 transition-colors duration-200" />
-            <CardHeader className="text-center pb-4 relative flex-1">
-              <div className="flex justify-center mb-6">
-                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 group-hover:bg-white group-hover:border-blue-200 transition-all duration-200 shadow-sm">
-                  <Shield className="w-10 h-10 text-blue-600" />
-                </div>
+      {/* Main Content - Centered */}
+      <div className="flex-1 flex items-center justify-center px-4">
+        <div className="w-full max-w-4xl space-y-10">
+          <div className="text-center space-y-3">
+            <div className="flex justify-center mb-4">
+              <div className="p-3 bg-blue-600 rounded-xl shadow-lg">
+                <Building2 className="h-8 w-8 text-white" />
               </div>
-              <CardTitle className="text-xl font-bold text-slate-900">Admin</CardTitle>
-              <CardDescription className="text-sm mt-2 text-slate-500">
-                Manage employees, track attendance, and handle leave requests
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="relative mt-auto">
-              <Button
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white shadow-none"
-                size="lg"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  safeRedirect(navigate, "/admin/login");
-                }}
-              >
-                Continue as Admin
-              </Button>
-            </CardContent>
-          </Card>
+            </div>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Employee Management System</h1>
+            <p className="text-base text-slate-500">Select your role to continue</p>
+          </div>
 
-          {/* Employee */}
-          <Card
-            className="group relative overflow-hidden bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer h-full flex flex-col"
-            onClick={() => safeRedirect(navigate, "/employee/login")}
-          >
-            <div className="absolute inset-0 bg-blue-50/0 group-hover:bg-blue-50/50 transition-colors duration-200" />
-            <CardHeader className="text-center pb-4 relative flex-1">
-              <div className="flex justify-center mb-6">
-                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 group-hover:bg-white group-hover:border-blue-200 transition-all duration-200 shadow-sm">
-                  <User className="w-10 h-10 text-blue-600" />
-                </div>
-              </div>
-              <CardTitle className="text-xl font-bold text-slate-900">Employee</CardTitle>
-              <CardDescription className="text-sm mt-2 text-slate-500">
-                Track your attendance, view hours, and apply for leave
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="relative mt-auto">
-              <Button
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-none"
-                size="lg"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  safeRedirect(navigate, "/employee/login");
-                }}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {roles.map((role) => (
+              <Card
+                key={role.title}
+                className="group relative overflow-hidden bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-200 transition-all duration-200 cursor-pointer flex flex-col"
+                onClick={() => safeRedirect(navigate, role.path)}
               >
-                Continue as Employee
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Business Owner */}
-          <Card
-            className="group relative overflow-hidden bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer h-full flex flex-col"
-            onClick={() => safeRedirect(navigate, "/business-owner/register")}
-          >
-            <div className="absolute inset-0 bg-blue-50/0 group-hover:bg-blue-50/50 transition-colors duration-200" />
-            <CardHeader className="text-center pb-4 relative flex-1">
-              <div className="flex justify-center mb-6">
-                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 group-hover:bg-white group-hover:border-blue-200 transition-all duration-200 shadow-sm">
-                  <Building2 className="w-10 h-10 text-blue-600" />
-                </div>
-              </div>
-              <CardTitle className="text-xl font-bold text-slate-900">Business Owner</CardTitle>
-              <CardDescription className="text-sm mt-2 text-slate-500">
-                Configure your organization, admins, and employees
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="relative mt-auto">
-              <Button
-                className="w-full border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-sm"
-                size="lg"
-                variant="outline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  safeRedirect(navigate, "/business-owner/register");
-                }}
-              >
-                Continue as Owner
-              </Button>
-            </CardContent>
-          </Card>
+                <div className="absolute inset-0 bg-blue-50/0 group-hover:bg-blue-50/30 transition-colors duration-200" />
+                <CardHeader className="text-center pb-3 relative flex-1">
+                  <div className="flex justify-center mb-4">
+                    <div className="p-3 bg-blue-50 rounded-xl border border-blue-100 group-hover:bg-blue-600 group-hover:border-blue-600 transition-all duration-200">
+                      <role.icon className="w-8 h-8 text-blue-600 group-hover:text-white transition-colors duration-200" />
+                    </div>
+                  </div>
+                  <CardTitle className="text-lg font-bold text-slate-900">{role.title}</CardTitle>
+                  <CardDescription className="text-sm mt-1.5 text-slate-500">
+                    {role.description}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="relative mt-auto pt-0">
+                  <Button
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-all"
+                    size="default"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      safeRedirect(navigate, role.path);
+                    }}
+                  >
+                    {role.label}
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
+      </div>
 
-        {/* System Admin Link */}
-        <div className="flex justify-center pt-8 border-t border-slate-200">
-          <button
-            onClick={() => safeRedirect(navigate, "/system-admin/login")}
-            className="group flex items-center gap-2 text-sm text-slate-400 hover:text-blue-600 transition-colors"
-          >
-            <Lock className="w-3 h-3 transition-transform group-hover:scale-110" />
-            <span>System Administrator Login</span>
-          </button>
-        </div>
+      {/* Footer */}
+      <div className="flex-shrink-0 py-4 text-center text-xs text-slate-400">
+        &copy; {new Date().getFullYear()} Employee Management System
       </div>
     </div>
   )
