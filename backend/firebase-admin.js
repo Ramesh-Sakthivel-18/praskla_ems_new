@@ -15,19 +15,28 @@ function initFirebaseAdmin() {
     return admin.app();
   }
 
-  const keyPath = path.join(__dirname, 'serviceAccountKey.json');
-  
+  let serviceAccount;
+
   try {
-    const serviceAccount = require(keyPath);
-    
+    // Priority 1: Environment variable (for Render / production deployment)
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+      console.log('🔑 Loading Firebase credentials from environment variable...');
+      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    } else {
+      // Priority 2: Local file (for localhost development)
+      const keyPath = path.join(__dirname, 'serviceAccountKey.json');
+      console.log('🔑 Loading Firebase credentials from local file...');
+      serviceAccount = require(keyPath);
+    }
+
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
     });
-    
+
     console.log('✅ Firebase Admin initialized successfully');
   } catch (err) {
     console.error('❌ Failed to initialize Firebase Admin.');
-    console.error('⚠️  Ensure serviceAccountKey.json exists in backend folder.');
+    console.error('⚠️  Set FIREBASE_SERVICE_ACCOUNT env variable OR ensure serviceAccountKey.json exists in backend folder.');
     console.error('Error:', err.message);
     process.exit(1);
   }

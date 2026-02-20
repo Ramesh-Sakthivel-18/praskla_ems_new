@@ -1,14 +1,9 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # dependencies
-/node_modules
+node_modules/
 
-# next.js
-/.next/
-/out/
-
-# production
-/build
+# build output
+dist/
+build/
 
 # debug
 npm-debug.log*
@@ -19,19 +14,16 @@ yarn-error.log*
 # env files
 .env*
 
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-backend\serviceAccountKey.json
-app\config\serviceAccountKey.json
-app/config/serviceAccountKey.json
-
-
-
+# service account keys (sensitive)
 **/serviceAccountKey.json
 
+# IDE
+.vscode/
+.idea/
 
+# OS
+.DS_Store
+Thumbs.db
+
+# Vite
+*.local
