@@ -94,16 +94,17 @@ export default function SystemAdminLayout({ children }) {
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
             {/* Mobile Header */}
-            <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white dark:bg-slate-800 border-b px-4 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <div className="p-1 bg-blue-500 rounded-md">
+            <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-3 flex items-center justify-between shadow-md">
+                <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 bg-white/20 rounded-lg">
                         <Shield className="h-5 w-5 text-white" />
                     </div>
-                    <span className="font-semibold text-blue-950 dark:text-blue-50">System Admin</span>
+                    <span className="font-semibold text-white text-sm tracking-wide">System Admin</span>
                 </div>
                 <Button
                     variant="ghost"
                     size="icon"
+                    className="text-white hover:bg-white/10 rounded-xl h-9 w-9"
                     onClick={() => setSidebarOpen(!sidebarOpen)}
                 >
                     {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}

@@ -258,7 +258,7 @@ export default function TeamLeavesPage() {
                             <CardDescription>Past leave requests you have processed.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="rounded-md border">
+                            <div className="overflow-x-auto mobile-table-scroll rounded-md border">
                                 <Table>
                                     <TableHeader>
                                         <TableRow>

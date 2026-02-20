@@ -171,19 +171,19 @@ export default function AdminDashboardPage() {
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6 space-y-4 sm:space-y-6">
 
       {/* Page Header */}
-      <div className="bg-white border border-slate-200 rounded-xl px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-sm">
+      <div className="bg-gradient-to-r from-blue-600 to-blue-700 sm:from-white sm:to-white rounded-2xl px-5 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-sm sm:border sm:border-slate-200">
         <div>
-          <h1 className="text-lg sm:text-xl font-semibold text-slate-900 tracking-tight">Dashboard</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            Overview for <span className="text-slate-700 font-medium">{currentUser?.name}</span>
+          <h1 className="text-lg sm:text-xl font-semibold text-white sm:text-slate-900 tracking-tight">Dashboard</h1>
+          <p className="text-sm text-blue-100 sm:text-slate-500 mt-0.5">
+            Overview for <span className="text-white sm:text-slate-700 font-medium">{currentUser?.name}</span>
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2 sm:gap-3">
           <Button
             onClick={loadDashboard}
             variant="outline"
             size="sm"
-            className="gap-2 border-slate-200 text-slate-600 hover:bg-slate-50"
+            className="gap-2 border-white/30 sm:border-slate-200 text-white sm:text-slate-600 hover:bg-white/10 sm:hover:bg-slate-50 bg-white/10 sm:bg-transparent"
           >
             <RefreshCw className="h-4 w-4" />
             Refresh
@@ -191,7 +191,7 @@ export default function AdminDashboardPage() {
           <Button
             onClick={() => navigate("/admin/employees")}
             size="sm"
-            className="gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-none"
+            className="gap-2 bg-white sm:bg-blue-600 text-blue-600 sm:text-white hover:bg-blue-50 sm:hover:bg-blue-700 shadow-none"
           >
             <Plus className="h-4 w-4" />
             Add Employee
@@ -219,17 +219,17 @@ export default function AdminDashboardPage() {
       )}
 
       {/* Stats Grid */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
         {statsData.map(({ title, value, subtitle, icon: Icon, accent, iconBg }) => (
-          <div key={title} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow duration-200">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-xs font-medium text-slate-500 uppercase tracking-wide leading-none">{title}</span>
-              <div className={`p-2 rounded-lg border ${iconBg}`}>
-                <Icon className={`h-4 w-4 ${accent}`} />
+          <div key={title} className="bg-white border border-slate-100 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-all duration-200 border-l-4 border-l-blue-500">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <span className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wide leading-none">{title}</span>
+              <div className={`p-1.5 sm:p-2 rounded-xl border ${iconBg}`}>
+                <Icon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${accent}`} />
               </div>
             </div>
             <p className={`text-2xl sm:text-3xl font-bold ${accent}`}>{value}</p>
-            <p className="text-xs text-slate-400 mt-1">{subtitle}</p>
+            <p className="text-[10px] sm:text-xs text-slate-400 mt-1">{subtitle}</p>
           </div>
         ))}
       </div>
