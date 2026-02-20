@@ -206,14 +206,14 @@ export default function EmployeeProfilePage() {
     <div className="space-y-6 animate-in fade-in-50 duration-500">
       <div className="flex flex-col md:flex-row gap-6 items-start">
         {/* Sidebar / User Card */}
-        <Card className="w-full md:w-80 shadow-sm border-slate-200">
+        <Card className="w-full md:w-80 shadow-sm border-slate-200 shrink-0">
           <CardContent className="pt-6 flex flex-col items-center">
-            <Avatar className="h-32 w-32 border-4 border-blue-50 mb-4 shadow-sm">
+            <Avatar className="h-24 w-24 sm:h-32 sm:w-32 border-4 border-blue-50 mb-4 shadow-sm">
               <AvatarFallback className="bg-blue-600 text-white text-3xl font-bold">
                 {getInitials(profileData.name)}
               </AvatarFallback>
             </Avatar>
-            <h2 className="text-2xl font-bold text-center text-slate-900">{profileData.name}</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-center text-slate-900">{profileData.name}</h2>
             <p className="text-slate-500 text-center mb-4 font-medium">{profileData.position}</p>
 
             <div className="w-full space-y-3 mt-4 pt-4 border-t border-slate-100">

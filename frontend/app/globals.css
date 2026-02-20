@@ -168,6 +168,43 @@ button,
   -webkit-overflow-scrolling: touch;
 }
 
+/* Mobile Table Scroll Wrapper */
+.mobile-table-scroll {
+  -webkit-overflow-scrolling: touch;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.mobile-table-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.mobile-table-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.mobile-table-scroll::-webkit-scrollbar-thumb {
+  background: oklch(0.8 0.01 260);
+  border-radius: 999px;
+}
+
+/* iPhone bottom safe area for fixed buttons */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Mobile text clamp utility */
+@media (max-width: 640px) {
+  .mobile-compact-header h1 {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+  }
+
+  .mobile-compact-stats .stat-value {
+    font-size: 1.5rem;
+  }
+}
+
 @theme inline {
   --font-sans: "Inter", "sans-serif";
   --font-mono: "JetBrains Mono", "monospace";

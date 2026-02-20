@@ -286,7 +286,7 @@ export default function BusinessOwnerLeaveRequestsPage() {
               <CardDescription>Monitor leave requests across all departments.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border">
+              <div className="overflow-x-auto mobile-table-scroll rounded-md border">
                 <Table>
                   <TableHeader>
                     <TableRow>

@@ -147,11 +147,11 @@ export default function AdminAttendancePage() {
             <Clock className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-slate-900 tracking-tight">Organization Attendance</h1>
+            <h1 className="text-base sm:text-lg font-semibold text-slate-900 tracking-tight">Organization Attendance</h1>
             <p className="text-sm text-slate-500 mt-0.5">View attendance records for all employees</p>
           </div>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <div className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-2 bg-white shadow-sm hover:border-blue-200 transition-colors">
             <Calendar className="h-4 w-4 text-slate-400" />
             <Input
@@ -196,7 +196,7 @@ export default function AdminAttendancePage() {
       )}
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
         <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all duration-200">
           <div className="flex items-center justify-between mb-4">
             <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Total</span>
@@ -204,7 +204,7 @@ export default function AdminAttendancePage() {
               <Users className="h-4 w-4 text-blue-600" />
             </div>
           </div>
-          <p className="text-3xl font-bold text-blue-600">{stats.totalEmployees}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-blue-600">{stats.totalEmployees}</p>
           <p className="text-xs text-slate-400 mt-1">Employees</p>
         </div>
 
@@ -215,7 +215,7 @@ export default function AdminAttendancePage() {
               <UserCheck className="h-4 w-4 text-blue-600" />
             </div>
           </div>
-          <p className="text-3xl font-bold text-blue-600">{stats.presentEmployees}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-blue-600">{stats.presentEmployees}</p>
           <p className="text-xs text-slate-400 mt-1">Working now</p>
         </div>
 
@@ -226,7 +226,7 @@ export default function AdminAttendancePage() {
               <UserX className="h-4 w-4 text-slate-500" />
             </div>
           </div>
-          <p className="text-3xl font-bold text-slate-500">{stats.absentEmployees}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-slate-500">{stats.absentEmployees}</p>
           <p className="text-xs text-slate-400 mt-1">Not in</p>
         </div>
 
@@ -237,7 +237,7 @@ export default function AdminAttendancePage() {
               <Coffee className="h-4 w-4 text-blue-600" />
             </div>
           </div>
-          <p className="text-3xl font-bold text-blue-600">{stats.onBreak}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-blue-600">{stats.onBreak}</p>
           <p className="text-xs text-slate-400 mt-1">Paused</p>
         </div>
 
@@ -248,7 +248,7 @@ export default function AdminAttendancePage() {
               <LogOut className="h-4 w-4 text-slate-600" />
             </div>
           </div>
-          <p className="text-3xl font-bold text-slate-600">{stats.checkedOut}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-slate-600">{stats.checkedOut}</p>
           <p className="text-xs text-slate-400 mt-1">Finished</p>
         </div>
       </div>
@@ -313,20 +313,20 @@ export default function AdminAttendancePage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50 border-b border-slate-100 hover:bg-slate-50">
-                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-6">Employee</TableHead>
+                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-4 sm:px-6">Employee</TableHead>
                   <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Status</TableHead>
                   <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Check In</TableHead>
                   <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Check Out</TableHead>
-                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Break In</TableHead>
-                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Break Out</TableHead>
-                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Total Hours</TableHead>
-                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Location</TableHead>
+                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 hidden sm:table-cell">Break In</TableHead>
+                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 hidden sm:table-cell">Break Out</TableHead>
+                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3">Total</TableHead>
+                  <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 hidden md:table-cell">Location</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredRecords.map((record) => (
                   <TableRow key={record.id} className="border-b border-slate-50 hover:bg-slate-50/70 transition-colors">
-                    <TableCell className="py-3.5 px-6 font-medium text-slate-800">{record.userName || record.employeeName}</TableCell>
+                    <TableCell className="py-3.5 px-4 sm:px-6 font-medium text-slate-800 whitespace-nowrap">{record.userName || record.employeeName}</TableCell>
                     <TableCell className="py-3.5">{getStatusBadge(record)}</TableCell>
                     <TableCell className="py-3.5">
                       {record.checkIn ? (
@@ -342,14 +342,14 @@ export default function AdminAttendancePage() {
                         <span className="text-xs text-slate-300">-</span>
                       )}
                     </TableCell>
-                    <TableCell className="py-3.5">
+                    <TableCell className="py-3.5 hidden sm:table-cell">
                       {record.breakIn ? (
                         <span className="text-xs font-mono bg-slate-100 text-slate-700 border border-slate-200 px-2 py-1 rounded">{record.breakIn}</span>
                       ) : (
                         <span className="text-xs text-slate-300">-</span>
                       )}
                     </TableCell>
-                    <TableCell className="py-3.5">
+                    <TableCell className="py-3.5 hidden sm:table-cell">
                       {record.breakOut ? (
                         <span className="text-xs font-mono bg-slate-100 text-slate-700 border border-slate-200 px-2 py-1 rounded">{record.breakOut}</span>
                       ) : (
@@ -365,7 +365,7 @@ export default function AdminAttendancePage() {
                         <span className="text-xs text-slate-300">-</span>
                       )}
                     </TableCell>
-                    <TableCell className="py-3.5">
+                    <TableCell className="py-3.5 hidden md:table-cell">
                       {(() => {
                         const checkInEvent = record.events?.find(e => e.type === 'checkIn' && e.location)
                         const checkOutEvent = record.events?.find(e => e.type === 'checkOut' && e.location)

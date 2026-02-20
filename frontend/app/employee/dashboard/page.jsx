@@ -106,7 +106,7 @@ export default function EmployeeDashboardPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
             Welcome back, {currentUser.name.split(' ')[0]}! 👋
           </h1>
           <p className="text-slate-500 mt-1">
@@ -161,11 +161,11 @@ export default function EmployeeDashboardPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
               <div className="space-y-1">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Check In</p>
-                <p className="text-2xl font-mono font-bold tracking-tight text-slate-900 dark:text-slate-100">{attendance?.checkIn || '--:--'}</p>
+                <p className="text-lg sm:text-2xl font-mono font-bold tracking-tight text-slate-900 dark:text-slate-100">{attendance?.checkIn || '--:--'}</p>
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Check Out</p>
-                <p className="text-2xl font-mono font-bold tracking-tight text-slate-900 dark:text-slate-100">{attendance?.checkOut || '--:--'}</p>
+                <p className="text-lg sm:text-2xl font-mono font-bold tracking-tight text-slate-900 dark:text-slate-100">{attendance?.checkOut || '--:--'}</p>
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Break</p>
@@ -202,7 +202,7 @@ export default function EmployeeDashboardPage() {
               <div className="space-y-4">
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-3xl font-bold text-slate-900 dark:text-slate-100">{stats.totalHours} <span className="text-lg font-normal text-slate-500">hrs</span></span>
+                    <span className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100">{stats.totalHours} <span className="text-base sm:text-lg font-normal text-slate-500">hrs</span></span>
                     <BarChart2 className="h-5 w-5 text-blue-500" />
                   </div>
                   <Progress value={Math.min((parseFloat(stats.totalHours) / 40) * 100, 100)} className="h-2 bg-slate-100 dark:bg-slate-800 [&>div]:bg-blue-600" />
@@ -223,7 +223,7 @@ export default function EmployeeDashboardPage() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-3xl font-bold text-slate-900 dark:text-slate-100">{leaveBalance?.annual?.remaining || 0}</span>
+                    <span className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100">{leaveBalance?.annual?.remaining || 0}</span>
                     <span className="text-sm text-slate-400 ml-1">/ {leaveBalance?.annual?.total || 0}</span>
                   </div>
                   <FileText className="h-5 w-5 text-blue-400" />

@@ -169,7 +169,7 @@ export default function EmployeeLeavePage() {
         <div className="space-y-6 animate-in fade-in-50 duration-500">
             {/* Header */}
             <div>
-                <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
                     Leave Requests
                 </h1>
                 <p className="text-muted-foreground mt-1">
@@ -209,10 +209,10 @@ export default function EmployeeLeavePage() {
                                         >
                                             <div className="space-y-1">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="font-semibold text-lg">{req.leaveType}</span>
+                                                    <span className="font-semibold text-base sm:text-lg">{req.leaveType}</span>
                                                     {getStatusBadge(req.status)}
                                                 </div>
-                                                <div className="flex items-center text-sm text-muted-foreground gap-4">
+                                                <div className="flex flex-wrap items-center text-sm text-muted-foreground gap-2 sm:gap-4">
                                                     <span className="flex items-center gap-1">
                                                         <Calendar className="w-4 h-4" />
                                                         {format(new Date(req.startDate), "MMM d")} - {format(new Date(req.endDate), "MMM d, yyyy")}

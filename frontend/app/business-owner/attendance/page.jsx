@@ -148,7 +148,7 @@ export default function BusinessOwnerAttendancePage() {
             View attendance records for all employees in your organization
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <div className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-md shadow-sm">
             <Calendar className="h-4 w-4 text-slate-500" />
             <Input
@@ -171,7 +171,7 @@ export default function BusinessOwnerAttendancePage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-slate-500">Total</CardTitle>
@@ -269,102 +269,104 @@ export default function BusinessOwnerAttendancePage() {
               </p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-slate-50/50 hover:bg-slate-50/50">
-                  <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("userName")}><div className="flex items-center gap-1">Employee <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("checkIn")}><div className="flex items-center gap-1">Check In <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
-                  <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("checkOut")}><div className="flex items-center gap-1">Check Out <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
-                  <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("breakIn")}><div className="flex items-center gap-1">Break In <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
-                  <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("breakOut")}><div className="flex items-center gap-1">Break Out <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
-                  <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("totalHours")}><div className="flex items-center gap-1">Total Hours <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
-                  <TableHead className="font-semibold text-slate-600">Location</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedAttendance.map((record) => (
-                  <TableRow key={record.id} className="hover:bg-slate-50/50 transition-colors">
-                    <TableCell className="font-medium text-slate-900">{record.userName || record.employeeName}</TableCell>
-                    <TableCell>{getStatusBadge(record)}</TableCell>
-                    <TableCell>
-                      {record.checkIn ? (
-                        <span className="text-sm font-mono bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-700">{record.checkIn}</span>
-                      ) : (
-                        <span className="text-xs text-slate-400">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {record.checkOut ? (
-                        <span className="text-sm font-mono bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-700">{record.checkOut}</span>
-                      ) : (
-                        <span className="text-xs text-slate-400">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {record.breakIn ? (
-                        <span className="text-sm font-mono bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-700">{record.breakIn}</span>
-                      ) : (
-                        <span className="text-xs text-slate-400">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {record.breakOut ? (
-                        <span className="text-sm font-mono bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-700">{record.breakOut}</span>
-                      ) : (
-                        <span className="text-xs text-slate-400">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {record.totalHours ? (
-                        <Badge variant="outline" className="font-mono bg-slate-50 text-slate-700 border-slate-200">
-                          {record.totalHours}
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-slate-400">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {(() => {
-                        const checkInEvent = record.events?.find(e => e.type === 'checkIn' && e.location);
-                        const checkOutEvent = record.events?.find(e => e.type === 'checkOut' && e.location);
-
-                        if (!checkInEvent && !checkOutEvent) return <span className="text-slate-400 text-xs">-</span>;
-
-                        return (
-                          <div className="flex flex-col gap-1 items-start">
-                            {checkInEvent?.location && (
-                              <a
-                                href={`https://www.google.com/maps?q=${checkInEvent.location.lat},${checkInEvent.location.lng}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 hover:underline"
-                                title="Check In Location"
-                              >
-                                <MapPin className="h-3 w-3" />
-                                In
-                              </a>
-                            )}
-                            {checkOutEvent?.location && (
-                              <a
-                                href={`https://www.google.com/maps?q=${checkOutEvent.location.lat},${checkOutEvent.location.lng}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700 hover:underline"
-                                title="Check Out Location"
-                              >
-                                <MapPin className="h-3 w-3" />
-                                Out
-                              </a>
-                            )}
-                          </div>
-                        );
-                      })()}
-                    </TableCell>
+            <div className="mobile-table-scroll">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50/50 hover:bg-slate-50/50">
+                    <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("userName")}><div className="flex items-center gap-1">Employee <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("checkIn")}><div className="flex items-center gap-1">Check In <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
+                    <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("checkOut")}><div className="flex items-center gap-1">Check Out <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
+                    <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors hidden sm:table-cell" onClick={() => requestSort("breakIn")}><div className="flex items-center gap-1">Break In <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
+                    <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors hidden sm:table-cell" onClick={() => requestSort("breakOut")}><div className="flex items-center gap-1">Break Out <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
+                    <TableHead className="cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => requestSort("totalHours")}><div className="flex items-center gap-1">Total <ArrowUpDown className="h-3 w-3 text-slate-400" /></div></TableHead>
+                    <TableHead className="font-semibold text-slate-600 hidden md:table-cell">Location</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {sortedAttendance.map((record) => (
+                    <TableRow key={record.id} className="hover:bg-slate-50/50 transition-colors">
+                      <TableCell className="font-medium text-slate-900 whitespace-nowrap">{record.userName || record.employeeName}</TableCell>
+                      <TableCell>{getStatusBadge(record)}</TableCell>
+                      <TableCell>
+                        {record.checkIn ? (
+                          <span className="text-sm font-mono bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-700">{record.checkIn}</span>
+                        ) : (
+                          <span className="text-xs text-slate-400">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {record.checkOut ? (
+                          <span className="text-sm font-mono bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-700">{record.checkOut}</span>
+                        ) : (
+                          <span className="text-xs text-slate-400">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        {record.breakIn ? (
+                          <span className="text-sm font-mono bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-700">{record.breakIn}</span>
+                        ) : (
+                          <span className="text-xs text-slate-400">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        {record.breakOut ? (
+                          <span className="text-sm font-mono bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-700">{record.breakOut}</span>
+                        ) : (
+                          <span className="text-xs text-slate-400">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {record.totalHours ? (
+                          <Badge variant="outline" className="font-mono bg-slate-50 text-slate-700 border-slate-200">
+                            {record.totalHours}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-slate-400">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {(() => {
+                          const checkInEvent = record.events?.find(e => e.type === 'checkIn' && e.location);
+                          const checkOutEvent = record.events?.find(e => e.type === 'checkOut' && e.location);
+
+                          if (!checkInEvent && !checkOutEvent) return <span className="text-slate-400 text-xs">-</span>;
+
+                          return (
+                            <div className="flex flex-col gap-1 items-start">
+                              {checkInEvent?.location && (
+                                <a
+                                  href={`https://www.google.com/maps?q=${checkInEvent.location.lat},${checkInEvent.location.lng}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 hover:underline"
+                                  title="Check In Location"
+                                >
+                                  <MapPin className="h-3 w-3" />
+                                  In
+                                </a>
+                              )}
+                              {checkOutEvent?.location && (
+                                <a
+                                  href={`https://www.google.com/maps?q=${checkOutEvent.location.lat},${checkOutEvent.location.lng}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700 hover:underline"
+                                  title="Check Out Location"
+                                >
+                                  <MapPin className="h-3 w-3" />
+                                  Out
+                                </a>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

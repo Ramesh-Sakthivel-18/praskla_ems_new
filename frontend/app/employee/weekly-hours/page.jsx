@@ -57,7 +57,7 @@ export default function WeeklyHoursPage() {
   return (
     <div className="space-y-6 animate-in fade-in-50 duration-500">
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-foreground">Weekly Hours</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold text-foreground">Weekly Hours</h2>
         <p className="text-muted-foreground mt-1">Track your working hours throughout the week</p>
       </div>
 
@@ -69,7 +69,7 @@ export default function WeeklyHoursPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-80">
+          <div className="h-60 sm:h-80">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={weeklyData}>
                 <CartesianGrid strokeDasharray="3 3" />

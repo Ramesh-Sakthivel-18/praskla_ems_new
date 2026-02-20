@@ -182,7 +182,7 @@ export default function BusinessOwnerDashboardPage() {
       )}
 
       {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
         {statsData.map((stat, index) => {
           const Icon = stat.icon
           return (
@@ -199,7 +199,7 @@ export default function BusinessOwnerDashboardPage() {
                 </div>
               </CardHeader>
               <CardContent className="relative">
-                <div className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">{stat.value}</div>
+                <div className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">{stat.value}</div>
                 <p className="text-xs text-slate-500 mt-1">{stat.subtitle}</p>
               </CardContent>
             </Card>
@@ -223,7 +223,7 @@ export default function BusinessOwnerDashboardPage() {
           </div>
         </CardHeader>
         <CardContent className="pt-6">
-          <div className="grid gap-8 md:grid-cols-3">
+          <div className="grid gap-6 sm:gap-8 sm:grid-cols-3">
             {/* Employees Quota */}
             <div className="space-y-3">
               <div className="flex justify-between items-center">
@@ -405,7 +405,7 @@ export default function BusinessOwnerDashboardPage() {
           <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">Quick Actions</CardTitle>
         </CardHeader>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
             <Button
               variant="outline"
               className="h-auto py-4 flex flex-col gap-3 border-blue-100 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all group shadow-sm hover:shadow-md"

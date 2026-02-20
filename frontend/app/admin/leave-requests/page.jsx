@@ -124,7 +124,7 @@ export default function AdminLeaveRequestsPage() {
           <CardDescription>All leave requests from employees, managers, and department heads.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
+          <div className="overflow-x-auto mobile-table-scroll rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>

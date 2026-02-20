@@ -671,11 +671,11 @@ export default function AdminEmployeesPage() {
             <Users className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-slate-900 tracking-tight">Employee Management</h1>
-            <p className="text-sm text-slate-500 mt-0.5">View, edit, and manage all organization employees</p>
+            <h1 className="text-base sm:text-lg font-semibold text-slate-900 tracking-tight">Employee Management</h1>
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">View, edit, and manage all organization employees</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <Button
             variant="outline"
             size="sm"
@@ -739,7 +739,7 @@ export default function AdminEmployeesPage() {
                 <Icon className={`h-4 w-4 ${accent}`} />
               </div>
             </div>
-            <p className={`text-3xl font-bold ${accent}`}>{value}</p>
+            <p className={`text-2xl sm:text-3xl font-bold ${accent}`}>{value}</p>
             <p className="text-xs text-slate-400 mt-1">{sub}</p>
           </div>
         ))}

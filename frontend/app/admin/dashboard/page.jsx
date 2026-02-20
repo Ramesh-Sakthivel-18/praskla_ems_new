@@ -168,12 +168,12 @@ export default function AdminDashboardPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6 space-y-6">
+    <div className="min-h-screen bg-slate-50 p-4 sm:p-6 space-y-4 sm:space-y-6">
 
       {/* Page Header */}
       <div className="bg-white border border-slate-200 rounded-xl px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-sm">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900 tracking-tight">Dashboard</h1>
+          <h1 className="text-lg sm:text-xl font-semibold text-slate-900 tracking-tight">Dashboard</h1>
           <p className="text-sm text-slate-500 mt-0.5">
             Overview for <span className="text-slate-700 font-medium">{currentUser?.name}</span>
           </p>
@@ -228,7 +228,7 @@ export default function AdminDashboardPage() {
                 <Icon className={`h-4 w-4 ${accent}`} />
               </div>
             </div>
-            <p className={`text-3xl font-bold ${accent}`}>{value}</p>
+            <p className={`text-2xl sm:text-3xl font-bold ${accent}`}>{value}</p>
             <p className="text-xs text-slate-400 mt-1">{subtitle}</p>
           </div>
         ))}
@@ -269,7 +269,7 @@ export default function AdminDashboardPage() {
           </div>
 
           {/* Quick Actions */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             {quickActions.map(({ label, icon: Icon, path }) => (
               <button
                 key={label}

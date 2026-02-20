@@ -229,15 +229,15 @@ export default function AdminProfilePage() {
     <div className="min-h-screen bg-slate-50 animate-in fade-in-50 duration-500">
       <div className="mx-auto max-w-5xl px-4 py-8 space-y-6">
         {/* ── Page Header ─────────────────────────────────── */}
-        <div className="bg-white border border-slate-200 rounded-xl px-6 py-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6 shadow-sm">
-          <div className="flex items-center gap-5">
-            <Avatar className="h-20 w-20 border-4 border-slate-50 shadow-sm">
+        <div className="bg-white border border-slate-200 rounded-xl px-4 sm:px-6 py-6 sm:py-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 sm:gap-6 shadow-sm">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-4 sm:gap-5">
+            <Avatar className="h-16 w-16 sm:h-20 sm:w-20 border-4 border-slate-50 shadow-sm">
               <AvatarFallback className="bg-blue-600 text-white text-2xl font-bold">
                 {getInitials(currentUser.name)}
               </AvatarFallback>
             </Avatar>
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{currentUser.name}</h1>
+            <div className="text-center sm:text-left">
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{currentUser.name}</h1>
               <p className="text-slate-500 font-medium">{currentUser.email}</p>
               <div className="flex gap-2 mt-2">
                 <Badge className="bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100 shadow-none">

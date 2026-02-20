@@ -129,7 +129,7 @@ export default function SystemAdminDashboardPage() {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
                 {/* Total Organizations */}
                 <Card className="transition-all duration-300 hover:shadow-lg border-l-4 border-l-blue-500">
                     <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -141,7 +141,7 @@ export default function SystemAdminDashboardPage() {
                         </div>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-bold">{system.totalOrganizations || 0}</div>
+                        <div className="text-2xl sm:text-3xl font-bold">{system.totalOrganizations || 0}</div>
                         <p className="text-xs text-muted-foreground mt-1">
                             Registered in system
                         </p>
@@ -159,7 +159,7 @@ export default function SystemAdminDashboardPage() {
                         </div>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-bold text-green-600">{system.activeOrganizations || 0}</div>
+                        <div className="text-2xl sm:text-3xl font-bold text-green-600">{system.activeOrganizations || 0}</div>
                         <p className="text-xs text-muted-foreground mt-1">
                             Currently active organizations
                         </p>
@@ -177,7 +177,7 @@ export default function SystemAdminDashboardPage() {
                         </div>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-bold text-gray-500">{system.inactiveOrganizations || 0}</div>
+                        <div className="text-2xl sm:text-3xl font-bold text-gray-500">{system.inactiveOrganizations || 0}</div>
                         <p className="text-xs text-muted-foreground mt-1">
                             Deactivated organizations
                         </p>
@@ -195,7 +195,7 @@ export default function SystemAdminDashboardPage() {
                         </div>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-bold text-blue-600">
+                        <div className="text-2xl sm:text-3xl font-bold text-blue-600">
                             {(users.totalBusinessOwners || 0) + (users.totalAdmins || 0) + (users.totalEmployees || 0)}
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
@@ -206,7 +206,7 @@ export default function SystemAdminDashboardPage() {
             </div>
 
             {/* User Breakdown */}
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-3 sm:gap-4 grid-cols-3">
                 <Card className="transition-all duration-300 hover:shadow-lg">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -272,10 +272,7 @@ export default function SystemAdminDashboardPage() {
                     ) : (
                         <div className="space-y-4">
                             {organizations.slice(0, 5).map((org) => (
-                                <div
-                                    key={org.id}
-                                    className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border hover:border-blue-200 transition-all"
-                                >
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border hover:border-blue-200 transition-all gap-3">
                                     <div className="flex items-center gap-4">
                                         <div className={`p-2 rounded-lg ${org.isActive ? 'bg-green-100 dark:bg-green-950/30' : 'bg-gray-100 dark:bg-gray-800'}`}>
                                             <Building2 className={`h-5 w-5 ${org.isActive ? 'text-green-600' : 'text-gray-400'}`} />
