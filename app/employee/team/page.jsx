@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react"
+import { useState, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQueryClient } from "@tanstack/react-query"
 import {
     Users,
     Clock,
@@ -10,7 +10,10 @@ import {
     User,
     Calendar,
     ArrowRight,
-    RefreshCw
+    RefreshCw,
+    Crown,
+    Briefcase,
+    Shield
 } from "lucide-react"
 import {
     Card,
@@ -23,42 +26,25 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getCurrentUser, isAuthenticated } from "@/lib/auth"
+import { getCurrentUser } from "@/lib/auth"
 import { getValidIdToken } from "@/lib/firebaseClient"
-import { safeRedirect } from "@/lib/redirectUtils"
+import { useOptimisticQuery } from "@/app/hooks/useOptimisticQuery"
 
 const getApiBase = () => import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
 export default function TeamDashboard() {
     const navigate = useNavigate()
-    const queryClient = useQueryClient()
-    const [currentUser, setCurrentUser] = useState(null)
+    const currentUser = getCurrentUser()
+    const [activeTab, setActiveTab] = useState("members")
 
-    // Auth Check
-    useEffect(() => {
-        if (!isAuthenticated()) {
-            safeRedirect(navigate, "/employee/login")
-            return
-        }
-        const user = getCurrentUser()
-        if (!user || user.role !== 'employee') {
-            safeRedirect(navigate, "/employee/login")
-            return
-        }
-        setCurrentUser(user)
-    }, [navigate])
+    // ─── Queries ────────────────────────────────────────────────
 
-    // Single useQuery for all team data (cached — no reload on navigation)
-    const { data: teamData = {}, isLoading: loading, error: queryError } = useQuery({
-        queryKey: ['team-dashboard'],
+    const { data: teamData = { members: [], attendance: [], pendingLeaves: [] }, isLoading: loading, isBackgroundRefresh, refresh } = useOptimisticQuery({
+        queryKey: ['team-dashboard-data'],
         queryFn: async () => {
             const token = await getValidIdToken()
-            if (!token) throw new Error("Authentication failed")
             const base = getApiBase()
-            const headers = {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            }
+            const headers = { 'Authorization': `Bearer ${token}` }
 
             // Fetch all 3 endpoints in parallel
             const [membersRes, attendanceRes, leavesRes] = await Promise.all([
@@ -67,11 +53,7 @@ export default function TeamDashboard() {
                 fetch(`${base}/api/team/leaves/pending`, { headers })
             ])
 
-            const result = {
-                members: [],
-                attendance: [],
-                pendingLeaves: []
-            }
+            const result = { members: [], attendance: [], pendingLeaves: [] }
 
             if (membersRes.ok) {
                 const data = await membersRes.json()
@@ -85,279 +67,178 @@ export default function TeamDashboard() {
                 const data = await leavesRes.json()
                 result.pendingLeaves = data.leaves || []
             }
-
             return result
         },
-        enabled: !!currentUser,
+        refetchInterval: 15000,
+        placeholderData: { members: [], attendance: [], pendingLeaves: [] }
     })
 
-    const teamMembers = teamData.members || []
-    const attendance = teamData.attendance || []
-    const pendingLeaves = teamData.pendingLeaves || []
+    // ─── Helpers ────────────────────────────────────────────────
 
-    const getInitials = (name) => {
-        if (!name) return "EM"
-        return name
-            .split(" ")
-            .map((n) => n[0])
-            .join("")
-            .toUpperCase()
-            .slice(0, 2)
-    }
+    const getInitials = (name) => name ? name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : '??'
 
     const getStatusColor = (status) => {
         switch (status) {
-            case 'present': return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400'
-            case 'absent': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-            case 'late': return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'
-            case 'half-day': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
-            default: return 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-400'
+            case 'Present': return 'text-green-600 bg-green-100 border-green-200'
+            case 'Absent': return 'text-red-600 bg-red-100 border-red-200'
+            case 'Late': return 'text-amber-600 bg-amber-100 border-amber-200'
+            case 'Half Day': return 'text-blue-600 bg-blue-100 border-blue-200'
+            default: return 'text-slate-600 bg-slate-100 border-slate-200'
         }
     }
 
-    // Calculate summary stats
-    const totalMembers = teamMembers.length
-    const presentCount = attendance.filter(a => a.attendance?.isPresent).length
-    const pendingLeaveCount = pendingLeaves.length
+    const getRoleBadge = (member) => {
+        if (member.isDeptHead) return <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px]"><Crown className="w-3 h-3 mr-1" /> HOD</Badge>
+        if (member.isManager) return <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-[10px]"><Briefcase className="w-3 h-3 mr-1" /> Manager</Badge>
+        return <Badge variant="outline" className="text-[10px]"><User className="w-3 h-3 mr-1" /> Employee</Badge>
+    }
 
-    if (!currentUser) return null
+    // ─── Render ─────────────────────────────────────────────────
+
+    const presentCount = teamData.attendance.filter(r => r.status === 'Present').length
+    const lateCount = teamData.attendance.filter(r => r.status === 'Late').length
+    const absentCount = teamData.members.length - (presentCount + lateCount)
 
     return (
         <div className="space-y-6 animate-in fade-in-50 duration-500">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                        My Team
+                    <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50 flex items-center gap-2">
+                        <Users className="h-6 w-6 text-blue-600" /> My Team
                     </h1>
-                    <p className="text-muted-foreground">
-                        Manage your direct reports, attendance, and leave requests.
+                    <p className="text-slate-500 mt-1">
+                        Overview of your {currentUser?.isDeptHead ? 'department' : 'direct reports'}
                     </p>
                 </div>
                 <div className="flex gap-2">
                     <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => queryClient.invalidateQueries({ queryKey: ['team-dashboard'] })}
-                        disabled={loading}
+                        onClick={() => navigate("/employee/team/leaves")}
+                        className={`gap-2 ${teamData.pendingLeaves.length > 0 ? 'bg-amber-600 hover:bg-amber-700' : ''}`}
                     >
-                        <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                        Refresh
+                        <FileText className="h-4 w-4" />
+                        Approvals
+                        {teamData.pendingLeaves.length > 0 && <Badge className="ml-1 bg-white text-amber-600 h-5 w-5 p-0 justify-center rounded-full">{teamData.pendingLeaves.length}</Badge>}
+                    </Button>
+                    <Button variant="outline" size="icon" onClick={refresh} disabled={isBackgroundRefresh}>
+                        <RefreshCw className={`h-4 w-4 ${isBackgroundRefresh ? 'animate-spin' : ''}`} />
                     </Button>
                 </div>
             </div>
 
-            {/* Stats Cards */}
-            <div className="grid gap-4 md:grid-cols-3">
-                <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+            {/* Quick Stats */}
+            <div className="grid gap-4 md:grid-cols-4">
+                <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Team Members</CardTitle>
-                        <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                            <Users className="h-4 w-4 text-blue-600" />
-                        </div>
+                        <CardTitle className="text-sm font-medium">Total Members</CardTitle>
+                        <Users className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-blue-700">{loading ? '—' : totalMembers}</div>
-                        <p className="text-xs text-muted-foreground">
-                            Direct reports
-                        </p>
+                        <div className="text-2xl font-bold">{teamData.members.length}</div>
+                        <p className="text-xs text-muted-foreground">{currentUser?.isDeptHead ? 'Department strength' : 'Direct reports'}</p>
                     </CardContent>
                 </Card>
-                <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+                <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Present Today</CardTitle>
-                        <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
-                            <Clock className="h-4 w-4 text-emerald-600" />
-                        </div>
+                        <User className="h-4 w-4 text-emerald-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-emerald-700">
-                            {loading ? '—' : <>{presentCount} <span className="text-sm font-normal text-muted-foreground">/ {totalMembers}</span></>}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                            On-time: {loading ? '—' : attendance.filter(a => a.attendance?.status === 'present').length}
-                        </p>
+                        <div className="text-2xl font-bold text-emerald-600">{presentCount}</div>
+                        <p className="text-xs text-muted-foreground">On time or checked in</p>
                     </CardContent>
                 </Card>
-                <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+                <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Pending Leaves</CardTitle>
-                        <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
-                            <FileText className="h-4 w-4 text-amber-600" />
-                        </div>
+                        <CardTitle className="text-sm font-medium">Late / Absent</CardTitle>
+                        <Clock className="h-4 w-4 text-amber-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-amber-700">{loading ? '—' : pendingLeaveCount}</div>
-                        <p className="text-xs text-muted-foreground">
-                            Require approval
-                        </p>
+                        <div className="text-2xl font-bold text-amber-600">{lateCount + absentCount}</div>
+                        <p className="text-xs text-muted-foreground">{lateCount} Late, {absentCount} Absent</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Pending Leaves</CardTitle>
+                        <FileText className="h-4 w-4 text-blue-500" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-blue-600">{teamData.pendingLeaves.length}</div>
+                        <p className="text-xs text-muted-foreground cursor-pointer hover:underline" onClick={() => navigate("/employee/team/leaves")}>Review requests →</p>
                     </CardContent>
                 </Card>
             </div>
 
-            <Tabs defaultValue="members" className="space-y-4">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
                 <TabsList>
                     <TabsTrigger value="members">Team Members</TabsTrigger>
-                    <TabsTrigger value="leaves">
-                        Pending Leaves
-                        {pendingLeaveCount > 0 && (
-                            <Badge variant="secondary" className="ml-2 bg-amber-100 text-amber-800 hover:bg-amber-200">
-                                {pendingLeaveCount}
-                            </Badge>
-                        )}
-                    </TabsTrigger>
+                    <TabsTrigger value="attendance">Today's Attendance</TabsTrigger>
                 </TabsList>
 
-                {/* Team Members List */}
                 <TabsContent value="members" className="space-y-4">
                     {loading ? (
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                            {[1, 2, 3].map(i => (
-                                <Card key={i} className="animate-pulse">
-                                    <CardHeader className="flex flex-row items-center gap-4 pb-2">
-                                        <div className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-700" />
-                                        <div className="flex-1 space-y-2">
-                                            <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4" />
-                                            <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/2" />
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="space-y-2">
-                                            <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded" />
-                                            <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded" />
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            ))}
+                            {[1, 2, 3].map(i => <Card key={i} className="animate-pulse h-32" />)}
                         </div>
-                    ) : teamMembers.length === 0 ? (
-                        <Card>
-                            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                                <Users className="h-10 w-10 text-muted-foreground mb-4" />
-                                <h3 className="text-lg font-medium">No team members</h3>
-                                <p className="text-muted-foreground">You don't have any direct reports assigned yet.</p>
-                            </CardContent>
-                        </Card>
                     ) : (
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                            {teamMembers.map((member) => {
-                                const memberAttendance = attendance.find(a => a.user?.id === member.id)?.attendance
-                                const status = memberAttendance?.status || 'absent'
-
-                                return (
-                                    <Card key={member.id} className="hover:shadow-lg transition-shadow">
-                                        <CardHeader className="flex flex-row items-center gap-4 pb-2">
-                                            <Avatar className="h-10 w-10">
-                                                <AvatarImage src={member.avatar} alt={member.name} />
-                                                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-sm font-bold">
-                                                    {getInitials(member.name)}
-                                                </AvatarFallback>
-                                            </Avatar>
-                                            <div className="flex-1 overflow-hidden">
-                                                <CardTitle className="text-base truncate">{member.name}</CardTitle>
-                                                <CardDescription className="truncate">{member.position || 'Employee'}</CardDescription>
+                            {teamData.members.map(member => (
+                                <Card key={member.id} className="overflow-hidden hover:shadow-md transition-all">
+                                    <div className={`h-1 w-full ${member.isDeptHead ? 'bg-amber-400' : member.isManager ? 'bg-purple-400' : 'bg-slate-200'}`} />
+                                    <CardContent className="p-4 flex items-center gap-4">
+                                        <Avatar className="h-12 w-12 border-2 border-slate-100">
+                                            <AvatarFallback className="bg-slate-100 text-slate-700 font-bold">{getInitials(member.name)}</AvatarFallback>
+                                        </Avatar>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <p className="font-semibold text-sm truncate">{member.name}</p>
+                                                {getRoleBadge(member)}
                                             </div>
-                                            <Badge variant="outline" className={getStatusColor(status)}>
-                                                {status.toUpperCase()}
-                                            </Badge>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <div className="text-sm text-muted-foreground space-y-1">
-                                                <div className="flex justify-between">
-                                                    <span>Check In:</span>
-                                                    <span className="font-medium text-slate-900 dark:text-slate-200">
-                                                        {memberAttendance?.checkIn ? new Date(memberAttendance.checkIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span>Check Out:</span>
-                                                    <span className="font-medium text-slate-900 dark:text-slate-200">
-                                                        {memberAttendance?.checkOut ? new Date(memberAttendance.checkOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            <div className="mt-4 pt-4 border-t flex justify-end">
-                                                <Button variant="ghost" size="sm" className="h-8" onClick={() => navigate('/employee/team/attendance')}>
-                                                    View History
-                                                    <ArrowRight className="ml-1 h-3 w-3" />
-                                                </Button>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                )
-                            })}
+                                            <p className="text-xs text-muted-foreground truncate">{member.email}</p>
+                                            <p className="text-xs text-muted-foreground truncate mt-0.5">{member.position || 'Employee'}</p>
+                                        </div>
+                                    </CardContent>
+                                    <CardDescription className="px-4 pb-3 text-xs flex justify-between items-center border-t pt-2">
+                                        <span>Joined: {new Date(member.createdAt?._seconds * 1000 || Date.now()).toLocaleDateString()}</span>
+                                    </CardDescription>
+                                </Card>
+                            ))}
                         </div>
                     )}
                 </TabsContent>
 
-                {/* Pending Leaves List */}
-                <TabsContent value="leaves" className="space-y-4">
-                    {loading ? (
-                        <Card className="animate-pulse">
-                            <CardContent className="py-8">
-                                <div className="space-y-4">
-                                    <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/2 mx-auto" />
-                                    <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/3 mx-auto" />
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ) : pendingLeaves.length === 0 ? (
-                        <Card>
-                            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                                <FileText className="h-10 w-10 text-muted-foreground mb-4" />
-                                <h3 className="text-lg font-medium">No pending requests</h3>
-                                <p className="text-muted-foreground">All leave requests have been reviewed.</p>
-                            </CardContent>
-                        </Card>
-                    ) : (
-                        <div className="grid gap-4">
-                            {pendingLeaves.map((leave) => (
-                                <Card key={leave.id} className="hover:shadow-lg transition-shadow">
-                                    <CardContent className="flex items-center justify-between p-6">
-                                        <div className="flex items-start gap-4">
-                                            <Avatar className="h-10 w-10 mt-1">
-                                                <AvatarFallback className="bg-gradient-to-br from-amber-500 to-orange-600 text-white text-sm font-bold">
-                                                    {getInitials(leave.userName)}
-                                                </AvatarFallback>
-                                            </Avatar>
-                                            <div>
-                                                <h4 className="font-semibold">{leave.userName}</h4>
-                                                <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                                                    <Badge variant="outline" className="text-xs">
-                                                        {leave.leaveType}
-                                                    </Badge>
-                                                    <span>•</span>
-                                                    <span>{leave.days} days</span>
-                                                    <span>•</span>
-                                                    <span>{new Date(leave.startDate).toLocaleDateString()} - {new Date(leave.endDate).toLocaleDateString()}</span>
+                <TabsContent value="attendance">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Attendance Report</CardTitle>
+                            <CardDescription>{new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-4">
+                                {teamData.attendance.length === 0 ? (
+                                    <div className="text-center py-8 text-muted-foreground">No attendance records for today yet.</div>
+                                ) : (
+                                    teamData.attendance.map(record => (
+                                        <div key={record.id} className="flex items-center justify-between p-3 rounded-lg border bg-slate-50/50">
+                                            <div className="flex items-center gap-3">
+                                                <Avatar className="h-9 w-9">
+                                                    <AvatarFallback>{getInitials(record.userName)}</AvatarFallback>
+                                                </Avatar>
+                                                <div>
+                                                    <p className="font-medium text-sm">{record.userName}</p>
+                                                    <p className="text-xs text-muted-foreground">Check-in: {record.checkInTime || '--:--'}</p>
                                                 </div>
-                                                {leave.reason && (
-                                                    <p className="text-sm text-slate-600 dark:text-slate-400 mt-2 bg-slate-50 dark:bg-slate-800 p-2 rounded-md">
-                                                        "{leave.reason}"
-                                                    </p>
-                                                )}
                                             </div>
+                                            <Badge variant="outline" className={getStatusColor(record.status)}>
+                                                {record.status}
+                                            </Badge>
                                         </div>
-                                        <div className="flex gap-2">
-                                            <Button
-                                                variant="outline"
-                                                className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                                                onClick={() => navigate(`/employee/team/leaves?id=${leave.id}&action=reject`)}
-                                            >
-                                                Reject
-                                            </Button>
-                                            <Button
-                                                className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                                                onClick={() => navigate(`/employee/team/leaves?id=${leave.id}&action=approve`)}
-                                            >
-                                                Approve
-                                            </Button>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </div>
-                    )}
+                                    ))
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
                 </TabsContent>
             </Tabs>
         </div>

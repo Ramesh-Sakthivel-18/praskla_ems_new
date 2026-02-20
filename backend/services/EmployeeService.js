@@ -15,18 +15,19 @@ const bcrypt = require('bcryptjs');
 
 class EmployeeService {
   /**
-   * Constructor with dependency injection
-   * @param {UserRepository} userRepository
-   * @param {QuotaService} quotaService
-   * @param {QuotaService} quotaService
-   * @param {OrganizationRepository} organizationRepository (optional)
-   * @param {AuditLogService} auditLogService
-   */
-  constructor(userRepository, quotaService, organizationRepository = null, auditLogService = null) {
+ * Constructor with dependency injection
+ * @param {UserRepository} userRepository
+ * @param {QuotaService} quotaService
+ * @param {OrganizationRepository} organizationRepository (optional)
+ * @param {AuditLogService} auditLogService
+ * @param {DepartmentRepository} departmentRepository (optional)
+ */
+  constructor(userRepository, quotaService, organizationRepository = null, auditLogService = null, departmentRepository = null) {
     this.userRepo = userRepository;
     this.quotaService = quotaService;
     this.orgRepo = organizationRepository;
     this.auditService = auditLogService;
+    this.deptRepo = departmentRepository;
   }
 
   /**
@@ -81,7 +82,11 @@ class EmployeeService {
         passwordHash,
         role: targetRole,
         department: employeeData.department || '',
+        departmentId: employeeData.departmentId || null,
         position: employeeData.position || (targetRole === 'admin' ? 'Admin' : 'Employee'),
+        isDeptHead: employeeData.isDeptHead || false,
+        isManager: employeeData.isManager || false,
+        managerId: employeeData.managerId || null,
         salary: employeeData.salary || '0',
         workingType: employeeData.workingType || 'full-time',
         skills: employeeData.skills || '',
@@ -90,6 +95,25 @@ class EmployeeService {
         phone: employeeData.phone || '',
         createdBy: creatorId
       });
+
+      // 6. Increment department member count if department assigned
+      if (employeeData.departmentId && this.deptRepo) {
+        await this.deptRepo.incrementMemberCount(orgId, employeeData.departmentId);
+        // If this is a dept head, update the department record
+        if (employeeData.isDeptHead) {
+          await this.deptRepo.setHead(orgId, employeeData.departmentId, employee.id, employee.name);
+        }
+      }
+
+      // 6b. Assign manager relationship if managerId is provided
+      if (employeeData.managerId) {
+        try {
+          await this.userRepo.assignManager(orgId, employee.id, employeeData.managerId);
+          console.log(`✅ Auto-assigned manager ${employeeData.managerId} for employee ${employee.id}`);
+        } catch (err) {
+          console.warn(`⚠️ Failed to auto-assign manager: ${err.message}`);
+        }
+      }
 
       // 6. Record creation in quota system
       await this.quotaService.recordUserCreation(orgId, targetRole, creatorId, creatorRole);
@@ -117,6 +141,68 @@ class EmployeeService {
     }
   }
 
+  /**
+   * Promote an employee to manager
+   * @param {string} orgId
+   * @param {string} userId
+   * @returns {Promise<Object>}
+   */
+  async promoteToManager(orgId, userId) {
+    const user = await this.userRepo.findById(orgId, userId);
+    if (!user) throw new Error('User not found');
+    if (user.isDeptHead) throw new Error('A department head cannot also be a manager');
+    if (user.isManager) throw new Error('User is already a manager');
+
+    const updated = await this.userRepo.update(orgId, userId, {
+      isManager: true,
+      isTeamLead: true
+    });
+    const { passwordHash: _, ...safe } = updated;
+    return safe;
+  }
+
+  /**
+   * Demote a manager back to employee
+   * @param {string} orgId
+   * @param {string} userId
+   * @returns {Promise<Object>}
+   */
+  async demoteFromManager(orgId, userId) {
+    const user = await this.userRepo.findById(orgId, userId);
+    if (!user) throw new Error('User not found');
+    if (!user.isManager) throw new Error('User is not a manager');
+
+    // Remove all direct reports from this manager
+    const directReports = user.directReports || [];
+    for (const reportId of directReports) {
+      await this.userRepo.update(orgId, reportId, {
+        managerId: null,
+        managerName: null
+      });
+    }
+
+    const updated = await this.userRepo.update(orgId, userId, {
+      isManager: false,
+      isTeamLead: user.isDeptHead, // keep isTeamLead if they're a dept head
+      directReports: []
+    });
+    const { passwordHash: _, ...safe } = updated;
+    return safe;
+  }
+
+  /**
+   * Get department members (for HOD view)
+   * @param {string} orgId
+   * @param {string} deptId
+   * @returns {Promise<Array>}
+   */
+  async getDepartmentMembers(orgId, deptId) {
+    const members = await this.userRepo.findByDepartment(orgId, deptId);
+    return members.map(m => {
+      const { passwordHash, ...safe } = m;
+      return safe;
+    });
+  }
   /**
    * Get employee by ID
    * @param {string} orgId - Organization ID

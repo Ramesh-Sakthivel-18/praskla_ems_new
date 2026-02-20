@@ -14,7 +14,8 @@ import {
     LogOut,
     User,
     Menu,
-    X
+    X,
+    GitBranch
 } from "lucide-react"
 import { getCurrentUser, isAuthenticated, logoutUser } from "@/lib/auth"
 import { cn } from "@/lib/utils"
@@ -67,6 +68,11 @@ export default function AdminLayout({ children }) {
             href: "/admin/dashboard",
             label: "Dashboard",
             icon: LayoutDashboard,
+        },
+        {
+            href: "/admin/org-chart",
+            label: "Org Chart",
+            icon: GitBranch,
         },
         {
             href: "/admin/employees",

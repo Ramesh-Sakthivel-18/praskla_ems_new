@@ -1,53 +1,67 @@
 /**
  * team.js
  * 
- * Routes for Team Lead management.
- * Accessible by Team Leads, Admins, and Business Owners.
+ * Routes for Team Lead / Manager / HOD management.
+ * HODs can view dept members/attendance and approve/reject dept leaves.
+ * Managers can view their direct reports and attendance.
  */
 
 const express = require('express');
 const router = express.Router();
 const container = require('../container');
-const { authenticateToken, requireTeamLead } = require('../middleware');
+const { authenticateToken, requireTeamLead, requireDeptHead } = require('../middleware');
 
 // Get services
-const userService = container.getUserRepo(); // Direct repo access for simple queries
+const userRepo = container.getUserRepo();
 const attendanceService = container.getAttendanceService();
 const leaveService = container.getLeaveService();
 
-// Middleware to ensure user is authenticated and authorized as a team lead
+// Middleware to ensure user is authenticated and authorized as a team lead/manager/HOD
 router.use(authenticateToken, requireTeamLead);
+
+// ============================================
+// TEAM MEMBER ROUTES (Manager + HOD)
+// ============================================
 
 /**
  * GET /api/team/members
- * Get all direct reports
+ * Get direct reports (for managers) or dept members (for HOD)
  */
 router.get('/members', async (req, res) => {
     try {
         const { organizationId, uid } = req.user;
+        const user = await userRepo.findById(organizationId, uid);
 
-        // Get direct reports using the repository method we added
-        const members = await userService.getDirectReports(organizationId, uid);
+        let members = [];
 
-        // Remove sensitive data
+        if (user.isDeptHead && user.departmentId) {
+            // HOD: get all department members
+            members = await userRepo.findByDepartment(organizationId, user.departmentId);
+            members = members.filter(m => m.id !== uid); // exclude self
+        } else {
+            // Manager: get direct reports
+            members = await userRepo.getDirectReports(organizationId, uid);
+        }
+
         const safeMembers = members.map(m => {
             const { passwordHash, ...safe } = m;
             return safe;
         });
 
-        res.json({
-            count: safeMembers.length,
-            members: safeMembers
-        });
+        res.json({ count: safeMembers.length, members: safeMembers });
     } catch (error) {
         console.error('❌ Error getting team members:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
+// ============================================
+// ATTENDANCE ROUTES (Manager + HOD)
+// ============================================
+
 /**
  * GET /api/team/attendance
- * Get today's attendance for the team
+ * Get today's attendance for team/department
  */
 router.get('/attendance', async (req, res) => {
     try {
@@ -56,11 +70,7 @@ router.get('/attendance', async (req, res) => {
 
         const teamAttendance = await attendanceService.getTeamAttendance(organizationId, uid, date);
 
-        res.json({
-            date,
-            count: teamAttendance.length,
-            attendance: teamAttendance
-        });
+        res.json({ date, count: teamAttendance.length, attendance: teamAttendance });
     } catch (error) {
         console.error('❌ Error getting team attendance:', error);
         res.status(500).json({ error: error.message });
@@ -82,31 +92,82 @@ router.get('/attendance/weekly', async (req, res) => {
 
         const teamHours = await attendanceService.getTeamWeeklyHours(organizationId, uid, weekStart, weekEnd);
 
-        res.json({
-            weekStart,
-            weekEnd,
-            data: teamHours
-        });
+        res.json({ weekStart, weekEnd, data: teamHours });
     } catch (error) {
         console.error('❌ Error getting team weekly hours:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
+// ============================================
+// HOD DEPARTMENT VIEW
+// ============================================
+
+/**
+ * GET /api/team/department/members
+ * Get all department members (HOD only)
+ */
+router.get('/department/members', async (req, res) => {
+    try {
+        const { organizationId, uid } = req.user;
+        const user = await userRepo.findById(organizationId, uid);
+
+        if (!user.isDeptHead || !user.departmentId) {
+            return res.status(403).json({ error: 'Only Department Heads can access this' });
+        }
+
+        const members = await userRepo.findByDepartment(organizationId, user.departmentId);
+        const safeMembers = members.filter(m => m.id !== uid).map(m => {
+            const { passwordHash, ...safe } = m;
+            return safe;
+        });
+
+        res.json({ count: safeMembers.length, members: safeMembers });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * GET /api/team/department/attendance
+ * Get department attendance (HOD only)
+ */
+router.get('/department/attendance', async (req, res) => {
+    try {
+        const { organizationId, uid } = req.user;
+        const date = req.query.date || new Date().toISOString().split('T')[0];
+        const user = await userRepo.findById(organizationId, uid);
+
+        if (!user.isDeptHead || !user.departmentId) {
+            return res.status(403).json({ error: 'Only Department Heads can access this' });
+        }
+
+        // Get all dept members and their attendance
+        const members = await userRepo.findByDepartment(organizationId, user.departmentId);
+        const memberIds = members.map(m => m.id);
+
+        const allAttendance = await attendanceService.getAllRecords(organizationId, { date });
+        const deptAttendance = allAttendance.filter(a => memberIds.includes(a.userId));
+
+        res.json({ date, count: deptAttendance.length, attendance: deptAttendance });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============================================
+// LEAVE MANAGEMENT (HOD approves dept leaves)
+// ============================================
+
 /**
  * GET /api/team/leaves/pending
- * Get pending leave requests assigned to me
+ * Get pending leave requests assigned to me (HOD or legacy team lead)
  */
 router.get('/leaves/pending', async (req, res) => {
     try {
         const { organizationId, uid } = req.user;
-
-        const pendingLeaves = await leaveService.getTeamPendingLeaves(organizationId, uid);
-
-        res.json({
-            count: pendingLeaves.length,
-            leaves: pendingLeaves
-        });
+        const pendingLeaves = await leaveService.getDeptPendingLeaves(organizationId, uid);
+        res.json({ count: pendingLeaves.length, leaves: pendingLeaves });
     } catch (error) {
         console.error('❌ Error getting pending team leaves:', error);
         res.status(500).json({ error: error.message });
@@ -115,30 +176,23 @@ router.get('/leaves/pending', async (req, res) => {
 
 /**
  * POST /api/team/leaves/:id/approve
- * Approve a leave request (as a team lead)
+ * Approve a leave request (as HOD)
  */
 router.post('/leaves/:id/approve', async (req, res) => {
     try {
-        const { organizationId, uid, name } = req.user;
+        const { organizationId, uid } = req.user;
         const { id } = req.params;
         const { comments } = req.body;
 
-        // Verify the leave is assigned to this user (security check)
+        // Verify the leave is assigned to this user
         const leave = await leaveService.getLeaveById(organizationId, id);
-        if (!leave) {
-            return res.status(404).json({ error: 'Leave request not found' });
-        }
-
-        if (leave.approverId !== uid && req.user.role !== 'admin' && req.user.role !== 'business_owner') {
+        if (!leave) return res.status(404).json({ error: 'Leave request not found' });
+        if (leave.approverId !== uid) {
             return res.status(403).json({ error: 'You are not the assigned approver for this leave request' });
         }
 
         const updatedLeave = await leaveService.approveLeave(organizationId, id, uid, comments);
-
-        res.json({
-            message: 'Leave request approved',
-            leave: updatedLeave
-        });
+        res.json({ message: 'Leave request approved', leave: updatedLeave });
     } catch (error) {
         console.error('❌ Error approving leave:', error);
         res.status(500).json({ error: error.message });
@@ -147,41 +201,29 @@ router.post('/leaves/:id/approve', async (req, res) => {
 
 /**
  * POST /api/team/leaves/:id/reject
- * Reject a leave request (as a team lead)
+ * Reject a leave request (as HOD)
  */
 router.post('/leaves/:id/reject', async (req, res) => {
     try {
-        const { organizationId, uid, name } = req.user;
+        const { organizationId, uid } = req.user;
         const { id } = req.params;
         const { comments } = req.body;
 
-        if (!comments) {
-            return res.status(400).json({ error: 'Rejection reason is required' });
-        }
+        if (!comments) return res.status(400).json({ error: 'Rejection reason is required' });
 
-        // Verify the leave is assigned to this user
         const leave = await leaveService.getLeaveById(organizationId, id);
-        if (!leave) {
-            return res.status(404).json({ error: 'Leave request not found' });
-        }
-
-        if (leave.approverId !== uid && req.user.role !== 'admin' && req.user.role !== 'business_owner') {
+        if (!leave) return res.status(404).json({ error: 'Leave request not found' });
+        if (leave.approverId !== uid) {
             return res.status(403).json({ error: 'You are not the assigned approver for this leave request' });
         }
 
         const updatedLeave = await leaveService.rejectLeave(organizationId, id, uid, comments);
-
-        res.json({
-            message: 'Leave request rejected',
-            leave: updatedLeave
-        });
+        res.json({ message: 'Leave request rejected', leave: updatedLeave });
     } catch (error) {
         console.error('❌ Error rejecting leave:', error);
         res.status(500).json({ error: error.message });
     }
 });
-
-
 
 /**
  * GET /api/team/leaves/history
@@ -190,13 +232,8 @@ router.post('/leaves/:id/reject', async (req, res) => {
 router.get('/leaves/history', async (req, res) => {
     try {
         const { organizationId, uid } = req.user;
-
-        const history = await leaveService.getTeamLeaveHistory(organizationId, uid);
-
-        res.json({
-            count: history.length,
-            leaves: history
-        });
+        const history = await leaveService.getDeptLeaveHistory(organizationId, uid);
+        res.json({ count: history.length, leaves: history });
     } catch (error) {
         console.error('❌ Error getting team leave history:', error);
         res.status(500).json({ error: error.message });

@@ -1,326 +1,346 @@
-import { useEffect, useState, useMemo } from "react"
+import { useState, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import {
+  FileText,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  Clock,
+  Search,
+  Filter,
+  ArrowLeft,
+  RefreshCw,
+  Briefcase,
+  Crown
+} from "lucide-react"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  CardFooter
+} from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { FileText, Clock, CheckCircle, XCircle, Calendar, ArrowLeft, RefreshCw, AlertCircle } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { getValidIdToken } from "@/lib/firebaseClient"
+import { toast } from "sonner"
 import { format } from "date-fns"
-import { safeRedirect } from "@/lib/redirectUtils"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
-const getApiBase = () => import.meta.env.VITE_API_URL || "http://localhost:3000"
-
-const fetchLeaveRequests = async () => {
-  const token = localStorage.getItem("firebaseToken")
-  const base = getApiBase()
-
-  const leaveRes = await fetch(`${base}/api/leave/all`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-
-  if (!leaveRes.ok) throw new Error(`Failed to load leave requests: ${leaveRes.status}`)
-
-  const data = await leaveRes.json()
-  const allLeaves = Array.isArray(data.requests) ? data.requests : data.requests || []
-
-  allLeaves.sort((a, b) => {
-    const dateA = new Date(a.createdAt || 0)
-    const dateB = new Date(b.createdAt || 0)
-    return dateB - dateA
-  })
-
-  return allLeaves
-}
+const getApiBase = () => import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
 export default function BusinessOwnerLeaveRequestsPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [activeTab, setActiveTab] = useState("approvals")
+  const [actionDialog, setActionDialog] = useState({ open: false, type: null, leave: null })
+  const [comments, setComments] = useState("")
 
-  const [currentUser, setCurrentUser] = useState(null)
-  const [statusFilter, setStatusFilter] = useState("all")
+  // ─── Queries ────────────────────────────────────────────────
 
-  useEffect(() => {
-    const current = localStorage.getItem("currentUser")
-    if (!current) {
-      safeRedirect(navigate, "/business-owner/login")
-      return
-    }
-    const emp = JSON.parse(current)
-    if (emp.role !== "business_owner") {
-      alert("Unauthorized. Business Owner access required.")
-      safeRedirect(navigate, "/role-selection")
-      return
-    }
-    setCurrentUser(emp)
-  }, [navigate])
-
-  const { data: allRequests = [], isLoading: loading } = useQuery({
-    queryKey: ['bo-leave-requests'],
-    queryFn: fetchLeaveRequests,
-    enabled: !!currentUser,
+  // 1. Pending HOD Leaves (Actionable)
+  const { data: pendingLeaves = [], isLoading: pendingLoading } = useQuery({
+    queryKey: ['bo-pending-leaves'],
+    queryFn: async () => {
+      const token = await getValidIdToken()
+      const res = await fetch(`${getApiBase()}/api/leave/bo/pending`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!res.ok) throw new Error("Failed to fetch pending leaves")
+      const data = await res.json()
+      return data.leaves || []
+    },
+    refetchInterval: 15000
   })
 
-  const filteredRequests = useMemo(() => {
-    if (statusFilter === "all") return allRequests
-    return allRequests.filter((req) => req.status?.toLowerCase() === statusFilter.toLowerCase())
-  }, [statusFilter, allRequests])
+  // 2. All Organization Leaves (Read-only/Monitoring)
+  const { data: allLeaves = [], isLoading: allLoading } = useQuery({
+    queryKey: ['bo-all-leaves'],
+    queryFn: async () => {
+      const token = await getValidIdToken()
+      const res = await fetch(`${getApiBase()}/api/leave/all`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!res.ok) throw new Error("Failed to fetch all leaves")
+      const data = await res.json()
+      return (data.requests || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    },
+    staleTime: 60000
+  })
 
-  const stats = useMemo(() => {
-    const pending = allRequests.filter((r) => r.status?.toLowerCase() === "pending").length
-    const approved = allRequests.filter((r) => r.status?.toLowerCase() === "approved").length
-    const rejected = allRequests.filter((r) => r.status?.toLowerCase() === "rejected").length
-    return { total: allRequests.length, pending, approved, rejected }
-  }, [allRequests])
+  // ─── Mutations ──────────────────────────────────────────────
 
-  const loadLeaveRequests = () => queryClient.invalidateQueries({ queryKey: ['bo-leave-requests'] })
+  const processLeave = useMutation({
+    mutationFn: async ({ leaveId, type, comment }) => {
+      const token = await getValidIdToken()
+      const endpoint = type === 'approve' ? 'approve' : 'reject'
+      const res = await fetch(`${getApiBase()}/api/leave/bo/${leaveId}/${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ comments: comment })
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.message || "Action failed")
+      }
+      return res.json()
+    },
+    onSuccess: (_, variables) => {
+      toast.success(`Leave request ${variables.type}d successfully`)
+      queryClient.invalidateQueries({ queryKey: ['bo-pending-leaves'] })
+      queryClient.invalidateQueries({ queryKey: ['bo-all-leaves'] })
+      setActionDialog({ open: false, type: null, leave: null })
+      setComments("")
+    },
+    onError: (err) => {
+      toast.error(err.message)
+    }
+  })
+
+  // ─── Helpers ────────────────────────────────────────────────
+
+  const getInitials = (name) => name ? name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : '??'
+
+  const formatDate = (dateVal) => {
+    if (!dateVal) return "N/A"
+    try {
+      return format(new Date(dateVal), "MMM dd, yyyy")
+    } catch (e) {
+      return "Invalid Date"
+    }
+  }
 
   const getStatusBadge = (status) => {
-    const normalizedStatus = status?.toLowerCase()
-    switch (normalizedStatus) {
-      case "pending":
-        return (
-          <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0">
-            <Clock className="mr-1 h-3 w-3" />
-            Pending
-          </Badge>
-        )
-      case "approved":
-        return (
-          <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0">
-            <CheckCircle className="mr-1 h-3 w-3" />
-            Approved
-          </Badge>
-        )
-      case "rejected":
-        return (
-          <Badge className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-0">
-            <XCircle className="mr-1 h-3 w-3" />
-            Rejected
-          </Badge>
-        )
-      default:
-        return <Badge variant="secondary" className="bg-slate-100 text-slate-700">{status}</Badge>
+    switch (status?.toLowerCase()) {
+      case 'approved': return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-0"><CheckCircle2 className="w-3 h-3 mr-1" /> Approved</Badge>
+      case 'rejected': return <Badge className="bg-red-100 text-red-700 hover:bg-red-200 border-0"><XCircle className="w-3 h-3 mr-1" /> Rejected</Badge>
+      case 'pending': return <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-200 border-0"><Clock className="w-3 h-3 mr-1" /> Pending</Badge>
+      default: return <Badge variant="outline">{status}</Badge>
     }
   }
 
-  const formatDate = (dateValue) => {
-    try {
-      // Handle Firestore timestamp object
-      if (dateValue && typeof dateValue === 'object' && dateValue._seconds) {
-        return format(new Date(dateValue._seconds * 1000), "MMM dd, yyyy")
-      }
-      // Handle regular date string
-      if (dateValue) {
-        return format(new Date(dateValue), "MMM dd, yyyy")
-      }
-      return "N/A"
-    } catch {
-      return String(dateValue) || "N/A"
-    }
-  }
-
-  if (!currentUser) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
-      </div>
-    )
-  }
+  // ─── Render ─────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6 animate-in fade-in-50 duration-500">
-      {/* Header */}
+    <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-            Leave Requests
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50 flex items-center gap-2">
+            <Crown className="h-6 w-6 text-amber-500" /> Leave Management
           </h1>
-          <p className="text-slate-500 mt-1">
-            View all leave requests from employees in your organization
-          </p>
+          <p className="text-slate-500 mt-1">Approve Department Head leaves and monitor organization status</p>
         </div>
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadLeaveRequests}
-            disabled={loading}
-            className="gap-2 border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate("/business-owner/dashboard")}
-            className="gap-2 border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Dashboard
-          </Button>
-        </div>
+        <Button variant="outline" size="sm" onClick={() => queryClient.invalidateQueries()} className="gap-2">
+          <RefreshCw className="h-4 w-4" /> Refresh
+        </Button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card className="border-slate-200 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">Total Requests</CardTitle>
-            <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg">
-              <FileText className="h-4 w-4 text-slate-600 dark:text-slate-400" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-              {stats.total}
-            </div>
-            <p className="text-xs text-slate-500 mt-1">All leave requests</p>
-          </CardContent>
-        </Card>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="approvals" className="relative">
+            Pending Approvals
+            {pendingLeaves.length > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] text-white">
+                {pendingLeaves.length}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="all">All Organization Leaves</TabsTrigger>
+        </TabsList>
 
-        <Card className="border-slate-200 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">Pending</CardTitle>
-            <div className="p-2 bg-amber-50 dark:bg-amber-900/30 rounded-lg">
-              <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+        {/* TAB 1: Pending Approvals */}
+        <TabsContent value="approvals" className="space-y-4">
+          {pendingLoading ? (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {[1, 2, 3].map(i => <Card key={i} className="animate-pulse h-48" />)}
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">{stats.pending}</div>
-            <p className="text-xs text-slate-500 mt-1">Awaiting decision</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">Approved</CardTitle>
-            <div className="p-2 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg">
-              <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">{stats.approved}</div>
-            <p className="text-xs text-slate-500 mt-1">Leave granted</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">Rejected</CardTitle>
-            <div className="p-2 bg-red-50 dark:bg-red-900/30 rounded-lg">
-              <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">{stats.rejected}</div>
-            <p className="text-xs text-slate-500 mt-1">Leave denied</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Leave Requests Table */}
-      <Card className="border-slate-200 shadow-sm overflow-hidden">
-        <CardHeader className="bg-slate-50/50 border-b border-slate-200">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base text-slate-800">
-                <FileText className="h-4 w-4 text-slate-500" />
-                Leave Requests ({filteredRequests.length})
-              </CardTitle>
-              <p className="text-xs text-slate-500 mt-1">
-                View-only. Admins can approve or reject leave requests.
-              </p>
-            </div>
-            <Tabs value={statusFilter} onValueChange={setStatusFilter}>
-              <TabsList className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                <TabsTrigger value="all" className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900">All</TabsTrigger>
-                <TabsTrigger value="pending" className="data-[state=active]:bg-amber-100 data-[state=active]:text-amber-800">Pending</TabsTrigger>
-                <TabsTrigger value="approved" className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-800">Approved</TabsTrigger>
-                <TabsTrigger value="rejected" className="data-[state=active]:bg-red-100 data-[state=active]:text-red-800">Rejected</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <RefreshCw className="h-6 w-6 animate-spin text-blue-600" />
-              <p className="ml-3 text-sm text-slate-500">Loading leave requests...</p>
-            </div>
-          ) : filteredRequests.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="p-4 bg-slate-50 rounded-full mb-4">
-                <FileText className="h-8 w-8 text-slate-300" />
+          ) : pendingLeaves.length === 0 ? (
+            <Card className="border-dashed py-12">
+              <div className="flex flex-col items-center text-center">
+                <CheckCircle2 className="h-12 w-12 text-emerald-500/50 mb-4" />
+                <h3 className="text-lg font-semibold">All Caught Up!</h3>
+                <p className="text-muted-foreground">No pending leave requests from Department Heads.</p>
               </div>
-              <p className="text-sm text-slate-500">
-                {statusFilter === "all" ? "No leave requests found" : `No ${statusFilter} leave requests`}
-              </p>
-            </div>
+            </Card>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-slate-50/50 hover:bg-slate-50/50">
-                  <TableHead className="font-semibold text-slate-600">Employee</TableHead>
-                  <TableHead className="font-semibold text-slate-600">Leave Type</TableHead>
-                  <TableHead className="font-semibold text-slate-600">Start Date</TableHead>
-                  <TableHead className="font-semibold text-slate-600">End Date</TableHead>
-                  <TableHead className="text-center font-semibold text-slate-600">Days</TableHead>
-                  <TableHead className="font-semibold text-slate-600">Reason</TableHead>
-                  <TableHead className="font-semibold text-slate-600">Status</TableHead>
-                  <TableHead className="font-semibold text-slate-600">Requested On</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredRequests.map((request) => (
-                  <TableRow key={request.id} className="hover:bg-slate-50/50 transition-colors">
-                    <TableCell className="font-medium text-slate-900">{request.userName || request.employeeName || "N/A"}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200">
-                        {request.leaveType}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-slate-600">{formatDate(request.startDate)}</TableCell>
-                    <TableCell className="text-slate-600">{formatDate(request.endDate)}</TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="secondary" className="bg-slate-100 text-slate-700 font-mono">
-                        {request.days}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate text-slate-600">
-                      {request.reason}
-                    </TableCell>
-                    <TableCell>{getStatusBadge(request.status)}</TableCell>
-                    <TableCell className="text-sm text-slate-500">
-                      {formatDate(request.createdAt)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Info Card */}
-      <Card className="border-blue-100 bg-blue-50/50 dark:border-blue-900/50 dark:bg-blue-900/20 shadow-sm">
-        <CardContent className="py-4">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
-              <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {pendingLeaves.map(leave => (
+                <Card key={leave.id} className="overflow-hidden border-l-4 border-l-amber-500 shadow-sm hover:shadow-md transition-all">
+                  <CardHeader className="pb-3 bg-slate-50/50">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-3">
+                        <Avatar>
+                          <AvatarFallback className="bg-amber-100 text-amber-700">{getInitials(leave.userName)}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <CardTitle className="text-base">{leave.userName}</CardTitle>
+                          <CardDescription className="flex items-center gap-1 text-xs">
+                            <Crown className="w-3 h-3 text-amber-500" /> Department Head
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="capitalize">{leave.leaveType}</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-4 space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <div className="space-y-1">
+                        <p className="text-muted-foreground text-xs">Duration</p>
+                        <p className="font-medium flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {formatDate(leave.startDate)} - {formatDate(leave.endDate)}
+                        </p>
+                      </div>
+                      <div className="text-right space-y-1">
+                        <p className="text-muted-foreground text-xs">Days</p>
+                        <p className="font-bold text-slate-900">{leave.days} Days</p>
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 p-2 rounded text-sm text-slate-600 italic border border-slate-100">
+                      "{leave.reason}"
+                    </div>
+                  </CardContent>
+                  <CardFooter className="bg-slate-50/50 border-t gap-2 p-3">
+                    <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                      onClick={() => setActionDialog({ open: true, type: 'approve', leave })}
+                    >
+                      Approve
+                    </Button>
+                    <Button variant="outline" className="flex-1 text-red-600 border-red-200 hover:bg-red-50"
+                      onClick={() => setActionDialog({ open: true, type: 'reject', leave })}
+                    >
+                      Reject
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))}
             </div>
-            <div>
-              <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">View-Only Access</p>
-              <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                As a business owner, you can view all leave requests but cannot approve or reject them.
-                Your admins have the authority to manage leave approvals.
-              </p>
+          )}
+        </TabsContent>
+
+        {/* TAB 2: All Leaves (Read Only) */}
+        <TabsContent value="all">
+          <Card>
+            <CardHeader>
+              <CardTitle>Organization Leave History</CardTitle>
+              <CardDescription>Monitor leave requests across all departments.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Dates</TableHead>
+                      <TableHead>Days</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Applied On</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="h-24 text-center">Loading...</TableCell>
+                      </TableRow>
+                    ) : allLeaves.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="h-24 text-center">No records found</TableCell>
+                      </TableRow>
+                    ) : (
+                      allLeaves.map(leave => (
+                        <TableRow key={leave.id}>
+                          <TableCell className="font-medium">{leave.userName}</TableCell>
+                          <TableCell>
+                            {leave.userRole === 'dept_head' ?
+                              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px]">HOD</Badge> :
+                              <Badge variant="outline" className="text-[10px]">Employee</Badge>
+                            }
+                          </TableCell>
+                          <TableCell className="capitalize">{leave.leaveType}</TableCell>
+                          <TableCell className="text-xs">
+                            {formatDate(leave.startDate)} <br />
+                            <span className="text-muted-foreground">{formatDate(leave.endDate)}</span>
+                          </TableCell>
+                          <TableCell>{leave.days}</TableCell>
+                          <TableCell>{getStatusBadge(leave.status)}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{formatDate(leave.createdAt)}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Action Dialog */}
+      <Dialog open={actionDialog.open} onOpenChange={(open) => !open && setActionDialog({ open: false, type: null, leave: null })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {actionDialog.type === 'approve' ? 'Approve Leave Request' : 'Reject Leave Request'}
+            </DialogTitle>
+            <DialogDescription>
+              {actionDialog.leave?.userName} - {actionDialog.leave?.days} days ({actionDialog.leave?.leaveType})
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Comments ({actionDialog.type === 'reject' ? 'Required' : 'Optional'})</Label>
+              <Textarea
+                placeholder={actionDialog.type === 'reject' ? "Please provide a reason for rejection..." : "Add a note (optional)..."}
+                value={comments}
+                onChange={(e) => setComments(e.target.value)}
+              />
             </div>
           </div>
-        </CardContent>
-      </Card>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setActionDialog({ open: false, type: null, leave: null })}>Cancel</Button>
+            <Button
+              className={actionDialog.type === 'approve' ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-600 hover:bg-red-700"}
+              disabled={processLeave.isPending || (actionDialog.type === 'reject' && !comments.trim())}
+              onClick={() => processLeave.mutate({
+                leaveId: actionDialog.leave.id,
+                type: actionDialog.type,
+                comment: comments
+              })}
+            >
+              {processLeave.isPending && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
+              {actionDialog.type === 'approve' ? 'Confirm Approval' : 'Confirm Rejection'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

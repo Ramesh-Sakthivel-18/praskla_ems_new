@@ -20,6 +20,7 @@ const AttendanceRepository = require('./repositories/AttendanceRepository');
 const LeaveRepository = require('./repositories/LeaveRepository');
 const StatisticsRepository = require('./repositories/StatisticsRepository');
 const AuditLogRepository = require('./repositories/AuditLogRepository');
+const DepartmentRepository = require('./repositories/DepartmentRepository');
 
 // ========================================
 // SERVICES
@@ -58,6 +59,7 @@ class Container {
     this.leaveRepo = new LeaveRepository(this.db);
     this.statisticsRepo = new StatisticsRepository(this.db);
     this.auditLogRepo = new AuditLogRepository(this.db);
+    this.departmentRepo = new DepartmentRepository(this.db);
     console.log('✅ Repositories initialized');
 
     // ========================================
@@ -86,7 +88,8 @@ class Container {
       this.userRepo,
       this.quotaService,
       this.organizationRepo,
-      this.auditLogService
+      this.auditLogService,
+      this.departmentRepo
     );
     console.log('✅ EmployeeService initialized');
 
@@ -222,6 +225,14 @@ class Container {
    */
   getAuditLogRepo() {
     return this.auditLogRepo;
+  }
+
+  /**
+   * Get DepartmentRepository instance
+   * @returns {DepartmentRepository}
+   */
+  getDepartmentRepo() {
+    return this.departmentRepo;
   }
 
   /**

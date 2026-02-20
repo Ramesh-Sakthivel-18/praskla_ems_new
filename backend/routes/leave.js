@@ -8,7 +8,7 @@
 const express = require('express');
 const router = express.Router();
 const container = require('../container');
-const { authenticateToken, requireEmployee, requireAdminOrBusinessOwner } = require('../middleware');
+const { authenticateToken, requireEmployee, requireAdminOrBusinessOwner, requireBusinessOwner } = require('../middleware');
 
 // Get service instance from container
 const leaveService = container.getLeaveService();
@@ -102,6 +102,76 @@ router.get('/my-leaves', authenticateToken, requireEmployee, async (req, res) =>
       error: 'Failed to get leave requests',
       message: error.message
     });
+  }
+});
+
+/**
+ * GET /api/leave/bo/pending
+ * Get HOD leave requests pending BO approval
+ * Business Owner only
+ */
+router.get('/bo/pending', authenticateToken, requireBusinessOwner, async (req, res) => {
+  try {
+    const orgId = req.user.organizationId;
+    const boId = req.user.uid;
+
+    // Get pending leaves assigned to this BO (which are HOD leaves)
+    const pendingLeaves = await leaveService.getDeptPendingLeaves(orgId, boId);
+
+    res.json({
+      count: pendingLeaves.length,
+      leaves: pendingLeaves
+    });
+  } catch (error) {
+    console.error('Error getting BO pending leaves:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/leave/bo/:leaveId/approve
+ * Approve HOD leave (BO only)
+ */
+router.post('/bo/:leaveId/approve', authenticateToken, requireBusinessOwner, async (req, res) => {
+  try {
+    const orgId = req.user.organizationId;
+    const { leaveId } = req.params;
+    const { comments } = req.body;
+
+    const leave = await leaveService.getLeaveById(orgId, leaveId);
+    if (!leave) return res.status(404).json({ error: 'Leave not found' });
+    if (leave.approverId !== req.user.uid) {
+      return res.status(403).json({ error: 'This leave is not assigned to you' });
+    }
+
+    const result = await leaveService.approveLeave(orgId, leaveId, req.user.uid, comments);
+    res.json({ message: 'HOD leave approved', leave: result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/leave/bo/:leaveId/reject
+ * Reject HOD leave (BO only)
+ */
+router.post('/bo/:leaveId/reject', authenticateToken, requireBusinessOwner, async (req, res) => {
+  try {
+    const orgId = req.user.organizationId;
+    const { leaveId } = req.params;
+    const { comments } = req.body;
+    if (!comments) return res.status(400).json({ error: 'Rejection reason is required' });
+
+    const leave = await leaveService.getLeaveById(orgId, leaveId);
+    if (!leave) return res.status(404).json({ error: 'Leave not found' });
+    if (leave.approverId !== req.user.uid) {
+      return res.status(403).json({ error: 'This leave is not assigned to you' });
+    }
+
+    const result = await leaveService.rejectLeave(orgId, leaveId, req.user.uid, comments);
+    res.json({ message: 'HOD leave rejected', leave: result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

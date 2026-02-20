@@ -233,7 +233,7 @@ function requireOrganization(organizationId) {
 }
 
 /**
- * Require TEAM LEAD access
+ * Require TEAM LEAD access (Manager or HOD)
  * (Also allows Admin and Business Owner)
  */
 function requireTeamLead(req, res, next) {
@@ -241,16 +241,42 @@ function requireTeamLead(req, res, next) {
     return res.status(401).json({ error: 'Unauthorized: Authentication required' });
   }
 
-  const isAuthorized = req.user.isTeamLead ||
+  const isAuthorized = req.user.isTeamLead || req.user.isDeptHead || req.user.isManager ||
     ['admin', 'business_owner'].includes(req.user.role);
 
   if (!isAuthorized) {
     return res.status(403).json({
-      error: 'Forbidden: Team Lead access required',
-      requiredRole: 'Team Lead',
-      yourRole: req.user.role,
-      isTeamLead: !!req.user.isTeamLead
+      error: 'Forbidden: Team Lead / Manager / HOD access required',
+      yourRole: req.user.role
     });
+  }
+  next();
+}
+
+/**
+ * Require Manager or HOD
+ */
+function requireManagerOrHOD(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const isAuthorized = req.user.isDeptHead || req.user.isManager ||
+    ['admin', 'business_owner'].includes(req.user.role);
+  if (!isAuthorized) {
+    return res.status(403).json({ error: 'Forbidden: Manager or HOD access required' });
+  }
+  next();
+}
+
+/**
+ * Require Department Head only
+ */
+function requireDeptHead(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!req.user.isDeptHead && !['admin', 'business_owner'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Forbidden: Department Head access required' });
   }
   next();
 }
@@ -261,7 +287,9 @@ module.exports = {
   requireBusinessOwner,
   requireAdminOrBusinessOwner,
   requireSystemAdmin,
-  requireTeamLead, // Export new middleware
+  requireTeamLead,
+  requireManagerOrHOD,
+  requireDeptHead,
   requireEmployee,
   requireOrganization
 };

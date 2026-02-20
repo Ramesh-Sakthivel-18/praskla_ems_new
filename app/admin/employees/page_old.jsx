@@ -59,7 +59,7 @@ export default function AdminEmployeesPage() {
   // Create Employee Dialog
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [createForm, setCreateForm] = useState({
-    name: "", email: "", password: "", department: "", departmentId: "", phone: "", position: "", role: "employee"
+    name: "", email: "", password: "", department: "", phone: "", position: "", role: "employee"
   })
 
   // Department Management
@@ -73,7 +73,7 @@ export default function AdminEmployeesPage() {
   const [deptMemberType, setDeptMemberType] = useState("employee") // 'hod', 'manager', 'employee'
   const [selectedDeptForMember, setSelectedDeptForMember] = useState(null)
   const [deptMemberForm, setDeptMemberForm] = useState({
-    name: "", email: "", password: "", phone: "", position: "", managerId: ""
+    name: "", email: "", password: "", phone: "", position: ""
   })
 
   // Auth Check
@@ -120,7 +120,7 @@ export default function AdminEmployeesPage() {
       })
       if (!res.ok) throw new Error("Failed to load departments")
       const data = await res.json()
-      return data.departments || []
+      return data.departmentList || []
     },
     enabled: !!currentUser,
     staleTime: 30000,
@@ -239,17 +239,13 @@ export default function AdminEmployeesPage() {
       queryClient.invalidateQueries({ queryKey: ['admin-employees'] })
       queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] })
       setCreateDialogOpen(false)
-      setCreateForm({ name: "", email: "", password: "", department: "", departmentId: "", phone: "", position: "", role: "employee" })
+      setCreateForm({ name: "", email: "", password: "", department: "", phone: "", position: "", role: "employee" })
     },
   })
 
   const handleCreateEmployee = () => {
     if (!createForm.name || !createForm.email || !createForm.password) return
-    const payload = {
-      ...createForm,
-      isManager: createForm.role === 'manager',
-    }
-    createMutation.mutate(payload)
+    createMutation.mutate(createForm)
   }
 
   // ── Create Department Mutation ──────────────────
@@ -301,10 +297,10 @@ export default function AdminEmployeesPage() {
     mutationFn: async (data) => {
       const token = await getValidIdToken()
       const endpoint = deptMemberType === 'hod'
-        ? `/api/admin/departments/${data.departmentId}/hod`
+        ? `/api/admin/departments/${data.departmentId}/head`
         : deptMemberType === 'manager'
-          ? `/api/admin/departments/${data.departmentId}/managers`
-          : `/api/admin/departments/${data.departmentId}/employees`
+          ? `/api/admin/departments/${data.departmentId}/manager`
+          : `/api/admin/departments/${data.departmentId}/employee`
       const res = await fetch(`${getApiBase()}${endpoint}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -320,7 +316,7 @@ export default function AdminEmployeesPage() {
       queryClient.invalidateQueries({ queryKey: ['admin-departments'] })
       queryClient.invalidateQueries({ queryKey: ['admin-employees'] })
       setDeptMemberDialogOpen(false)
-      setDeptMemberForm({ name: "", email: "", password: "", phone: "", position: "", managerId: "" })
+      setDeptMemberForm({ name: "", email: "", password: "", phone: "", position: "" })
     },
   })
 
@@ -330,27 +326,17 @@ export default function AdminEmployeesPage() {
     setDeptMemberType(type)
     setDeptMemberForm({
       name: "", email: "", password: "", phone: "",
-      position: type === 'hod' ? 'Department Head' : "",
-      managerId: ""
+      position: type === 'hod' ? 'Department Head' : ""
     })
     setDeptMemberDialogOpen(true)
   }
 
   const handleCreateDeptMember = () => {
     if (!deptMemberForm.name || !deptMemberForm.email || !deptMemberForm.password) return
-    const payload = {
+    createDeptMemberMutation.mutate({
       ...deptMemberForm,
       departmentId: selectedDeptForMember?.id
-    }
-    // For employees: if managerId is empty or '__hod__', let backend default to HOD
-    if (deptMemberType === 'employee') {
-      if (payload.managerId === '__hod__' || !payload.managerId) {
-        delete payload.managerId // backend defaults to HOD
-      }
-    } else {
-      delete payload.managerId // managers auto-get HOD on backend
-    }
-    createDeptMemberMutation.mutate(payload)
+    })
   }
 
   // ── Computed Values ─────────────────────────────
@@ -364,14 +350,14 @@ export default function AdminEmployeesPage() {
 
   const managers = useMemo(() => {
     return employees.filter(
-      (emp) => emp.isManager || emp.isDeptHead
+      (emp) => emp.role === 'team_lead' || emp.role === 'manager' || emp.role === 'business_owner'
     )
   }, [employees])
 
-  // Managers available for manager assignment in the Assign Manager dialog
+  // Non-admin employees available for manager assignment (including BO)
   const assignableManagers = useMemo(() => {
     return employees.filter(
-      (emp) => emp.isManager && !emp.isDeptHead && emp.isActive !== false
+      (emp) => emp.role !== 'admin' && emp.isActive !== false
     )
   }, [employees])
 
@@ -555,18 +541,11 @@ export default function AdminEmployeesPage() {
 
         {/* Manager */}
         <TableCell className="py-3.5">
-          {emp.role === 'business_owner' || emp.role === 'admin' ? (
-            <span className="text-xs text-slate-300">—</span>
-          ) : emp.managerId ? (
+          {emp.managerId ? (
             <span className="text-sm text-slate-700">{getManagerName(emp.managerId)}</span>
-          ) : (() => {
-            const dept = orgDepartments.find(d => d.id === emp.departmentId)
-            return dept?.headName ? (
-              <span className="text-sm text-purple-600">{dept.headName} <span className="text-[10px] text-purple-400">(HOD)</span></span>
-            ) : (
-              <span className="text-xs text-slate-300 italic">Unassigned</span>
-            )
-          })()}
+          ) : (
+            <span className="text-xs text-slate-300 italic">Unassigned</span>
+          )}
         </TableCell>
 
         {/* Status */}
@@ -744,67 +723,6 @@ export default function AdminEmployeesPage() {
           </div>
         ))}
       </div>
-
-      {/* ── Department Cards Section ──────────────────── */}
-      {orgDepartments.length > 0 && (
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-purple-600" /> Departments ({orgDepartments.length})
-            </h2>
-            <Button size="sm" variant="outline" onClick={() => setDeptDialogOpen(true)} className="h-7 text-xs gap-1.5 border-purple-200 text-purple-700 hover:bg-purple-50">
-              <Building2 className="h-3 w-3" /> New
-            </Button>
-          </div>
-          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-            {orgDepartments.map((dept) => (
-              <div key={dept.id} className="border border-slate-200 rounded-lg p-4 hover:border-blue-200 hover:shadow-sm transition-all bg-gradient-to-br from-white to-slate-50">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-                      <Building2 className="h-3.5 w-3.5 text-blue-600" />
-                      {dept.name}
-                    </h3>
-                    {dept.description && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{dept.description}</p>}
-                  </div>
-                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-400 hover:text-red-600 hover:bg-red-50" onClick={() => { setDeptToDelete(dept); setDeleteDeptConfirmOpen(true); }}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-                {/* Department Stats */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-xs text-slate-500">
-                  <span className="flex items-center gap-1"><Users className="h-3 w-3" /> {dept.memberCount || 0}/{dept.maxEmployees || '∞'} members</span>
-                  {dept.headName ? (
-                    <span className="flex items-center gap-1 text-purple-600 font-medium"><Shield className="h-3 w-3" /> HOD: {dept.headName}</span>
-                  ) : (
-                    <span className="flex items-center gap-1 text-amber-500"><AlertCircle className="h-3 w-3" /> No HOD</span>
-                  )}
-                </div>
-                {dept.createdAt && (
-                  <p className="text-[10px] text-slate-400 mt-2">Created {new Date(dept.createdAt).toLocaleDateString()}</p>
-                )}
-                {/* Action Buttons */}
-                <div className="flex gap-2 mt-3">
-                  {!dept.headId ? (
-                    <Button size="sm" variant="outline" className="h-7 text-xs flex-1 border-purple-200 text-purple-700 hover:bg-purple-50" onClick={() => openDeptMemberDialog(dept, 'hod')}>
-                      <Shield className="h-3 w-3 mr-1" /> Assign HOD
-                    </Button>
-                  ) : (
-                    <>
-                      <Button size="sm" variant="outline" className="h-7 text-xs flex-1 border-blue-200 text-blue-700 hover:bg-blue-50" onClick={() => openDeptMemberDialog(dept, 'manager')}>
-                        <UserPlus className="h-3 w-3 mr-1" /> Manager
-                      </Button>
-                      <Button size="sm" variant="outline" className="h-7 text-xs flex-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={() => openDeptMemberDialog(dept, 'employee')}>
-                        <UserPlus className="h-3 w-3 mr-1" /> Employee
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* ── Search & Filters ──────────────────────────── */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
@@ -1174,7 +1092,7 @@ export default function AdminEmployeesPage() {
               Assign Manager
             </DialogTitle>
             <DialogDescription>
-              Assign a manager for <strong>{assigningEmployee?.name}</strong>. Only managers and HODs are shown.
+              Assign a manager for <strong>{assigningEmployee?.name}</strong>. Only non-admin employees and the business owner can be assigned as managers.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -1192,8 +1110,7 @@ export default function AdminEmployeesPage() {
                     <SelectItem key={mgr.uid || mgr.id} value={mgr.uid || mgr.id}>
                       <div className="flex items-center gap-2">
                         <span>{mgr.name}</span>
-                        <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0">Manager</Badge>
-                        {mgr.department && <span className="text-xs text-slate-400">({mgr.department})</span>}
+                        <span className="text-xs text-slate-400">({mgr.role})</span>
                       </div>
                     </SelectItem>
                   ))}
@@ -1282,71 +1199,12 @@ export default function AdminEmployeesPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-slate-700">Department</Label>
-                <Select
-                  value={createForm.departmentId || "__none__"}
-                  onValueChange={(val) => {
-                    if (val === "__none__") {
-                      setCreateForm({ ...createForm, department: "", departmentId: "" })
-                    } else {
-                      const dept = orgDepartments.find(d => d.id === val)
-                      setCreateForm({ ...createForm, department: dept?.name || "", departmentId: val })
-                    }
-                  }}
-                >
-                  <SelectTrigger className="border-slate-200">
-                    <SelectValue placeholder="Select department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">
-                      <span className="text-slate-400 italic">No Department</span>
-                    </SelectItem>
-                    {orgDepartments.map((dept) => (
-                      <SelectItem key={dept.id} value={dept.id}>
-                        <div className="flex items-center gap-2">
-                          <Building2 className="h-3 w-3 text-blue-500" />
-                          <span>{dept.name}</span>
-                          <span className="text-xs text-slate-400">({dept.memberCount || 0}/{dept.maxEmployees || '∞'})</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-slate-700">Role</Label>
-                <Select
-                  value={createForm.role}
-                  onValueChange={(val) => setCreateForm({ ...createForm, role: val })}
-                >
-                  <SelectTrigger className="border-slate-200">
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="employee">
-                      <div className="flex items-center gap-2">
-                        <Users className="h-3 w-3 text-slate-500" />
-                        <span>Employee</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="manager">
-                      <div className="flex items-center gap-2">
-                        <Shield className="h-3 w-3 text-blue-500" />
-                        <span>Manager</span>
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="create-position" className="text-sm font-medium text-slate-700">Position / Designation</Label>
+                <Label htmlFor="create-dept" className="text-sm font-medium text-slate-700">Department</Label>
                 <Input
-                  id="create-position"
-                  placeholder="e.g. Designer, Developer"
-                  value={createForm.position}
-                  onChange={(e) => setCreateForm({ ...createForm, position: e.target.value })}
+                  id="create-dept"
+                  placeholder="e.g. Engineering"
+                  value={createForm.department}
+                  onChange={(e) => setCreateForm({ ...createForm, department: e.target.value })}
                   className="border-slate-200 focus-visible:ring-blue-500"
                 />
               </div>
@@ -1361,39 +1219,15 @@ export default function AdminEmployeesPage() {
                 />
               </div>
             </div>
-
-            {/* Manager Assignment */}
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-slate-700">Assign Manager</Label>
-              <Select
-                value={createForm.managerId || '__unassigned__'}
-                onValueChange={(val) => setCreateForm({ ...createForm, managerId: val === '__unassigned__' ? '' : val })}
-              >
-                <SelectTrigger className="border-slate-200">
-                  <SelectValue placeholder="Select manager" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__unassigned__">
-                    <div className="flex items-center gap-2">
-                      <Shield className="h-3 w-3 text-purple-500" />
-                      <span className="text-purple-700 font-medium">Unassigned (reports to dept HOD)</span>
-                    </div>
-                  </SelectItem>
-                  {employees
-                    .filter(e => e.isManager && !e.isDeptHead && e.isActive !== false)
-                    .map(mgr => (
-                      <SelectItem key={mgr.uid || mgr.id} value={mgr.uid || mgr.id}>
-                        <div className="flex items-center gap-2">
-                          <UserCheck className="h-3 w-3 text-blue-500" />
-                          <span>{mgr.name}</span>
-                          <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0">Manager</Badge>
-                          {mgr.department && <span className="text-xs text-slate-400">({mgr.department})</span>}
-                        </div>
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[10px] text-slate-400">If unassigned, employee reports to the HOD of their department.</p>
+              <Label htmlFor="create-position" className="text-sm font-medium text-slate-700">Position / Designation</Label>
+              <Input
+                id="create-position"
+                placeholder="e.g. Designer, Developer, Manager"
+                value={createForm.position}
+                onChange={(e) => setCreateForm({ ...createForm, position: e.target.value })}
+                className="border-slate-200 focus-visible:ring-blue-500"
+              />
             </div>
           </div>
           <DialogFooter>
@@ -1540,51 +1374,6 @@ export default function AdminEmployeesPage() {
                 <Input placeholder="+91 ..." value={deptMemberForm.phone} onChange={(e) => setDeptMemberForm({ ...deptMemberForm, phone: e.target.value })} className="border-slate-200 focus-visible:ring-blue-500" />
               </div>
             </div>
-
-            {/* Manager Assignment - shown for Employee type */}
-            {deptMemberType === 'employee' && (
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-slate-700">Assign To Manager</Label>
-                <Select
-                  value={deptMemberForm.managerId || '__hod__'}
-                  onValueChange={(val) => setDeptMemberForm({ ...deptMemberForm, managerId: val })}
-                >
-                  <SelectTrigger className="border-slate-200">
-                    <SelectValue placeholder="Select manager" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__hod__">
-                      <div className="flex items-center gap-2">
-                        <Shield className="h-3 w-3 text-purple-500" />
-                        <span className="text-purple-700 font-medium">Unassigned (reports to HOD)</span>
-                      </div>
-                    </SelectItem>
-                    {employees
-                      .filter(e => e.isManager && e.departmentId === selectedDeptForMember?.id)
-                      .map(mgr => (
-                        <SelectItem key={mgr.uid || mgr.id} value={mgr.uid || mgr.id}>
-                          <div className="flex items-center gap-2">
-                            <UserCheck className="h-3 w-3 text-blue-500" />
-                            <span>{mgr.name}</span>
-                            {mgr.position && <span className="text-xs text-slate-400">({mgr.position})</span>}
-                          </div>
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-[10px] text-slate-400">If no manager is selected, the employee reports directly to the HOD.</p>
-              </div>
-            )}
-
-            {/* Auto-assign note for Managers */}
-            {deptMemberType === 'manager' && selectedDeptForMember?.headName && (
-              <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 rounded-lg">
-                <Shield className="h-4 w-4 text-purple-500" />
-                <p className="text-xs text-blue-700">
-                  This manager will automatically report to <strong>{selectedDeptForMember.headName}</strong> (HOD)
-                </p>
-              </div>
-            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeptMemberDialogOpen(false)} className="border-slate-200">Cancel</Button>
@@ -1627,7 +1416,51 @@ export default function AdminEmployeesPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Department cards are now rendered above the employee list */}
+      {/* ── Department Cards Section (visible when departments exist) ── */}
+      {orgDepartments.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-purple-600" /> Departments ({orgDepartments.length})
+            </h2>
+          </div>
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+            {orgDepartments.map((dept) => (
+              <div key={dept.id} className="border border-slate-200 rounded-lg p-4 hover:border-blue-200 hover:shadow-sm transition-all">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-800">{dept.name}</h3>
+                    {dept.description && <p className="text-xs text-slate-500 mt-0.5">{dept.description}</p>}
+                  </div>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-400 hover:text-red-600 hover:bg-red-50" onClick={() => { setDeptToDelete(dept); setDeleteDeptConfirmOpen(true); }}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <div className="flex items-center gap-3 mt-3 text-xs text-slate-500">
+                  <span><Users className="h-3 w-3 inline mr-0.5" /> {dept.memberCount || 0}/{dept.maxEmployees || '∞'}</span>
+                  {dept.headName && <span className="text-purple-600"><Shield className="h-3 w-3 inline mr-0.5" /> {dept.headName}</span>}
+                </div>
+                <div className="flex gap-2 mt-3">
+                  {!dept.headId ? (
+                    <Button size="sm" variant="outline" className="h-7 text-xs flex-1 border-purple-200 text-purple-700 hover:bg-purple-50" onClick={() => openDeptMemberDialog(dept, 'hod')}>
+                      <Shield className="h-3 w-3 mr-1" /> Assign HOD
+                    </Button>
+                  ) : (
+                    <>
+                      <Button size="sm" variant="outline" className="h-7 text-xs flex-1 border-blue-200 text-blue-700 hover:bg-blue-50" onClick={() => openDeptMemberDialog(dept, 'manager')}>
+                        <UserPlus className="h-3 w-3 mr-1" /> Manager
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-7 text-xs flex-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={() => openDeptMemberDialog(dept, 'employee')}>
+                        <UserPlus className="h-3 w-3 mr-1" /> Employee
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

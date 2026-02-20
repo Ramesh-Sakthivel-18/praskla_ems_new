@@ -18,6 +18,7 @@ import AdminEmployeesPage from '@/app/admin/employees/page'
 import AdminAttendancePage from '@/app/admin/attendance/page'
 import AdminLeaveRequestsPage from '@/app/admin/leave-requests/page'
 import AdminProfilePage from '@/app/admin/profile/page'
+import AdminOrgChartPage from '@/app/admin/org-chart/page'
 
 // Employee Pages
 import EmployeeLoginPage from '@/app/employee/login/page'
@@ -57,6 +58,7 @@ export default function App() {
                 <Route path="/admin/login" element={<AdminLayout><AdminLoginPage /></AdminLayout>} />
                 <Route path="/admin" element={<AdminLayout />}>
                     <Route path="dashboard" element={<AdminDashboardPage />} />
+                    <Route path="org-chart" element={<AdminOrgChartPage />} />
                     <Route path="employees" element={<AdminEmployeesPage />} />
                     <Route path="attendance" element={<AdminAttendancePage />} />
                     <Route path="leave-requests" element={<AdminLeaveRequestsPage />} />

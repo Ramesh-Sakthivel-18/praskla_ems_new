@@ -22,6 +22,8 @@ const employeeService = container.getEmployeeService();
 const attendanceService = container.getAttendanceService();
 const leaveService = container.getLeaveService();
 const quotaService = container.getQuotaService();
+const departmentRepo = container.getDepartmentRepo();
+const userRepo = container.getUserRepo();
 
 // ============================================
 // EMPLOYEE MANAGEMENT
@@ -48,7 +50,7 @@ router.post('/employees', authenticateToken, requireAdminOrBusinessOwner, async 
     // Create user (quota validation and permission check happens in service)
     const employee = await employeeService.createEmployee(
       organizationId,
-      { name, email, password, department, position, salary, workingType, skills, address, emergencyContact, phone, role: targetRole },
+      { name, email, password, department, departmentId: req.body.departmentId, position, salary, workingType, skills, address, emergencyContact, phone, role: targetRole, isDeptHead: req.body.isDeptHead || false, isManager: req.body.isManager || false, managerId: req.body.managerId || null },
       creatorId,
       creatorRole
     );
@@ -435,58 +437,6 @@ router.get('/leaves/pending', authenticateToken, requireAdminOrBusinessOwner, as
 });
 
 /**
- * APPROVE Leave Request (ADMIN ONLY)
- * POST /api/admin/leaves/:id/approve
- */
-router.post('/leaves/:id/approve', authenticateToken, requireAdmin, async (req, res) => {
-  console.log(`✅ POST /api/admin/leaves/${req.params.id}/approve`);
-  try {
-    const { organizationId, uid: reviewerId } = req.user;
-    const { id } = req.params;
-    const { comments } = req.body;
-
-    const leave = await leaveService.approveLeave(organizationId, id, reviewerId, comments);
-
-    res.json({
-      message: 'Leave request approved',
-      leave
-    });
-
-  } catch (error) {
-    console.error('❌ Error approving leave:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * REJECT Leave Request (ADMIN ONLY)
- * POST /api/admin/leaves/:id/reject
- */
-router.post('/leaves/:id/reject', authenticateToken, requireAdmin, async (req, res) => {
-  console.log(`❌ POST /api/admin/leaves/${req.params.id}/reject`);
-  try {
-    const { organizationId, uid: reviewerId } = req.user;
-    const { id } = req.params;
-    const { comments } = req.body;
-
-    if (!comments) {
-      return res.status(400).json({ error: 'Rejection reason (comments) is required' });
-    }
-
-    const leave = await leaveService.rejectLeave(organizationId, id, reviewerId, comments);
-
-    res.json({
-      message: 'Leave request rejected',
-      leave
-    });
-
-  } catch (error) {
-    console.error('❌ Error rejecting leave:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-/**
  * GET Leave Statistics (ADMIN + BUSINESS OWNER)
  * GET /api/admin/leaves/stats/summary
  */
@@ -675,6 +625,297 @@ router.get('/organization', authenticateToken, requireAdminOrBusinessOwner, asyn
 
   } catch (error) {
     console.error('❌ Error getting organization details:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// DEPARTMENT MANAGEMENT (ADMIN ONLY)
+// ============================================
+
+/**
+ * CREATE Department
+ * POST /api/admin/departments
+ */
+router.post('/departments', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { organizationId, uid } = req.user;
+    const { name, description, maxEmployees } = req.body;
+    if (!name) return res.status(400).json({ error: 'Department name is required' });
+
+    // Check duplicate name
+    const existing = await departmentRepo.findByName(organizationId, name);
+    if (existing) return res.status(400).json({ error: 'Department with this name already exists' });
+
+    const dept = await departmentRepo.create(organizationId, {
+      name, description, maxEmployees: maxEmployees || 50, createdBy: uid
+    });
+    res.status(201).json({ message: 'Department created', department: dept });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET All Departments
+ * GET /api/admin/departments
+ */
+router.get('/departments', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+  try {
+    const { organizationId } = req.user;
+    const departments = await departmentRepo.findAll(organizationId);
+    res.json({ count: departments.length, departments });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET Department by ID (with members)
+ * GET /api/admin/departments/:id
+ */
+router.get('/departments/:id', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+  try {
+    const { organizationId } = req.user;
+    const dept = await departmentRepo.findById(organizationId, req.params.id);
+    if (!dept) return res.status(404).json({ error: 'Department not found' });
+
+    const members = await employeeService.getDepartmentMembers(organizationId, req.params.id);
+    res.json({ department: dept, members, memberCount: members.length });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * UPDATE Department
+ * PUT /api/admin/departments/:id
+ */
+router.put('/departments/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { organizationId } = req.user;
+    const { name, description, maxEmployees } = req.body;
+    const dept = await departmentRepo.update(organizationId, req.params.id, { name, description, maxEmployees });
+    res.json({ message: 'Department updated', department: dept });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE Department (deletes all members!)
+ * DELETE /api/admin/departments/:id
+ */
+router.delete('/departments/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { organizationId, uid } = req.user;
+    const deptId = req.params.id;
+
+    // Get all members and delete them
+    const members = await userRepo.findByDepartment(organizationId, deptId);
+    for (const member of members) {
+      await employeeService.deleteEmployee(organizationId, member.id, uid);
+    }
+
+    // Delete the department
+    await departmentRepo.delete(organizationId, deptId);
+
+    res.json({ message: `Department deleted along with ${members.length} members` });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * CREATE Department Head
+ * POST /api/admin/departments/:id/hod
+ */
+router.post('/departments/:id/hod', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { organizationId, uid: creatorId, role: creatorRole } = req.user;
+    const deptId = req.params.id;
+    const { name, email, password, position, phone } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Name, email, and password are required' });
+    }
+
+    // Check dept exists
+    const dept = await departmentRepo.findById(organizationId, deptId);
+    if (!dept) return res.status(404).json({ error: 'Department not found' });
+    if (dept.headId) return res.status(400).json({ error: 'Department already has a HOD. Remove existing HOD first.' });
+
+    const employee = await employeeService.createEmployee(
+      organizationId,
+      { name, email, password, department: dept.name, departmentId: deptId, position: position || 'Department Head', isDeptHead: true, role: 'employee', phone },
+      creatorId, creatorRole
+    );
+
+    res.status(201).json({ message: 'Department Head created', employee });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * CREATE Employee in Department
+ * POST /api/admin/departments/:id/employees
+ */
+router.post('/departments/:id/employees', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { organizationId, uid: creatorId, role: creatorRole } = req.user;
+    const deptId = req.params.id;
+    const { name, email, password, position, phone } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Name, email, and password are required' });
+    }
+
+    const dept = await departmentRepo.findById(organizationId, deptId);
+    if (!dept) return res.status(404).json({ error: 'Department not found' });
+    if (!dept.headId) return res.status(400).json({ error: 'Create a Department Head first before adding employees' });
+
+    // Check member limit
+    const limit = await departmentRepo.checkMemberLimit(organizationId, deptId);
+    if (!limit.canAdd) return res.status(400).json({ error: `Department has reached max capacity (${limit.max})` });
+
+    const employee = await employeeService.createEmployee(
+      organizationId,
+      { name, email, password, department: dept.name, departmentId: deptId, position: position || 'Employee', role: 'employee', phone, managerId: req.body.managerId || dept.headId || null },
+      creatorId, creatorRole
+    );
+
+    res.status(201).json({ message: 'Employee created in department', employee });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * CREATE Manager in Department
+ * POST /api/admin/departments/:id/managers
+ */
+router.post('/departments/:id/managers', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { organizationId, uid: creatorId, role: creatorRole } = req.user;
+    const deptId = req.params.id;
+    const { name, email, password, position, phone } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Name, email, and password are required' });
+    }
+
+    const dept = await departmentRepo.findById(organizationId, deptId);
+    if (!dept) return res.status(404).json({ error: 'Department not found' });
+    if (!dept.headId) return res.status(400).json({ error: 'Create a Department Head first' });
+
+    const limit = await departmentRepo.checkMemberLimit(organizationId, deptId);
+    if (!limit.canAdd) return res.status(400).json({ error: `Department has reached max capacity (${limit.max})` });
+
+    const employee = await employeeService.createEmployee(
+      organizationId,
+      { name, email, password, department: dept.name, departmentId: deptId, position: position || 'Manager', isManager: true, role: 'employee', phone, managerId: dept.headId || null },
+      creatorId, creatorRole
+    );
+
+    res.status(201).json({ message: 'Manager created in department', employee });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PROMOTE Employee to Manager
+ * PUT /api/admin/employees/:id/promote-manager
+ */
+router.put('/employees/:id/promote-manager', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { organizationId } = req.user;
+    const employee = await employeeService.promoteToManager(organizationId, req.params.id);
+    res.json({ message: 'Employee promoted to Manager', employee });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DEMOTE Manager to Employee
+ * PUT /api/admin/employees/:id/demote-manager
+ */
+router.put('/employees/:id/demote-manager', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { organizationId } = req.user;
+    const employee = await employeeService.demoteFromManager(organizationId, req.params.id);
+    res.json({ message: 'Manager demoted to Employee', employee });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * ADD Team Member to Manager
+ * PUT /api/admin/employees/:managerId/add-team-member
+ */
+router.put('/employees/:managerId/add-team-member', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { organizationId } = req.user;
+    const { managerId } = req.params;
+    const { employeeId } = req.body;
+
+    if (!employeeId) return res.status(400).json({ error: 'employeeId is required' });
+
+    // Validate: target cannot be a manager
+    const target = await userRepo.findById(organizationId, employeeId);
+    if (!target) return res.status(404).json({ error: 'Employee not found' });
+    if (target.isManager) return res.status(400).json({ error: 'A manager cannot be added to another manager\'s team' });
+
+    const updated = await userRepo.assignManager(organizationId, employeeId, managerId);
+    const { passwordHash, ...safe } = updated;
+    res.json({ message: 'Team member added', employee: safe });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * ORG CHART Data
+ * GET /api/admin/org-chart
+ */
+router.get('/org-chart', authenticateToken, requireAdminOrBusinessOwner, async (req, res) => {
+  try {
+    const { organizationId } = req.user;
+
+    const [departments, allUsers] = await Promise.all([
+      departmentRepo.findAll(organizationId),
+      userRepo.findAll(organizationId, { isActive: true })
+    ]);
+
+    // Build hierarchy
+    const chart = departments.map(dept => {
+      const deptMembers = allUsers.filter(u => u.departmentId === dept.id);
+      const hod = deptMembers.find(u => u.isDeptHead);
+      const managers = deptMembers.filter(u => u.isManager);
+      const employees = deptMembers.filter(u => !u.isDeptHead && !u.isManager);
+
+      return {
+        department: { id: dept.id, name: dept.name, maxEmployees: dept.maxEmployees, memberCount: dept.memberCount },
+        hod: hod ? { id: hod.id, name: hod.name, position: hod.position } : null,
+        managers: managers.map(m => ({
+          id: m.id, name: m.name, position: m.position,
+          teamMembers: (m.directReports || []).map(rid => {
+            const r = allUsers.find(u => u.id === rid);
+            return r ? { id: r.id, name: r.name, position: r.position, departmentId: r.departmentId } : null;
+          }).filter(Boolean)
+        })),
+        employees: employees.map(e => ({ id: e.id, name: e.name, position: e.position }))
+      };
+    });
+
+    // Include unassigned users (no department)
+    const unassigned = allUsers.filter(u => !u.departmentId && u.role === 'employee');
+
+    res.json({ chart, unassigned: unassigned.map(u => ({ id: u.id, name: u.name, position: u.position })) });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });

@@ -56,10 +56,15 @@ class UserRepository extends BaseRepository {
         organizationId: orgId, // ✅ Always set
         isActive: true,
 
+        // 🏢 Department mapping
+        departmentId: data.departmentId || null,
+
         // 👥 Team/Manager mapping
         managerId: data.managerId || null,
         managerName: data.managerName || null,
-        isTeamLead: false,
+        isDeptHead: data.isDeptHead || false,
+        isManager: data.isManager || false,
+        isTeamLead: data.isManager || data.isDeptHead || false, // backward compat
         directReports: [],
 
         // 👨‍💼 For Admins: Track their quota usage
@@ -611,6 +616,84 @@ class UserRepository extends BaseRepository {
     } catch (error) {
       console.error(`❌ [UserRepository] GetTeamLeads error:`, error);
       throw new Error(`Failed to get team leads: ${error.message}`);
+    }
+  }
+
+  /**
+   * Find all users in a department
+   * @param {string} orgId - Organization ID
+   * @param {string} deptId - Department ID
+   * @returns {Promise<Array>}
+   */
+  async findByDepartment(orgId, deptId) {
+    try {
+      const snapshot = await this.getCollection(orgId)
+        .where('departmentId', '==', deptId)
+        .where('isActive', '==', true)
+        .get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error(`❌ [UserRepository] FindByDepartment error:`, error);
+      throw new Error(`Failed to find users by department: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get department head for a department
+   * @param {string} orgId
+   * @param {string} deptId
+   * @returns {Promise<Object|null>}
+   */
+  async getDeptHead(orgId, deptId) {
+    try {
+      const snapshot = await this.getCollection(orgId)
+        .where('departmentId', '==', deptId)
+        .where('isDeptHead', '==', true)
+        .where('isActive', '==', true)
+        .limit(1)
+        .get();
+      if (snapshot.empty) return null;
+      const doc = snapshot.docs[0];
+      return { id: doc.id, ...doc.data() };
+    } catch (error) {
+      console.error(`❌ [UserRepository] GetDeptHead error:`, error);
+      throw new Error(`Failed to get dept head: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get all managers in an organization
+   * @param {string} orgId
+   * @returns {Promise<Array>}
+   */
+  async getManagers(orgId) {
+    try {
+      const snapshot = await this.getCollection(orgId)
+        .where('isManager', '==', true)
+        .where('isActive', '==', true)
+        .get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error(`❌ [UserRepository] GetManagers error:`, error);
+      throw new Error(`Failed to get managers: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get all department heads in an organization
+   * @param {string} orgId
+   * @returns {Promise<Array>}
+   */
+  async getDeptHeads(orgId) {
+    try {
+      const snapshot = await this.getCollection(orgId)
+        .where('isDeptHead', '==', true)
+        .where('isActive', '==', true)
+        .get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error(`❌ [UserRepository] GetDeptHeads error:`, error);
+      throw new Error(`Failed to get dept heads: ${error.message}`);
     }
   }
 }

@@ -67,7 +67,31 @@ class LeaveService {
         throw new Error(`Invalid leave type. Must be one of: ${validTypes.join(', ')}`);
       }
 
-      // 5. Create leave request
+      // 5. Determine approver based on hierarchy
+      // HOD → leave goes to Business Owner
+      // Manager/Employee → leave goes to their Department Head
+      let approverId = null;
+      let approverName = null;
+
+      if (user.isDeptHead) {
+        // HOD's leave goes to Business Owner
+        const boUsers = await this.userRepo.findByRole(orgId, 'business_owner');
+        if (boUsers.length > 0) {
+          approverId = boUsers[0].id;
+          approverName = boUsers[0].name;
+        }
+        console.log(`🔀 HOD leave routed to Business Owner: ${approverId}`);
+      } else if (user.departmentId) {
+        // Employee/Manager → find their Dept Head
+        const deptHead = await this.userRepo.getDeptHead(orgId, user.departmentId);
+        if (deptHead) {
+          approverId = deptHead.id;
+          approverName = deptHead.name;
+        }
+        console.log(`🔀 Employee/Manager leave routed to HOD: ${approverId}`);
+      }
+
+      // 6. Create leave request
       const leaveDataToCreate = {
         userId: user.id,
         userName: user.name,
@@ -75,9 +99,9 @@ class LeaveService {
         startDate: leaveData.startDate,
         endDate: leaveData.endDate,
         reason: leaveData.reason || '',
-        // 👥 Route to manager if exists
-        approverId: user.managerId || null,
-        approverName: user.managerName || null
+        approverId: approverId,
+        approverName: approverName,
+        departmentId: user.departmentId || null
       };
 
       const leave = await this.leaveRepo.create(orgId, leaveDataToCreate);
@@ -754,6 +778,33 @@ class LeaveService {
         userAvatar: user?.avatar || null
       };
     });
+  }
+
+  /**
+   * Get pending leaves for an HOD (leaves where they are the approver)
+   * @param {string} orgId - Organization ID
+   * @param {string} hodId - Department Head user ID
+   * @returns {Promise<Array>} Pending leaves addressed to this HOD
+   */
+  async getDeptPendingLeaves(orgId, hodId) {
+    const leaves = await this.leaveRepo.findByApprover(orgId, hodId, { status: 'pending' });
+    return await this.attachUserDetails(orgId, leaves);
+  }
+
+  /**
+   * Get leave history for an HOD
+   * @param {string} orgId - Organization ID
+   * @param {string} hodId - Department Head user ID
+   * @returns {Promise<Array>} Approved/rejected leaves
+   */
+  async getDeptLeaveHistory(orgId, hodId) {
+    const [approved, rejected] = await Promise.all([
+      this.leaveRepo.findByApprover(orgId, hodId, { status: 'approved' }),
+      this.leaveRepo.findByApprover(orgId, hodId, { status: 'rejected' })
+    ]);
+    const leaves = [...approved, ...rejected];
+    leaves.sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+    return await this.attachUserDetails(orgId, leaves);
   }
 }
 

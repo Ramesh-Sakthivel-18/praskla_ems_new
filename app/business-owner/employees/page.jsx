@@ -131,8 +131,8 @@ export default function BusinessOwnerEmployeesPage() {
           name: newAdmin.name,
           email: newAdmin.email,
           password: newAdmin.password,
-          department: newAdmin.department,
-          position: newAdmin.position || "Admin",
+          department: "Management", // default for BO admins
+          position: "Admin",
           role: "admin",
           organizationId: currentUser.organizationId,
           workingType: "Full-time",
@@ -157,8 +157,6 @@ export default function BusinessOwnerEmployeesPage() {
           name: "",
           email: "",
           password: "",
-          department: "",
-          position: "",
         })
 
         alert(
@@ -428,36 +426,6 @@ export default function BusinessOwnerEmployeesPage() {
                 </div>
                 <p className="text-xs text-slate-500">Share this password securely with the admin</p>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="department">Department</Label>
-                  <div className="relative">
-                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <Input
-                      id="department"
-                      value={newAdmin.department}
-                      onChange={(e) => setNewAdmin((s) => ({ ...s, department: e.target.value }))}
-                      placeholder="HR, IT..."
-                      disabled={createLoading}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="position">Position</Label>
-                  <div className="relative">
-                    <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <Input
-                      id="position"
-                      value={newAdmin.position}
-                      onChange={(e) => setNewAdmin((s) => ({ ...s, position: e.target.value }))}
-                      placeholder="Admin"
-                      disabled={createLoading}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-              </div>
               <div className="flex justify-end gap-2 pt-4">
                 <Button
                   type="button"
@@ -465,7 +433,7 @@ export default function BusinessOwnerEmployeesPage() {
                   onClick={() => {
                     setShowCreateAdmin(false)
                     setShowPassword(false)
-                    setNewAdmin({ name: "", email: "", password: "", department: "", position: "" })
+                    setNewAdmin({ name: "", email: "", password: "" })
                   }}
                   disabled={createLoading}
                 >

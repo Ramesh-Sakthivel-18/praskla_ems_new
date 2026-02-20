@@ -1,26 +1,28 @@
-import { useState, useEffect } from "react"
-import { useNavigate, useSearchParams } from "react-router-dom"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useState, useMemo } from "react"
+import { useNavigate } from "react-router-dom"
+import { useQueryClient, useMutation } from "@tanstack/react-query"
 import {
     FileText,
     CheckCircle2,
     XCircle,
     AlertCircle,
-    ArrowLeft,
     Clock,
+    User,
+    Calendar,
+    ArrowLeft,
     RefreshCw
 } from "lucide-react"
 import {
     Card,
     CardContent,
+    CardDescription,
     CardHeader,
     CardTitle,
-    CardDescription
+    CardFooter
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     Dialog,
     DialogContent,
@@ -29,351 +31,310 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { getValidIdToken } from "@/lib/firebaseClient"
 import { toast } from "sonner"
+import { format } from "date-fns"
+import { useOptimisticQuery } from "@/app/hooks/useOptimisticQuery"
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+const getApiBase = () => import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
 export default function TeamLeavesPage() {
     const navigate = useNavigate()
     const queryClient = useQueryClient()
-    const [searchParams] = useSearchParams()
-    const [selectedLeave, setSelectedLeave] = useState(null)
-    const [action, setAction] = useState(null)
+    const [activeTab, setActiveTab] = useState("pending")
+    const [actionDialog, setActionDialog] = useState({ open: false, type: null, leave: null })
     const [comments, setComments] = useState("")
-    const [dialogOpen, setDialogOpen] = useState(false)
-    const [processing, setProcessing] = useState(false)
 
-    // React Query for team leaves data
-    const { data: leaves = [], isLoading: loading } = useQuery({
-        queryKey: ['team-leaves'],
+    // ─── Queries ────────────────────────────────────────────────
+
+    const { data: pendingLeaves = [], isLoading: pendingLoading, isBackgroundRefresh: pendingRefreshing, refresh: refreshPending } = useOptimisticQuery({
+        queryKey: ['team-pending-leaves'],
         queryFn: async () => {
             const token = await getValidIdToken()
-            const headers = {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            }
-            const response = await fetch(`${API_URL}/team/leaves/pending`, { headers })
-            if (!response.ok) throw new Error('Failed to fetch team leaves')
-            const data = await response.json()
+            const res = await fetch(`${getApiBase()}/api/team/leaves/pending`, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            if (!res.ok) throw new Error("Failed to fetch pending leaves")
+            const data = await res.json()
             return data.leaves || []
         },
+        refetchInterval: 10000,
+        placeholderData: []
     })
 
-    const { data: historyLeaves = [], isLoading: historyLoading } = useQuery({
-        queryKey: ['team-leaves', 'history'],
+    const { data: historyLeaves = [], isLoading: historyLoading } = useOptimisticQuery({
+        queryKey: ['team-history-leaves'],
         queryFn: async () => {
             const token = await getValidIdToken()
-            const headers = {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            }
-            const response = await fetch(`${API_URL}/team/leaves/history`, { headers })
-            if (!response.ok) throw new Error('Failed to fetch leave history')
-            const data = await response.json()
+            const res = await fetch(`${getApiBase()}/api/team/leaves/history`, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            if (!res.ok) throw new Error("Failed to fetch leave history")
+            const data = await res.json()
             return data.leaves || []
         },
+        refetchInterval: 60000,
+        placeholderData: []
     })
 
-    const getInitials = (name) => {
-        if (!name) return "EM"
-        return name
-            .split(" ")
-            .map((n) => n[0])
-            .join("")
-            .toUpperCase()
-            .slice(0, 2)
-    }
+    // ─── Mutations ──────────────────────────────────────────────
 
-    const getLeaveTypeColor = (type) => {
-        switch (type) {
-            case 'sick': return 'bg-red-100 text-red-800 border-red-200'
-            case 'casual': return 'bg-blue-100 text-blue-800 border-blue-200'
-            case 'vacation': return 'bg-green-100 text-green-800 border-green-200'
-            default: return 'bg-slate-100 text-slate-800 border-slate-200'
-        }
-    }
-
-    const renderLeaveCard = (leave, isHistory = false) => (
-        <Card key={leave.id}>
-            <CardContent className="p-6">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div className="flex items-start gap-4">
-                        <Avatar className="h-12 w-12 mt-1">
-                            <AvatarFallback>{getInitials(leave.userName)}</AvatarFallback>
-                        </Avatar>
-                        <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                                <h3 className="font-semibold text-lg">{leave.userName}</h3>
-                                <Badge variant="outline" className={getLeaveTypeColor(leave.leaveType)}>
-                                    {leave.leaveType}
-                                </Badge>
-                                {isHistory && (
-                                    <Badge variant="outline" className={leave.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
-                                        {leave.status.toUpperCase()}
-                                    </Badge>
-                                )}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                                {leave.userEmail}
-                            </div>
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground border-l-2 pl-2 border-slate-200 dark:border-slate-700">
-                                <div className="flex items-center gap-1">
-                                    <Clock className="h-3.5 w-3.5" />
-                                    <span>{leave.days} Day{leave.days > 1 ? 's' : ''}</span>
-                                </div>
-                                <div>•</div>
-                                <div>
-                                    {new Date(leave.startDate).toLocaleDateString()} - {new Date(leave.endDate).toLocaleDateString()}
-                                </div>
-                            </div>
-                            {leave.reason && (
-                                <p className="text-sm text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 p-3 rounded-md mt-2 border border-slate-100 dark:border-slate-700 italic">
-                                    "{leave.reason}"
-                                </p>
-                            )}
-                            {isHistory && leave.reviewComments && (
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    <span className="font-medium">Reviewer Note:</span> {leave.reviewComments}
-                                </p>
-                            )}
-                            <div className="text-xs text-muted-foreground pt-1">
-                                Applied on {new Date(leave.createdAt).toLocaleDateString()}
-                            </div>
-                        </div>
-                    </div>
-
-                    {!isHistory && (
-                        <div className="flex gap-3 md:flex-col lg:flex-row md:min-w-[200px] justify-end">
-                            <Button
-                                variant="outline"
-                                className="flex-1 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                                onClick={() => openActionDialog(leave, 'reject')}
-                            >
-                                <XCircle className="mr-2 h-4 w-4" />
-                                Reject
-                            </Button>
-                            <Button
-                                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-                                onClick={() => openActionDialog(leave, 'approve')}
-                            >
-                                <CheckCircle2 className="mr-2 h-4 w-4" />
-                                Approve
-                            </Button>
-                        </div>
-                    )}
-                </div>
-            </CardContent>
-        </Card>
-    )
-
-    // Check for URL params to open specific leave action
-    useEffect(() => {
-        const id = searchParams.get('id')
-        const actionParam = searchParams.get('action')
-
-        if (id && actionParam && leaves.length > 0) {
-            const leave = leaves.find(l => l.id === id)
-            if (leave) {
-                openActionDialog(leave, actionParam)
-            }
-        }
-    }, [searchParams, leaves])
-
-    const handleApproveDirectly = async (leave) => {
-        setProcessing(true)
-        try {
+    const processLeave = useMutation({
+        mutationFn: async ({ leaveId, type, comment }) => {
             const token = await getValidIdToken()
-            const headers = {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            }
-            const response = await fetch(`${API_URL}/team/leaves/${leave.id}/approve`, {
+            const endpoint = type === 'approve' ? 'approve' : 'reject'
+            const res = await fetch(`${getApiBase()}/api/team/leaves/${leaveId}/${endpoint}`, {
                 method: 'POST',
-                headers,
-                body: JSON.stringify({ comments: '' })
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ comments: comment })
             })
-            if (response.ok) {
-                toast.success('Leave request approved successfully')
-                queryClient.invalidateQueries({ queryKey: ['team-leaves'] })
-                queryClient.invalidateQueries({ queryKey: ['team-dashboard'] })
-            } else {
-                const errorData = await response.json()
-                toast.error(errorData.error || 'Failed to approve request')
+            if (!res.ok) {
+                const err = await res.json()
+                throw new Error(err.message || "Action failed")
             }
-        } catch (error) {
-            console.error('Error approving leave:', error)
-            toast.error('An error occurred')
-        } finally {
-            setProcessing(false)
+            return res.json()
+        },
+        onMutate: async ({ leaveId, type }) => {
+            // Optimistic Update
+            await queryClient.cancelQueries({ queryKey: ['team-pending-leaves'] })
+            const previousPending = queryClient.getQueryData(['team-pending-leaves'])
+
+            // Remove from pending immediately
+            queryClient.setQueryData(['team-pending-leaves'], (old) =>
+                (old || []).filter(l => l.id !== leaveId)
+            )
+
+            return { previousPending }
+        },
+        onError: (err, variables, context) => {
+            toast.error(err.message)
+            queryClient.setQueryData(['team-pending-leaves'], context.previousPending)
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ['team-pending-leaves'] })
+            queryClient.invalidateQueries({ queryKey: ['team-history-leaves'] })
+            setActionDialog({ open: false, type: null, leave: null })
+            setComments("")
+            toast.success("Leave processed successfully")
         }
-    }
+    })
 
-    const handleAction = async () => {
-        if (!selectedLeave || !action) return
+    // ─── Helpers ────────────────────────────────────────────────
 
-        if (action === 'reject' && !comments.trim()) {
-            toast.error("Please provide a reason for rejection")
-            return
-        }
+    const getInitials = (name) => name ? name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : '??'
 
-        setProcessing(true)
+    const formatDate = (dateVal) => {
+        if (!dateVal) return "N/A"
         try {
-            const token = await getValidIdToken()
-            const headers = {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            }
-
-            const endpoint = `${API_URL}/team/leaves/${selectedLeave.id}/${action}`
-            const body = { comments: comments }
-
-            const response = await fetch(endpoint, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify(body)
-            })
-
-            if (response.ok) {
-                toast.success(`Leave request ${action}ed successfully`)
-                setDialogOpen(false)
-
-                // Invalidate to refetch
-                queryClient.invalidateQueries({ queryKey: ['team-leaves'] })
-                queryClient.invalidateQueries({ queryKey: ['team-dashboard'] })
-
-                // Clear URL params if present
-                if (window.location.search) {
-                    navigate('/employee/team/leaves', { replace: true })
-                }
-            } else {
-                const errorData = await response.json()
-                toast.error(errorData.error || `Failed to ${action} request`)
-            }
-        } catch (error) {
-            console.error(`Error ${action}ing leave:`, error)
-            toast.error("An error occurred")
-        } finally {
-            setProcessing(false)
+            return format(new Date(dateVal), "MMM dd, yyyy")
+        } catch (e) {
+            return "Invalid Date"
         }
     }
 
-    const openActionDialog = (leave, actionType) => {
-        if (actionType === 'approve') {
-            handleApproveDirectly(leave)
-            return
-        }
-        setSelectedLeave(leave)
-        setAction(actionType)
-        setComments("")
-        setDialogOpen(true)
+    const getLeaveIndexColor = (i) => {
+        const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-amber-500', 'bg-pink-500']
+        return colors[i % colors.length]
     }
 
+    // ─── Render ─────────────────────────────────────────────────
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" onClick={() => navigate("/employee/team")}>
-                        <ArrowLeft className="h-5 w-5" />
-                    </Button>
-                    <div>
-                        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                            Leave Approvals
-                        </h1>
-                        <p className="text-muted-foreground">
-                            Review and manage leave requests from your team.
-                        </p>
-                    </div>
+        <div className="space-y-6 animate-in fade-in-50 duration-500">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50 flex items-center gap-2">
+                        <CheckCircle2 className="h-6 w-6 text-blue-600" /> Team Approvals
+                    </h1>
+                    <p className="text-slate-500 mt-1">Manage leave requests from your team members</p>
                 </div>
-                <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => {
-                        queryClient.invalidateQueries({ queryKey: ['team-leaves'] })
-                    }}
-                    disabled={loading || historyLoading}
-                >
-                    <RefreshCw className={`h-4 w-4 ${loading || historyLoading ? 'animate-spin' : ''}`} />
-                </Button>
+                <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => navigate("/employee/team")} className="gap-2">
+                        <ArrowLeft className="h-4 w-4" /> Back to Team
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={refreshPending} disabled={pendingRefreshing} className="gap-2">
+                        <RefreshCw className={`h-4 w-4 ${pendingRefreshing ? 'animate-spin' : ''}`} /> Refresh
+                    </Button>
+                </div>
             </div>
 
-            <Tabs defaultValue="pending">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
                 <TabsList>
-                    <TabsTrigger value="pending">Pending Requests</TabsTrigger>
+                    <TabsTrigger value="pending" className="relative">
+                        Pending Requests
+                        {pendingLeaves.length > 0 && (
+                            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] text-white">
+                                {pendingLeaves.length}
+                            </span>
+                        )}
+                    </TabsTrigger>
                     <TabsTrigger value="history">History</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="pending" className="mt-6">
-                    {loading ? (
-                        <div className="flex justify-center p-12">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                {/* TAB 1: Pending Requests */}
+                <TabsContent value="pending" className="space-y-4">
+                    {pendingLoading ? (
+                        <div className="grid gap-4 md:grid-cols-2">
+                            {[1, 2].map(i => <Card key={i} className="animate-pulse h-48" />)}
                         </div>
-                    ) : leaves.length === 0 ? (
-                        <Card>
-                            <CardContent className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-                                <CheckCircle2 className="h-12 w-12 mb-4 text-emerald-500" />
-                                <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100">All caught up!</h3>
-                                <p>There are no pending leave requests requiring your attention.</p>
-                            </CardContent>
+                    ) : pendingLeaves.length === 0 ? (
+                        <Card className="border-dashed py-12">
+                            <div className="flex flex-col items-center text-center">
+                                <CheckCircle2 className="h-12 w-12 text-blue-500/30 mb-4" />
+                                <h3 className="text-lg font-semibold">No Pending Requests</h3>
+                                <p className="text-muted-foreground">Your team has no pending leave requests at the moment.</p>
+                            </div>
                         </Card>
                     ) : (
-                        <div className="grid gap-4">
-                            {leaves.map((leave) => renderLeaveCard(leave, false))}
+                        <div className="grid gap-4 md:grid-cols-2">
+                            {pendingLeaves.map((leave, idx) => (
+                                <Card key={leave.id} className="overflow-hidden border-l-4 border-l-blue-500 shadow-sm hover:shadow-md transition-all">
+                                    <div className={`h-1 ${getLeaveIndexColor(idx)} w-full opacity-20 absolute top-0 left-0 right-0`} />
+                                    <CardHeader className="pb-3 pt-5">
+                                        <div className="flex justify-between items-start">
+                                            <div className="flex items-center gap-3">
+                                                <Avatar className="h-10 w-10">
+                                                    <AvatarFallback className="bg-slate-100 text-slate-700 font-bold">{getInitials(leave.userName)}</AvatarFallback>
+                                                </Avatar>
+                                                <div>
+                                                    <CardTitle className="text-base">{leave.userName}</CardTitle>
+                                                    <CardDescription className="text-xs flex items-center gap-1">
+                                                        <User className="w-3 h-3" /> {leave.userRole === 'manager' ? 'Manager' : 'Team Member'}
+                                                    </CardDescription>
+                                                </div>
+                                            </div>
+                                            <Badge variant="outline" className="capitalize bg-slate-50">{leave.leaveType}</Badge>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="space-y-3 pb-3">
+                                        <div className="grid grid-cols-2 gap-4 text-sm bg-slate-50/50 p-3 rounded-lg border border-slate-100">
+                                            <div>
+                                                <p className="text-xs text-muted-foreground mb-1">From</p>
+                                                <p className="font-semibold">{formatDate(leave.startDate)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-muted-foreground mb-1">To</p>
+                                                <p className="font-semibold">{formatDate(leave.endDate)}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between text-sm px-1">
+                                            <span className="text-muted-foreground flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> Duration</span>
+                                            <span className="font-bold">{leave.days} Days</span>
+                                        </div>
+                                        <div className="bg-slate-50 p-2.5 rounded text-sm text-slate-600 italic border border-slate-100 mt-2">
+                                            "{leave.reason}"
+                                        </div>
+                                    </CardContent>
+                                    <CardFooter className="bg-slate-50/80 border-t gap-2 p-3 mt-2">
+                                        <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                                            onClick={() => setActionDialog({ open: true, type: 'approve', leave })}
+                                        >
+                                            Approve
+                                        </Button>
+                                        <Button variant="outline" className="flex-1 text-red-600 border-red-200 hover:bg-red-50"
+                                            onClick={() => setActionDialog({ open: true, type: 'reject', leave })}
+                                        >
+                                            Reject
+                                        </Button>
+                                    </CardFooter>
+                                </Card>
+                            ))}
                         </div>
                     )}
                 </TabsContent>
 
-                <TabsContent value="history" className="mt-6">
-                    {historyLoading ? (
-                        <div className="flex justify-center p-12">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                        </div>
-                    ) : historyLeaves.length === 0 ? (
-                        <Card>
-                            <CardContent className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-                                <Clock className="h-10 w-10 mb-4" />
-                                <h3 className="text-lg font-medium">No History</h3>
-                                <p>No approved or rejected leave requests found.</p>
-                            </CardContent>
-                        </Card>
-                    ) : (
-                        <div className="grid gap-4">
-                            {historyLeaves.map((leave) => renderLeaveCard(leave, true))}
-                        </div>
-                    )}
+                {/* TAB 2: History */}
+                <TabsContent value="history">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Approval History</CardTitle>
+                            <CardDescription>Past leave requests you have processed.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="rounded-md border">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Employee</TableHead>
+                                            <TableHead>Type</TableHead>
+                                            <TableHead>Period</TableHead>
+                                            <TableHead>Days</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead>Action Date</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {historyLoading ? (
+                                            <TableRow><TableCell colSpan={6} className="h-24 text-center">Loading...</TableCell></TableRow>
+                                        ) : historyLeaves.length === 0 ? (
+                                            <TableRow><TableCell colSpan={6} className="h-24 text-center">No history found</TableCell></TableRow>
+                                        ) : (
+                                            historyLeaves.map(leave => (
+                                                <TableRow key={leave.id}>
+                                                    <TableCell className="font-medium">{leave.userName}</TableCell>
+                                                    <TableCell className="capitalize">{leave.leaveType}</TableCell>
+                                                    <TableCell className="text-xs">
+                                                        {formatDate(leave.startDate)} - {formatDate(leave.endDate)}
+                                                    </TableCell>
+                                                    <TableCell>{leave.days}</TableCell>
+                                                    <TableCell>
+                                                        {leave.status === 'Approved' ?
+                                                            <Badge className="bg-emerald-100 text-emerald-700 border-0">Approved</Badge> :
+                                                            <Badge className="bg-red-100 text-red-700 border-0">Rejected</Badge>
+                                                        }
+                                                    </TableCell>
+                                                    <TableCell className="text-xs text-muted-foreground">{formatDate(leave.updatedAt || leave.createdAt)}</TableCell>
+                                                </TableRow>
+                                            ))
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </CardContent>
+                    </Card>
                 </TabsContent>
             </Tabs>
 
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            {/* Action Dialog */}
+            <Dialog open={actionDialog.open} onOpenChange={(open) => !open && setActionDialog({ open: false, type: null, leave: null })}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Reject Leave Request</DialogTitle>
+                        <DialogTitle>
+                            {actionDialog.type === 'approve' ? 'Approve Request' : 'Reject Request'}
+                        </DialogTitle>
                         <DialogDescription>
-                            Please provide a reason for rejecting this request for {selectedLeave?.userName}.
+                            Review {actionDialog.leave?.userName}'s request for {actionDialog.leave?.days} days.
                         </DialogDescription>
                     </DialogHeader>
-
-                    <div className="py-4">
-                        <Textarea
-                            placeholder="Reason for rejection (required)..."
-                            value={comments}
-                            onChange={(e) => setComments(e.target.value)}
-                            className="min-h-[100px]"
-                        />
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Comments</Label>
+                            <Textarea
+                                placeholder="Add optional comments..."
+                                value={comments}
+                                onChange={(e) => setComments(e.target.value)}
+                            />
+                        </div>
                     </div>
-
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={processing}>
-                            Cancel
-                        </Button>
+                        <Button variant="outline" onClick={() => setActionDialog({ open: false, type: null, leave: null })}>Cancel</Button>
                         <Button
-                            variant="destructive"
-                            onClick={handleAction}
-                            disabled={processing || !comments.trim()}
+                            className={actionDialog.type === 'approve' ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-600 hover:bg-red-700"}
+                            disabled={processLeave.isPending}
+                            onClick={() => processLeave.mutate({
+                                leaveId: actionDialog.leave.id,
+                                type: actionDialog.type,
+                                comment: comments
+                            })}
                         >
-                            {processing ? "Processing..." : "Reject Request"}
+                            {processLeave.isPending && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
+                            Confirm
                         </Button>
                     </DialogFooter>
                 </DialogContent>
