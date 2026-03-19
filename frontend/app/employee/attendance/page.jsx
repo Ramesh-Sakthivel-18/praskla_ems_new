@@ -11,7 +11,7 @@ import {
 } from "lucide-react"
 import { format } from "date-fns"
 import { safeRedirect } from "@/lib/redirectUtils"
-import { getValidIdToken } from "@/lib/firebaseClient"
+import { getValidIdToken } from "@/lib/api"
 
 const getApiBase = () => {
   const url = import.meta.env.VITE_API_URL || 'http://localhost:3000'

@@ -16,7 +16,8 @@ class DepartmentRepository extends BaseRepository {
      * Get collection for a specific organization
      */
     getCollection(orgId) {
-        return this.db.collection('organizations').doc(orgId).collection('departments');
+        if (!orgId) throw new Error('Organization ID is required');
+        return this.db.collection('departments');
     }
 
     /**
@@ -70,6 +71,7 @@ class DepartmentRepository extends BaseRepository {
     async findByName(orgId, name) {
         try {
             const snapshot = await this.getCollection(orgId)
+                .where('organizationId', '==', orgId)
                 .where('name', '==', name)
                 .limit(1)
                 .get();
@@ -87,7 +89,7 @@ class DepartmentRepository extends BaseRepository {
      */
     async findAll(orgId) {
         try {
-            const snapshot = await this.getCollection(orgId).orderBy('name').get();
+            const snapshot = await this.getCollection(orgId).where('organizationId', '==', orgId).orderBy('name').get();
             return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         } catch (error) {
             console.error(`❌ [DepartmentRepo] FindAll error:`, error);
@@ -153,10 +155,11 @@ class DepartmentRepository extends BaseRepository {
      * Increment member count
      */
     async incrementMemberCount(orgId, deptId) {
+        const dept = await this.findById(orgId, deptId);
+        if (!dept) return;
         const ref = this.getCollection(orgId).doc(deptId);
-        const { FieldValue } = require('firebase-admin/firestore');
         await ref.update({
-            memberCount: FieldValue.increment(1),
+            memberCount: (dept.memberCount || 0) + 1,
             updatedAt: new Date().toISOString()
         });
     }
@@ -165,10 +168,11 @@ class DepartmentRepository extends BaseRepository {
      * Decrement member count
      */
     async decrementMemberCount(orgId, deptId) {
+        const dept = await this.findById(orgId, deptId);
+        if (!dept) return;
         const ref = this.getCollection(orgId).doc(deptId);
-        const { FieldValue } = require('firebase-admin/firestore');
         await ref.update({
-            memberCount: FieldValue.increment(-1),
+            memberCount: Math.max(0, (dept.memberCount || 0) - 1),
             updatedAt: new Date().toISOString()
         });
     }

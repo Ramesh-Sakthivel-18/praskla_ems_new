@@ -3,8 +3,6 @@
  * Centralized authentication helper functions
  */
 
-import { auth, signInWithCustomToken } from './firebaseClient';
-
 // ✅ Consistent API URL (base server URL, /api appended by getApiBase)
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const getApiBase = () => API_URL.endsWith('/api') ? API_URL : `${API_URL}/api`;
@@ -53,17 +51,8 @@ export async function loginUser(email, password, organizationId = null, expected
       };
     }
 
-    // Sign in with Firebase using custom token
-    let idToken = data.firebaseToken || data.token;
-    if (auth && idToken) {
-      try {
-        const userCredential = await signInWithCustomToken(auth, idToken);
-        idToken = await userCredential.user.getIdToken();
-        console.log('🔥 Auth: Firebase authentication successful');
-      } catch (firebaseError) {
-        console.warn('⚠️ Auth: Firebase auth failed, using custom token:', firebaseError.message);
-      }
-    }
+    // Set local token
+    let idToken = data.token;
 
     // Store authentication data
     const authData = {
@@ -77,7 +66,8 @@ export async function loginUser(email, password, organizationId = null, expected
     return {
       success: true,
       user: data.user,
-      organizationId: data.user.organizationId
+      organizationId: data.user.organizationId,
+      token: idToken
     };
   } catch (error) {
     console.error('❌ Auth: Network error:', error);
@@ -93,47 +83,7 @@ export async function loginUser(email, password, organizationId = null, expected
  * @param {string} role - 'employee' | 'admin' | 'business_owner'
  */
 export async function loginWithGoogle(role = 'employee') {
-  try {
-    console.log('🔵 Starting Google Login...');
-    const { auth, signInWithPopup, GoogleAuthProvider } = await import('./firebaseClient');
-
-    if (!auth) throw new Error("Firebase auth not initialized");
-
-    const provider = new GoogleAuthProvider();
-    const result = await signInWithPopup(auth, provider);
-    const user = result.user;
-    const idToken = await user.getIdToken();
-
-    console.log('✅ Google Login successful. Token obtained.');
-    console.log('📤 Sending token to backend for verification...');
-
-    const response = await fetch(`${getApiBase()}/auth/google-login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: idToken, role }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || 'Backend verification failed');
-    }
-
-    const data = await response.json();
-    console.log('✅ Backend verification successful. Role:', data.user.role);
-
-    // Store auth data
-    storeAuthData({
-      isLoggedIn: true,
-      token: idToken,
-      user: data.user
-    });
-
-    return { success: true, user: data.user };
-
-  } catch (error) {
-    console.error('❌ Google Login Error:', error);
-    throw error;
-  }
+  throw new Error("Google Login Disabled (Local Auth Only)");
 }
 
 /**
@@ -158,14 +108,14 @@ export async function registerOrganization(data) {
 
     const result = await response.json();
     console.log('✅ Auth: Registration successful');
-
-    // Sign in with the new account
-    if (result.firebaseToken) {
-      try {
-        await signInWithCustomToken(auth, result.firebaseToken);
-      } catch (e) {
-        console.warn('⚠️ Auto sign-in failed:', e.message);
-      }
+    
+    // Store credentials cleanly without using SDK firebase methods
+    if (result.token) {
+        storeAuthData({
+            isLoggedIn: true,
+            token: result.token,
+            user: result.user
+        });
     }
 
     return { success: true, data: result };
@@ -181,7 +131,7 @@ export async function registerOrganization(data) {
 export function storeAuthData({ isLoggedIn, token, user }) {
   try {
     localStorage.setItem('isLoggedIn', String(isLoggedIn));
-    localStorage.setItem('firebaseToken', token);
+    localStorage.setItem('token', token);
     localStorage.setItem('currentUser', JSON.stringify(user));
 
     // Role-specific flags (for backward compatibility)
@@ -216,7 +166,7 @@ export function getCurrentUser() {
  */
 export function getAuthToken() {
   try {
-    return localStorage.getItem('firebaseToken') || '';
+    return localStorage.getItem('token') || '';
   } catch {
     return '';
   }
@@ -240,17 +190,12 @@ export function logoutUser() {
   try {
     // Clear all auth data
     localStorage.removeItem('isLoggedIn');
-    localStorage.removeItem('firebaseToken');
+    localStorage.removeItem('token');
     localStorage.removeItem('currentUser');
     localStorage.removeItem('adminLoggedIn');
     localStorage.removeItem('employeeLoggedIn');
     localStorage.removeItem('businessOwnerLoggedIn');
     localStorage.removeItem('systemAdminLoggedIn');
-
-    // Sign out from Firebase
-    if (auth && auth.currentUser) {
-      auth.signOut();
-    }
 
     console.log('👋 User logged out');
   } catch (error) {

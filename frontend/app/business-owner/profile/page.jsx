@@ -32,7 +32,7 @@ import { format } from "date-fns"
 const getApiBase = () => import.meta.env.VITE_API_URL || "http://localhost:3000"
 
 const fetchOrgDetails = async () => {
-  const token = localStorage.getItem("firebaseToken")
+  const token = localStorage.getItem("token")
   const base = getApiBase()
   const orgRes = await fetch(`${base}/api/admin/organization`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -91,7 +91,7 @@ export default function BusinessOwnerProfilePage() {
   })
 
   const handleSaveProfile = async () => {
-    const token = localStorage.getItem("firebaseToken")
+    const token = localStorage.getItem("token")
     const base = getApiBase()
 
     try {
@@ -144,7 +144,7 @@ export default function BusinessOwnerProfilePage() {
       return
     }
 
-    const token = localStorage.getItem("firebaseToken")
+    const token = localStorage.getItem("token")
     const base = getApiBase()
 
     try {

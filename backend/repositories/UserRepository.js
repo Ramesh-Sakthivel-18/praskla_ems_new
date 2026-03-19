@@ -17,6 +17,8 @@ class UserRepository extends BaseRepository {
 
   /**
    * Override: Get collection reference for specific organization
+   * Instead of hierarchical, we query the flat 'users' collection 
+   * but scoped methods will append `.where('organizationId', '==', orgId)`
    * @param {string} orgId - Organization ID
    * @returns {FirebaseFirestore.CollectionReference}
    */
@@ -24,7 +26,8 @@ class UserRepository extends BaseRepository {
     if (!orgId) {
       throw new Error('Organization ID is required');
     }
-    return this.db.collection('organizations').doc(orgId).collection('users');
+    // Return base collection adapter since FirestoreAdapter supports flattened logic natively
+    return this.db.collection('users');
   }
 
   /**
@@ -123,6 +126,7 @@ class UserRepository extends BaseRepository {
   async findByEmail(orgId, email) {
     try {
       const snapshot = await this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
         .where('email', '==', email.toLowerCase())
         .limit(1)
         .get();
@@ -151,7 +155,7 @@ class UserRepository extends BaseRepository {
    */
   async findAll(orgId, filters = {}) {
     try {
-      let query = this.getCollection(orgId);
+      let query = this.getCollection(orgId).where('organizationId', '==', orgId);
 
       // Apply role filter
       if (filters.role) {
@@ -443,6 +447,7 @@ class UserRepository extends BaseRepository {
   async countByRole(orgId, role) {
     try {
       const snapshot = await this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
         .where('role', '==', role)
         .where('isActive', '==', true)
         .get();
@@ -585,6 +590,7 @@ class UserRepository extends BaseRepository {
   async getDirectReports(orgId, leaderId) {
     try {
       const snapshot = await this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
         .where('managerId', '==', leaderId)
         .where('isActive', '==', true)
         .get();
@@ -606,6 +612,7 @@ class UserRepository extends BaseRepository {
   async getTeamLeads(orgId) {
     try {
       const snapshot = await this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
         .where('isTeamLead', '==', true)
         .where('isActive', '==', true)
         .get();
@@ -628,6 +635,7 @@ class UserRepository extends BaseRepository {
   async findByDepartment(orgId, deptId) {
     try {
       const snapshot = await this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
         .where('departmentId', '==', deptId)
         .where('isActive', '==', true)
         .get();
@@ -647,6 +655,7 @@ class UserRepository extends BaseRepository {
   async getDeptHead(orgId, deptId) {
     try {
       const snapshot = await this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
         .where('departmentId', '==', deptId)
         .where('isDeptHead', '==', true)
         .where('isActive', '==', true)
@@ -669,6 +678,7 @@ class UserRepository extends BaseRepository {
   async getManagers(orgId) {
     try {
       const snapshot = await this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
         .where('isManager', '==', true)
         .where('isActive', '==', true)
         .get();
@@ -687,6 +697,7 @@ class UserRepository extends BaseRepository {
   async getDeptHeads(orgId) {
     try {
       const snapshot = await this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
         .where('isDeptHead', '==', true)
         .where('isActive', '==', true)
         .get();

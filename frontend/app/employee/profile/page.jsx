@@ -14,7 +14,7 @@ import {
 import { format } from "date-fns"
 import { safeRedirect } from "@/lib/redirectUtils"
 import { isAuthenticated } from "@/lib/auth"
-import { getValidIdToken } from "@/lib/firebaseClient"
+import { getValidIdToken } from "@/lib/api"
 
 export default function EmployeeProfilePage() {
   const navigate = useNavigate()

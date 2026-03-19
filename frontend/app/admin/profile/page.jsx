@@ -27,7 +27,7 @@ import {
 } from "lucide-react"
 import { format } from "date-fns"
 import { getCurrentUser, isAuthenticated } from "@/lib/auth"
-import { getValidIdToken } from "@/lib/firebaseClient"
+import { getValidIdToken } from "@/lib/api"
 
 export default function AdminProfilePage() {
   const navigate = useNavigate()

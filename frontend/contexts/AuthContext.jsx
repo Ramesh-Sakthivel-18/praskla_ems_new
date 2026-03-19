@@ -1,17 +1,6 @@
-/**
- * contexts/AuthContext.jsx
- * Authentication context provider for managing user state
- */
-
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { 
-  onAuthStateChanged,
-  signInWithCustomToken,
-  signOut as firebaseSignOut
-} from 'firebase/auth';
-import { auth } from '@/app/config/firebase';
 import { getCurrentUser } from '@/lib/api';
 
 const AuthContext = createContext({});
@@ -22,68 +11,51 @@ export function AuthProvider({ children }) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Listen to Firebase auth state changes
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const initializeAuth = async () => {
       try {
-        if (firebaseUser) {
-          console.log('🔐 Firebase user detected:', firebaseUser.uid);
-          
-          // Get ID token
-          const token = await firebaseUser.getIdToken();
-          
-          // Fetch user data from backend
-          try {
-            const userData = await getCurrentUser(token);
-            console.log('✅ User data loaded:', userData.user);
-            
-            setUser({
-              ...userData.user,
-              firebaseUser,
-              token
-            });
-          } catch (error) {
-            console.error('❌ Error fetching user data from backend:', error);
-            
-            // If backend fails, still set basic firebase user
-            setUser({
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              firebaseUser,
-              token,
-              backendError: true
-            });
-          }
+        const token = localStorage.getItem('token');
+        if (token) {
+          console.log('🔐 Local token detected, fetching user data...');
+          const userData = await getCurrentUser(token);
+          setUser({
+            ...userData.user,
+            token
+          });
         } else {
-          console.log('🔓 No Firebase user');
+          console.log('🔓 No local token found');
           setUser(null);
         }
       } catch (error) {
-        console.error('❌ Auth state change error:', error);
-        setError(error.message);
+        console.error('❌ Auth initialization error:', error);
+        localStorage.removeItem('token');
         setUser(null);
       } finally {
         setLoading(false);
       }
-    });
+    };
 
-    return () => unsubscribe();
+    initializeAuth();
   }, []);
 
   /**
-   * Sign in with custom token from backend
+   * Internal SignIn Helper (Used after login API succeeds)
    */
   const signInWithToken = async (customToken) => {
     try {
       setLoading(true);
       setError(null);
-      console.log('🔐 Signing in with custom token...');
+      console.log('🔐 Saving token and getting user data...');
+      localStorage.setItem('token', customToken);
       
-      const userCredential = await signInWithCustomToken(auth, customToken);
-      console.log('✅ Signed in successfully:', userCredential.user.uid);
-      
-      return userCredential;
+      const userData = await getCurrentUser(customToken);
+      setUser({
+        ...userData.user,
+        token: customToken
+      });
+      return userData;
     } catch (error) {
       console.error('❌ Sign in error:', error);
+      localStorage.removeItem('token');
       setError(error.message);
       throw error;
     } finally {
@@ -91,47 +63,27 @@ export function AuthProvider({ children }) {
     }
   };
 
-  /**
-   * Sign out
-   */
   const signOut = async () => {
     try {
       setLoading(true);
-      console.log('🔓 Signing out...');
-      
-      await firebaseSignOut(auth);
+      localStorage.removeItem('token');
       setUser(null);
-      
       console.log('✅ Signed out successfully');
     } catch (error) {
-      console.error('❌ Sign out error:', error);
-      setError(error.message);
-      throw error;
+       console.error('❌ Sign out error:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  /**
-   * Refresh user data from backend
-   */
   const refreshUser = async () => {
     try {
-      if (!user?.token) {
-        console.warn('⚠️ No token available for refresh');
-        return;
-      }
-      
-      console.log('🔄 Refreshing user data...');
+      if (!user?.token) return;
       const userData = await getCurrentUser(user.token);
-      
       setUser({
         ...userData.user,
-        firebaseUser: user.firebaseUser,
         token: user.token
       });
-      
-      console.log('✅ User data refreshed');
     } catch (error) {
       console.error('❌ Refresh user error:', error);
       setError(error.message);
@@ -155,9 +107,6 @@ export function AuthProvider({ children }) {
   );
 }
 
-/**
- * Hook to use auth context
- */
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {

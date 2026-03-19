@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { Calendar, RefreshCw } from "lucide-react"
 import { safeRedirect } from "@/lib/redirectUtils"
-import { getValidIdToken } from "@/lib/firebaseClient"
+import { getValidIdToken } from "@/lib/api"
 
 const fetchWeeklyHours = async () => {
   const token = await getValidIdToken()
@@ -42,7 +42,7 @@ export default function WeeklyHoursPage() {
 
   if (queryError?.message === "SESSION_EXPIRED") {
     localStorage.removeItem("employeeLoggedIn")
-    localStorage.removeItem("firebaseToken")
+    localStorage.removeItem("token")
     safeRedirect(navigate, "/employee/login")
   }
 

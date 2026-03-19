@@ -23,7 +23,7 @@ class AttendanceRepository extends BaseRepository {
     if (!orgId) {
       throw new Error('Organization ID is required');
     }
-    return this.db.collection('organizations').doc(orgId).collection('attendance');
+    return this.db.collection('attendance');
   }
 
   /**
@@ -77,7 +77,7 @@ class AttendanceRepository extends BaseRepository {
           userId,
           userName,
           date,
-          organizationId: orgId,
+          organizationId: orgId, // Add organizationId to the document
           [action]: time,
           events: [event],
           verifyMethod,
@@ -106,7 +106,9 @@ class AttendanceRepository extends BaseRepository {
   async getTodayRecord(orgId, userId, date) {
     try {
       const attendanceId = `${userId}_${date}`;
-      const doc = await this.getCollection(orgId).doc(attendanceId).get();
+      const doc = await this.getCollection(orgId)
+        .where('organizationId', '==', orgId) // Filter by organizationId
+        .doc(attendanceId).get();
 
       if (!doc.exists) {
         console.log(`⚠️ [AttendanceRepository] No attendance record for user ${userId} on ${date}`);
@@ -131,7 +133,9 @@ class AttendanceRepository extends BaseRepository {
    */
   async getUserRecords(orgId, userId, options = {}) {
     try {
-      let query = this.getCollection(orgId).where('userId', '==', userId);
+      let query = this.getCollection(orgId)
+        .where('organizationId', '==', orgId) // Filter by organizationId
+        .where('userId', '==', userId);
 
       // Date range filter
       if (options.startDate) {
@@ -152,7 +156,9 @@ class AttendanceRepository extends BaseRepository {
       } catch (indexError) {
         // Firestore composite index may not exist — fallback to userId-only query + client-side filter
         console.log('⚠️ [AttendanceRepository] Composite index not available, using fallback filter');
-        const fallbackQuery = this.getCollection(orgId).where('userId', '==', userId);
+        const fallbackQuery = this.getCollection(orgId)
+          .where('organizationId', '==', orgId) // Filter by organizationId in fallback
+          .where('userId', '==', userId);
         snapshot = await fallbackQuery.get();
       }
 
@@ -194,6 +200,7 @@ class AttendanceRepository extends BaseRepository {
   async getByDate(orgId, date) {
     try {
       const snapshot = await this.getCollection(orgId)
+        .where('organizationId', '==', orgId) // Filter by organizationId
         .where('date', '==', date)
         .get();
 
@@ -220,6 +227,7 @@ class AttendanceRepository extends BaseRepository {
   async getByDateRange(orgId, startDate, endDate) {
     try {
       const snapshot = await this.getCollection(orgId)
+        .where('organizationId', '==', orgId) // Filter by organizationId
         .where('date', '>=', startDate)
         .where('date', '<=', endDate)
         .get();
@@ -252,8 +260,8 @@ class AttendanceRepository extends BaseRepository {
       const docRef = this.getCollection(orgId).doc(attendanceId);
       const doc = await docRef.get();
 
-      if (!doc.exists) {
-        throw new Error(`Attendance record not found: ${attendanceId}`);
+      if (!doc.exists || doc.data().organizationId !== orgId) { // Verify organizationId
+        throw new Error(`Attendance record not found or does not belong to organization: ${attendanceId}`);
       }
 
       const updateData = {
@@ -334,8 +342,8 @@ class AttendanceRepository extends BaseRepository {
       const docRef = this.getCollection(orgId).doc(attendanceId);
       const doc = await docRef.get();
 
-      if (!doc.exists) {
-        throw new Error(`Attendance record not found: ${attendanceId}`);
+      if (!doc.exists || doc.data().organizationId !== orgId) { // Verify organizationId
+        throw new Error(`Attendance record not found or does not belong to organization: ${attendanceId}`);
       }
 
       await docRef.delete();
@@ -397,6 +405,7 @@ class AttendanceRepository extends BaseRepository {
   async countInDateRange(orgId, startDate, endDate) {
     try {
       const snapshot = await this.getCollection(orgId)
+        .where('organizationId', '==', orgId) // Filter by organizationId
         .where('date', '>=', startDate)
         .where('date', '<=', endDate)
         .get();
@@ -435,7 +444,8 @@ class AttendanceRepository extends BaseRepository {
    */
   async findAll(orgId, options = {}) {
     try {
-      let query = this.getCollection(orgId);
+      let query = this.getCollection(orgId)
+        .where('organizationId', '==', orgId); // Filter by organizationId
 
       // Apply ordering
       if (options.orderBy) {

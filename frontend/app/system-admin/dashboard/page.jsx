@@ -11,7 +11,7 @@ import {
     Activity, AlertTriangle
 } from "lucide-react"
 import { getCurrentUser, isAuthenticated } from "@/lib/auth"
-import { getValidIdToken } from "@/lib/firebaseClient"
+import { getValidIdToken } from "@/lib/api"
 
 export default function SystemAdminDashboardPage() {
     const navigate = useNavigate()

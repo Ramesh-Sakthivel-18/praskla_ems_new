@@ -12,7 +12,7 @@ import {
 import { format } from "date-fns"
 import { safeRedirect } from "@/lib/redirectUtils"
 import { getCurrentUser, isAuthenticated } from "@/lib/auth"
-import { getValidIdToken } from "@/lib/firebaseClient"
+import { getValidIdToken } from "@/lib/api"
 
 export default function EmployeeDashboardPage() {
   const navigate = useNavigate()

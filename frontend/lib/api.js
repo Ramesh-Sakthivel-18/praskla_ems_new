@@ -3,10 +3,12 @@
  * Centralized API client for backend communication
  */
 
-import { getValidIdToken } from './firebaseClient';
-
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const getApiBase = () => API_BASE_URL.endsWith('/api') ? API_BASE_URL : `${API_BASE_URL}/api`;
+
+export async function getValidIdToken() {
+  return localStorage.getItem('token');
+}
 
 /**
  * Make authenticated API request
@@ -61,7 +63,7 @@ export async function apiRequest(endpoint, options = {}) {
 
 /**
  * Get current user from backend
- * @param {string} token - Firebase ID token
+ * @param {string} token - JWT token
  * @returns {Promise<Object>} User data
  */
 export async function getCurrentUser(token) {

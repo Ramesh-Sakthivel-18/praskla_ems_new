@@ -23,7 +23,7 @@ class LeaveRepository extends BaseRepository {
     if (!orgId) {
       throw new Error('Organization ID is required');
     }
-    return this.db.collection('organizations').doc(orgId).collection('leaves');
+    return this.db.collection('leaves');
   }
 
   /**
@@ -108,7 +108,9 @@ class LeaveRepository extends BaseRepository {
    */
   async findByUser(orgId, userId, options = {}) {
     try {
-      let query = this.getCollection(orgId).where('userId', '==', userId);
+      let query = this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
+        .where('userId', '==', userId);
 
       // Filter by status
       if (options.status) {
@@ -153,7 +155,8 @@ class LeaveRepository extends BaseRepository {
    */
   async findAll(orgId, filters = {}) {
     try {
-      let query = this.getCollection(orgId);
+      let query = this.getCollection(orgId)
+        .where('organizationId', '==', orgId);
 
       // Filter by status
       if (filters.status) {
@@ -482,6 +485,7 @@ class LeaveRepository extends BaseRepository {
   async countByStatus(orgId, status) {
     try {
       const snapshot = await this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
         .where('status', '==', status)
         .get();
 
@@ -540,6 +544,7 @@ class LeaveRepository extends BaseRepository {
   async findByApprover(orgId, approverId, options = {}) {
     try {
       let query = this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
         .where('approverId', '==', approverId);
 
       if (options.status) {

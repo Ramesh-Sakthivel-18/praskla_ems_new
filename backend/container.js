@@ -7,8 +7,8 @@
  * This is a singleton that manages all service instances.
  */
 
-const { getFirestore } = require('firebase-admin/firestore');
-const initFirebaseAdmin = require('./firebase-admin');
+const { connectDB, getDB } = require('./db/mongo');
+const FirestoreAdapter = require('./db/FirestoreAdapter');
 const redisClient = require('./config/redis');
 
 // ========================================
@@ -42,10 +42,10 @@ class Container {
   constructor() {
     console.log('🔧 Initializing Dependency Injection Container...');
 
-    // Initialize Firebase Admin
-    initFirebaseAdmin();
-    this.db = getFirestore();
-    console.log('✅ Firebase Admin initialized');
+    // Initialize MongoDB and FirestoreAdapter
+    connectDB();
+    this.db = new FirestoreAdapter(getDB());
+    console.log('✅ MongoDB Adapter initialized');
 
     // Initialize Redis (async, but don't wait for it)
     this.initializeRedis();

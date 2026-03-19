@@ -13,7 +13,7 @@ import { safeRedirect } from "@/lib/redirectUtils"
 const getApiBase = () => import.meta.env.VITE_API_URL || "http://localhost:3000"
 
 const fetchAttendance = async (dateFilter) => {
-  const token = localStorage.getItem("firebaseToken")
+  const token = localStorage.getItem("token")
   const base = getApiBase()
 
   const empRes = await fetch(`${base}/api/admin/employees?role=employee`, {

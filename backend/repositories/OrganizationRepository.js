@@ -6,27 +6,15 @@
  */
 
 const BaseRepository = require('./BaseRepository');
-const { initFirebaseAdmin } = require('../firebase-admin');
-const { getFirestore } = require('firebase-admin/firestore');
+// Firebase usage fully removed mapped to Mongo Adapter
 
 class OrganizationRepository extends BaseRepository {
   constructor(db) {
     // Pass db to parent, even if undefined
     super(db, 'organizations');
     
-    // 🚨 FAILSAFE: If db is missing (DI failed), initialize it manually
-    if (db) {
-      this.db = db;
-    } else {
-      console.log('⚠️ [OrganizationRepository] DB not passed to constructor, initializing manually...');
-      try {
-        const admin = initFirebaseAdmin();
-        this.db = getFirestore(admin);
-        console.log('✅ [OrganizationRepository] Manual DB initialization successful');
-      } catch (e) {
-        console.error('❌ [OrganizationRepository] Failed to manual init db:', e);
-      }
-    }
+    if (!db) throw new Error('DB is required by OrganizationRepository');
+    this.db = db;
   }
 
   /**

@@ -10,7 +10,7 @@ import {
     RefreshCw, Briefcase, Hash, Clock
 } from "lucide-react"
 import { getCurrentUser, isAuthenticated } from "@/lib/auth"
-import { getValidIdToken } from "@/lib/firebaseClient"
+import { getValidIdToken } from "@/lib/api"
 
 export default function SystemAdminProfilePage() {
     const navigate = useNavigate()

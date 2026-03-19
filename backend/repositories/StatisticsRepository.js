@@ -23,7 +23,7 @@ class StatisticsRepository extends BaseRepository {
     if (!orgId) {
       throw new Error('Organization ID is required');
     }
-    return this.db.collection('organizations').doc(orgId).collection('statistics');
+    return this.db.collection('statistics');
   }
 
   /**
@@ -82,7 +82,9 @@ class StatisticsRepository extends BaseRepository {
   async getDailyStats(orgId, date) {
     try {
       const statId = `daily_${date}`;
-      const doc = await this.getCollection(orgId).doc(statId).get();
+      const doc = await this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
+        .doc(statId).get();
 
       if (!doc.exists) {
         console.log(`⚠️ [StatisticsRepository] Daily stats not found for ${date}`);
@@ -158,7 +160,9 @@ class StatisticsRepository extends BaseRepository {
   async getWeeklyStats(orgId, year, weekNumber) {
     try {
       const statId = `weekly_${year}_W${String(weekNumber).padStart(2, '0')}`;
-      const doc = await this.getCollection(orgId).doc(statId).get();
+      const doc = await this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
+        .doc(statId).get();
 
       if (!doc.exists) {
         console.log(`⚠️ [StatisticsRepository] Weekly stats not found for ${year}-W${weekNumber}`);
@@ -238,7 +242,9 @@ class StatisticsRepository extends BaseRepository {
   async getMonthlyStats(orgId, year, month) {
     try {
       const statId = `monthly_${year}_${String(month).padStart(2, '0')}`;
-      const doc = await this.getCollection(orgId).doc(statId).get();
+      const doc = await this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
+        .doc(statId).get();
 
       if (!doc.exists) {
         console.log(`⚠️ [StatisticsRepository] Monthly stats not found for ${year}-${month}`);
@@ -314,7 +320,9 @@ class StatisticsRepository extends BaseRepository {
   async getUserMonthlyStats(orgId, userId, year, month) {
     try {
       const statId = `user_${userId}_monthly_${year}_${String(month).padStart(2, '0')}`;
-      const doc = await this.getCollection(orgId).doc(statId).get();
+      const doc = await this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
+        .doc(statId).get();
 
       if (!doc.exists) {
         console.log(`⚠️ [StatisticsRepository] User monthly stats not found`);
@@ -338,7 +346,9 @@ class StatisticsRepository extends BaseRepository {
    */
   async delete(orgId, statId) {
     try {
-      const docRef = this.getCollection(orgId).doc(statId);
+      const docRef = this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
+        .doc(statId);
       const doc = await docRef.get();
 
       if (!doc.exists) {
@@ -364,7 +374,9 @@ class StatisticsRepository extends BaseRepository {
    */
   async findByType(orgId, type, options = {}) {
     try {
-      let query = this.getCollection(orgId).where('type', '==', type);
+      let query = this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
+        .where('type', '==', type);
 
       // Apply ordering
       if (options.orderBy) {
@@ -403,6 +415,7 @@ class StatisticsRepository extends BaseRepository {
   async getDateRangeStats(orgId, startDate, endDate) {
     try {
       const snapshot = await this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
         .where('type', '==', 'daily')
         .where('date', '>=', startDate)
         .where('date', '<=', endDate)
@@ -430,7 +443,9 @@ class StatisticsRepository extends BaseRepository {
    */
   async exists(orgId, statId) {
     try {
-      const doc = await this.getCollection(orgId).doc(statId).get();
+      const doc = await this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
+        .doc(statId).get();
       return doc.exists;
     } catch (error) {
       console.error(`❌ [StatisticsRepository] Exists check error:`, error);
@@ -447,7 +462,9 @@ class StatisticsRepository extends BaseRepository {
    */
   async update(orgId, statId, data) {
     try {
-      const docRef = this.getCollection(orgId).doc(statId);
+      const docRef = this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
+        .doc(statId);
       const doc = await docRef.get();
 
       if (!doc.exists) {
@@ -482,6 +499,7 @@ class StatisticsRepository extends BaseRepository {
   async deleteOldStats(orgId, beforeDate) {
     try {
       const snapshot = await this.getCollection(orgId)
+        .where('organizationId', '==', orgId)
         .where('calculatedAt', '<', beforeDate)
         .get();
 

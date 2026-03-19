@@ -32,7 +32,7 @@ import { safeRedirect } from "@/lib/redirectUtils"
 const getApiBase = () => import.meta.env.VITE_API_URL || "http://localhost:3000"
 
 const fetchEmployees = async () => {
-  const token = localStorage.getItem("firebaseToken")
+  const token = localStorage.getItem("token")
   const base = getApiBase()
   if (!token) throw new Error("Authentication token not found. Please login again.")
 
@@ -125,7 +125,7 @@ export default function BusinessOwnerEmployeesPage() {
     }
 
     setCreateLoading(true)
-    const token = localStorage.getItem("firebaseToken")
+    const token = localStorage.getItem("token")
     const base = getApiBase()
 
     try {
@@ -199,7 +199,7 @@ export default function BusinessOwnerEmployeesPage() {
       return list.filter(emp => emp.id !== adminId)
     })
 
-    const token = localStorage.getItem("firebaseToken")
+    const token = localStorage.getItem("token")
     const base = getApiBase()
 
     try {

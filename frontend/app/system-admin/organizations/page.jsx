@@ -22,7 +22,7 @@ import {
     Shield, Activity, ChevronRight
 } from "lucide-react"
 import { getCurrentUser, isAuthenticated } from "@/lib/auth"
-import { getValidIdToken } from "@/lib/firebaseClient"
+import { getValidIdToken } from "@/lib/api"
 
 const getApiBase = () => {
     const url = import.meta.env.VITE_API_URL || "http://localhost:3000"

@@ -10,7 +10,7 @@ import {
   Clock, TrendingUp, Calendar, Plus, Briefcase
 } from "lucide-react"
 import { getCurrentUser, isAuthenticated } from "@/lib/auth"
-import { getValidIdToken } from "@/lib/firebaseClient"
+import { getValidIdToken } from "@/lib/api"
 
 export default function AdminDashboardPage() {
   const navigate = useNavigate()
