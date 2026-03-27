@@ -18,7 +18,7 @@ export default defineConfig({
     // Add this proxy section!
     proxy: {
       '/api': {
-        target: 'http://localhost:8000', // Points to your Node server.js
+        target: 'http://localhost:3000', // Points to your Node server.js
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
