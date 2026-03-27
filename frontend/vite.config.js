@@ -14,6 +14,14 @@ export default defineConfig({
     allowedHosts: [
       'ellis-bradytelic-factiously.ngrok-free.dev',
       'ems.prasklatechnology.com'
-    ]
-  }
+    ],
+    // Add this proxy section!
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000', // Points to your Node server.js
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
+  },
 })
